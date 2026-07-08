@@ -16,5 +16,15 @@ export default defineConfigWithVueTs(
   ]),
   pluginVue.configs['flat/recommended'],
   vueTsConfigs.recommendedTypeChecked,
+  {
+    // Vendored shadcn-vue registry components follow the registry's naming
+    // and prop conventions, not ours.
+    name: 'app/shadcn-ui-overrides',
+    files: ['**/src/components/ui/**'],
+    rules: {
+      'vue/multi-word-component-names': 'off',
+      'vue/require-default-prop': 'off',
+    },
+  },
   skipFormatting,
 )

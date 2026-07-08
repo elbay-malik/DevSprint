@@ -1,0 +1,11 @@
+// Deploy-ready SPA config: assets-only Worker (Workers Static Assets, ADR-0009).
+// Not deployed yet — see apps/api/README.md for the one-time deploy runbook.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "devsprint-web",
+  "compatibility_date": "2026-07-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+  },
+}

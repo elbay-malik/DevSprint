@@ -1,0 +1,15 @@
+{
+  "extends": ["@vue/tsconfig/tsconfig.dom.json", "../../tsconfig.base.json"],
+  "compilerOptions": {
+    "types": ["vite/client"],
+    // reka-ui / shadcn-vue optional-prop typings are not exactOptionalPropertyTypes-clean;
+    // the rest of the workspace keeps the flag via tsconfig.base.json
+    "exactOptionalPropertyTypes": false,
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"]
+}
