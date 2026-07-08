@@ -1,0 +1,28 @@
+# Architecture Decision Records
+
+Decision records for DevSprint Copilot, kept as lightweight MADR-style markdown (see
+[ADR-0001](0001-record-architecture-decisions.md)). Start new ADRs from [template.md](template.md).
+
+## Conventions
+
+- Files are named `NNNN-kebab-title.md`; numbers are sequential, zero-padded to four digits, and
+  never reused.
+- Status lifecycle: Proposed → Accepted → Deprecated or Superseded by ADR-XXXX.
+- Accepted ADRs are immutable: to change a decision, write a new ADR that supersedes the old one —
+  do not edit the old record (typo fixes excepted).
+- Keep policy separate from mechanism where the mechanism is likely to churn (see ADR-0003).
+- Update the index table below in the same commit that adds or supersedes an ADR.
+
+## Index
+
+| ADR                                                        | Title                                        | Status                                     | One-line stance                                                                                                       |
+| ---------------------------------------------------------- | -------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| [0001](0001-record-architecture-decisions.md)              | Record architecture decisions                | Accepted                                   | MADR-lite markdown in `docs/adr/`; no adr-tools CLI.                                                                  |
+| [0002](0002-staged-mcp-adoption.md)                        | Staged MCP adoption                          | Accepted                                   | Plain function calling for Phases 3-5; tools refactored behind 2-3 MCP servers at Phase 6, issues server public.      |
+| [0003](0003-hitl-approval-gates-on-write-tools.md)         | HITL approval gates on write tools           | Accepted (policy; mechanism churn flagged) | Every write gated by an in-stream ApprovalCard plus mandatory server-side re-validation.                              |
+| [0004](0004-hono-on-cloudflare-workers.md)                 | Hono on Cloudflare Workers                   | Accepted                                   | Agent loop runs server-side in Hono on Workers; the server holds all keys.                                            |
+| [0005](0005-model-routing-groq-primary-gemini-fallback.md) | Model routing: Groq primary, Gemini fallback | Accepted                                   | Groq `llama-3.3-70b-versatile` primary, Gemini Flash fallback, global daily token-cap kill-switch.                    |
+| [0006](0006-ui-kit-shadcn-vue.md)                          | UI kit: shadcn-vue                           | Accepted (user-locked)                     | shadcn-vue (Reka UI v2, Tailwind v4, Unovis charts) over Nuxt UI v4 for code ownership.                               |
+| [0007](0007-monorepo-pnpm-workspaces.md)                   | Monorepo with pnpm workspaces                | Accepted                                   | `apps/web`, `apps/api`, `packages/shared`; `apps/mcp-*` reserved for Phase 6.                                         |
+| [0008](0008-vapor-mode-deferred.md)                        | Vapor Mode deferred                          | Accepted (deferral)                        | Build on the stable Vue 3.5 line (3.6-track via pinned catalog bumps); Vapor is a flagged Phase 12 experiment.        |
+| [0009](0009-workers-static-assets-over-pages.md)           | Workers Static Assets over Pages             | Accepted for scaffold                      | SPA served as an assets-only Worker matching the committed `apps/web/wrangler.jsonc`; no Cloudflare deploy this pass. |
