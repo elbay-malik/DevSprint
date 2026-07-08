@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+coverage/
+
+# Caches & logs
+.eslintcache
+*.log
+.DS_Store
+.vite/
+
+# Env & secrets — Vite mode files (.env.development, .env.production) ARE committed
+.env.local
+.env.*.local
+.dev.vars*
+
+# Cloudflare
+.wrangler/
+
+# Test artifacts
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
