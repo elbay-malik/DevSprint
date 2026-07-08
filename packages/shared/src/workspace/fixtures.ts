@@ -38,7 +38,7 @@ interface IssueSeed {
 
 function issue(seed: IssueSeed): Issue {
   return {
-    id: `issue-${seed.n}`,
+    id: `ds-${seed.n}`,
     key: `DS-${seed.n}`,
     projectId: 'proj-1',
     sprintId: seed.sprintId,
