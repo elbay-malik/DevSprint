@@ -3,3 +3,6 @@ export const API_ROUTES = {
 } as const
 
 export type ChatRole = 'user' | 'assistant' | 'system'
+
+export * from './workspace/types'
+export * from './workspace/fixtures'
