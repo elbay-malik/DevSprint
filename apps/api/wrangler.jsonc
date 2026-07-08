@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "devsprint-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+  // Not needed for the echo route, but standard for the AI SDK providers
+  // arriving in Phase 3 — avoids a config change later.
+  "compatibility_flags": ["nodejs_compat"],
+  "dev": {
+    "port": 8787,
+  },
+  "vars": {
+    // Build-config var, not a secret. Must be updated to the deployed web
+    // origin before a real deploy — see README.md runbook.
+    "CORS_ORIGIN": "http://localhost:5173",
+  },
+  "observability": {
+    "enabled": true,
+  },
+}
