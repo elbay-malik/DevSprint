@@ -5,10 +5,22 @@ export default defineConfig({
   timeout: 30_000,
   use: { baseURL: 'http://localhost:5173' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  webServer: {
-    command: 'pnpm dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
-  },
+  // Both panes are under test, so both servers run: the SPA hydrates its board
+  // from the Worker and the composer streams through it.
+  webServer: [
+    {
+      // `--var MODEL_PROVIDER:mock` pins the scripted model regardless of any
+      // local apps/api/.dev.vars, so e2e stays deterministic, offline and free.
+      command: 'pnpm --filter @devsprint/api exec wrangler dev --var MODEL_PROVIDER:mock',
+      url: 'http://localhost:8787/api/health',
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
+    {
+      command: 'pnpm dev',
+      url: 'http://localhost:5173',
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
+  ],
 })

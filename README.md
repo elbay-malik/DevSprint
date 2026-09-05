@@ -61,6 +61,15 @@ Routing follows [ADR-0005](docs/adr/0005-model-routing-groq-primary-gemini-fallb
 | `pnpm test`         | recursive Vitest                                    |
 | `pnpm build`        | recursive builds (web: vite; api: wrangler dry-run) |
 
+Browser tests live in `apps/web`:
+
+```sh
+pnpm --filter @devsprint/web test:e2e
+```
+
+Playwright starts both servers itself and pins the scripted mock model, so the end-to-end run
+needs no API key and never spends provider quota. The full six-scenario suite is Phase 13.
+
 **Package contract**: every workspace package exposes `typecheck` (web: `vue-tsc --noEmit`; others: `tsc --noEmit`) and, where meaningful, `test` (`vitest run`) and `build`. `pnpm -r` skips packages missing a script.
 
 ## Roadmap
