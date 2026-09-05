@@ -20,6 +20,7 @@ import type {
   LanguageModelV3,
   LanguageModelV3CallOptions,
   LanguageModelV3Message,
+  LanguageModelV3Prompt,
   LanguageModelV3StreamPart,
   LanguageModelV3Usage,
 } from './provider-types'
@@ -27,6 +28,11 @@ import type {
 export type MockDecision =
   | { kind: 'tool-call'; toolName: string; input: Record<string, unknown> }
   | { kind: 'text'; text: string }
+
+/** `1 issue` / `2 issues` — the summaries are read by a person. */
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`
+}
 
 /** Splits text into whitespace-preserving tokens for a word-by-word stream. */
 export function tokenize(text: string): string[] {
@@ -62,11 +68,17 @@ function searchQueryFrom(text: string): string {
   return stripped.length > 0 ? stripped : text
 }
 
+/** Longest chain the mock will script, matching the demo scenarios (S-A uses three). */
+const MAX_PLAN_LENGTH = 3
+
 /**
- * Picks the first matching decision whose tool is available. Order matters:
- * "Show me the burndown" must reach get_burndown before the list rule.
+ * Every tool the question calls for, in the order a person would gather them.
+ * A compound question ("summarize the sprint and draft release notes") yields
+ * several entries, which is what drives the multi-step loop; a plain question
+ * yields one. Rule order matters: "show me the burndown" must reach
+ * get_burndown before the broader list rule.
  */
-export function routeUserText(text: string, availableTools: ReadonlySet<string>): MockDecision {
+export function planUserText(text: string, availableTools: ReadonlySet<string>): MockDecision[] {
   const candidates: MockDecision[] = []
   if (/deploy|shipped|rolled out/i.test(text)) {
     const environment = environmentFrom(text)
@@ -86,6 +98,21 @@ export function routeUserText(text: string, availableTools: ReadonlySet<string>)
       input: { query: searchQueryFrom(text) },
     })
   }
+  // Release notes are written from the sprint's completed work, so this is the
+  // scripted chain: how the sprint went, then what actually shipped.
+  if (/release note|changelog/i.test(text)) {
+    candidates.push(
+      { kind: 'tool-call', toolName: 'get_sprint_status', input: {} },
+      {
+        kind: 'tool-call',
+        toolName: 'list_issues',
+        input: { sprintId: 'sprint-12', status: 'done' },
+      },
+    )
+  }
+  if (/summar|how is|how are|health/i.test(text)) {
+    candidates.push({ kind: 'tool-call', toolName: 'get_sprint_status', input: {} })
+  }
   if (
     /list|show|which issues|what issues|done issues|blocked issues|in review|in progress/i.test(
       text,
@@ -104,12 +131,40 @@ export function routeUserText(text: string, availableTools: ReadonlySet<string>)
       text: 'To compare release notes I need the draft markdown — paste the draft and I will diff it against the last published version.',
     })
   }
-  candidates.push({ kind: 'tool-call', toolName: 'get_sprint_status', input: {} })
 
+  const usable = candidates.filter(
+    (candidate) => candidate.kind === 'text' || availableTools.has(candidate.toolName),
+  )
+  const calls = usable.filter((candidate) => candidate.kind === 'tool-call')
+
+  // A text candidate is a dead end, so it only ever stands alone.
+  if (calls.length === 0) {
+    const firstText = usable.find((candidate) => candidate.kind === 'text')
+    if (firstText) return [firstText]
+    return availableTools.has('get_sprint_status')
+      ? [{ kind: 'tool-call', toolName: 'get_sprint_status', input: {} }]
+      : [
+          {
+            kind: 'text',
+            text: 'None of the tools I know how to use are registered in this session.',
+          },
+        ]
+  }
+
+  const seen = new Set<string>()
+  return calls
+    .filter((call) => {
+      if (seen.has(call.toolName)) return false
+      seen.add(call.toolName)
+      return true
+    })
+    .slice(0, MAX_PLAN_LENGTH)
+}
+
+/** The plan's first step, for callers that only need one decision. */
+export function routeUserText(text: string, availableTools: ReadonlySet<string>): MockDecision {
   return (
-    candidates.find(
-      (candidate) => candidate.kind === 'text' || availableTools.has(candidate.toolName),
-    ) ?? {
+    planUserText(text, availableTools)[0] ?? {
       kind: 'text',
       text: 'None of the tools I know how to use are registered in this session.',
     }
@@ -141,7 +196,7 @@ function summarizeIssues({ issues }: ListIssuesData): string {
   const items = issues.map(
     (issue) => `${issue.key} (${issue.status}, ${issue.points} pts) ${issue.title}`,
   )
-  return `${issues.length} issues: ${items.join('; ')}.`
+  return `${plural(issues.length, 'issue')}: ${items.join('; ')}.`
 }
 
 function summarizeSearch({ matches }: SearchIssuesData): string {
@@ -158,7 +213,7 @@ function summarizeDeployments({ deployments }: DeploymentHistoryData): string {
     (deployment) =>
       `${deployment.id} ${deployment.version} → ${deployment.environment} ${deployment.status} (${deployment.startedAt})`,
   )
-  return `${deployments.length} deployments, latest first: ${items.join('; ')}.`
+  return `${plural(deployments.length, 'deployment')}, latest first: ${items.join('; ')}.`
 }
 
 function summarizeBurndown(data: BurndownData): string {
@@ -293,17 +348,43 @@ function toolCallChunks(
   ]
 }
 
+/** The most recent user turn — the one the current plan answers. */
+function lastUserText(prompt: LanguageModelV3Prompt): string {
+  for (let index = prompt.length - 1; index >= 0; index -= 1) {
+    const text = userTextOf(prompt[index])
+    if (text.length > 0) return text
+  }
+  return ''
+}
+
+/** Tool messages since that user turn, i.e. how far through the plan we are. */
+function toolMessagesSinceUserTurn(prompt: LanguageModelV3Prompt): ToolMessage[] {
+  const lastUserIndex = prompt.findLastIndex((message) => message.role === 'user')
+  return prompt
+    .slice(lastUserIndex + 1)
+    .filter((message): message is ToolMessage => message.role === 'tool')
+}
+
+/**
+ * Drives the agent loop: on a user turn it emits the plan's first tool call, on
+ * each tool turn the next one, and once the plan is exhausted it writes the
+ * answer from every tool result gathered this turn. That is what makes the mock
+ * exercise multi-step chaining rather than a single round-trip.
+ */
 export function scriptChunks(options: LanguageModelV3CallOptions): LanguageModelV3StreamPart[] {
-  const last = options.prompt.at(-1)
+  const plan = planUserText(lastUserText(options.prompt), availableToolNames(options))
+  const done = toolMessagesSinceUserTurn(options.prompt)
+  const next = plan[done.length]
+
   let body: LanguageModelV3StreamPart[]
-  if (last?.role === 'tool') {
-    body = textChunks(summarizeToolMessage(last))
+  if (next === undefined) {
+    // Plan exhausted: answer from everything gathered, oldest first.
+    const summary = done.map(summarizeToolMessage).join(' ')
+    body = textChunks(summary.length > 0 ? summary : 'I have nothing to report.')
+  } else if (next.kind === 'text') {
+    body = textChunks(next.text)
   } else {
-    const decision = routeUserText(userTextOf(last), availableToolNames(options))
-    body =
-      decision.kind === 'text'
-        ? textChunks(decision.text)
-        : toolCallChunks(decision.toolName, decision.input)
+    body = toolCallChunks(next.toolName, next.input)
   }
   return [{ type: 'stream-start', warnings: [] }, ...body]
 }

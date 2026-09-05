@@ -2,8 +2,6 @@ import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
 import {
   convertToModelMessages,
-  stepCountIs,
-  streamText,
   validateUIMessages,
   type InferUITools,
   type UIDataTypes,
@@ -12,14 +10,12 @@ import {
 import { API_ROUTES } from '@devsprint/shared'
 import type { AppEnv } from './env'
 import { workspaceStore } from './workspace'
+import { createCopilotAgent } from './agent/agent'
 import { createStepAuditLogger } from './agent/audit'
 import { describeError, toClientErrorMessage } from './agent/errors'
 import { ModelConfigError, resolveModel } from './agent/model'
 import { buildSystemPrompt } from './agent/system-prompt'
 import { createReadTools, type ReadTools } from './agent/tools'
-
-/** One tool round-trip plus the answer; multi-tool chaining is Phase 4 (ToolLoopAgent). */
-const MAX_STEPS = 2
 
 /** Mirrors the SPA's `DevSprintUIMessage` so tool parts validate against the real schemas. */
 type ChatUIMessage = UIMessage<unknown, UIDataTypes, InferUITools<ReadTools>>
@@ -78,21 +74,22 @@ app.post(API_ROUTES.chat, async (c) => {
   }
   const { model, label } = resolved
 
-  const result = streamText({
+  const agent = createCopilotAgent({
     model,
-    system: buildSystemPrompt(workspaceStore.get()),
-    messages: await convertToModelMessages(uiMessages, { tools }),
+    instructions: buildSystemPrompt(workspaceStore.get()),
     tools,
-    stopWhen: stepCountIs(MAX_STEPS),
-    maxRetries: 1,
-    temperature: 0.2,
+  })
+
+  // The request signal is what makes the composer's Stop button real: aborting
+  // the fetch ends the agent loop server-side instead of leaving it running.
+  const result = await agent.stream({
+    // A turn the user stopped leaves an assistant tool call with no result.
+    // Without this the NEXT message throws MessageConversionError and the chat
+    // is wedged until reload — pruning the dangling call is what lets the
+    // conversation continue after Stop.
+    messages: await convertToModelMessages(uiMessages, { tools, ignoreIncompleteToolCalls: true }),
     abortSignal: c.req.raw.signal,
     onStepFinish: createStepAuditLogger(label),
-    onError: ({ error }) => {
-      console.error(
-        JSON.stringify({ event: 'model-error', model: label, error: describeError(error) }),
-      )
-    },
   })
 
   // 'Content-Encoding: Identity' defeats wrangler dev/miniflare response
@@ -100,7 +97,12 @@ app.post(API_ROUTES.chat, async (c) => {
   // in production.
   return result.toUIMessageStreamResponse({
     headers: { 'Content-Encoding': 'Identity', 'X-DevSprint-Model': label },
-    onError: toClientErrorMessage,
+    onError: (error) => {
+      console.error(
+        JSON.stringify({ event: 'model-error', model: label, error: describeError(error) }),
+      )
+      return toClientErrorMessage(error)
+    },
   })
 })
 

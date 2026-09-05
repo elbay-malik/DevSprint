@@ -97,6 +97,118 @@ describe('POST /api/chat', () => {
     expect(res.headers.get('access-control-expose-headers')).toContain('X-DevSprint-Model')
   })
 
+  it('chains several tools in one turn and answers from all of them', async () => {
+    const res = await ask('Summarize Sprint 12 and draft release notes for v1.5.0.')
+    const chunks = parseChunks(await res.text())
+
+    const calls = chunks
+      .filter((chunk) => chunk.type === 'tool-input-available')
+      .map((chunk) => chunk.toolName)
+    expect(calls).toEqual(['get_sprint_status', 'list_issues'])
+
+    // The second call is scoped by the first step's context, not a blind repeat.
+    const listInput = chunks.find(
+      (chunk) => chunk.type === 'tool-input-available' && chunk.toolName === 'list_issues',
+    )?.input
+    expect(listInput).toMatchObject({ sprintId: 'sprint-12', status: 'done' })
+
+    // The answer is grounded in both results: sprint health and the shipped issues.
+    const answer = textOf(chunks)
+    expect(answer).toContain('23 of 31 points remaining')
+    expect(answer).toContain('DS-5')
+    expect(answer).toContain('DS-6')
+  })
+
+  it('aborting the request ends the agent loop instead of running it out', async () => {
+    const controller = new AbortController()
+    // The Request is held in a local rather than built inside `app.request`:
+    // undici keeps the abort plumbing behind a WeakRef, so a garbage collection
+    // between send and abort can silently drop the abort and redden this test.
+    const request = new Request('http://localhost/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [
+          {
+            id: 'm1',
+            role: 'user',
+            parts: [
+              { type: 'text', text: 'Summarize Sprint 12 and draft release notes for v1.5.0.' },
+            ],
+          },
+        ],
+      }),
+      signal: controller.signal,
+    })
+    const res = await app.request(request, undefined, env)
+    expect(res.status).toBe(200)
+
+    // This is what the composer's Stop button does: abort the in-flight fetch.
+    const reader = res.body!.getReader()
+    const decoder = new TextDecoder()
+    let received = ''
+    let reads = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      received += decoder.decode(value, { stream: true })
+      reads += 1
+      if (reads === 3) controller.abort()
+    }
+
+    // The stream stops mid-turn: no finish event, and the plan never completes.
+    expect(received).not.toContain('"type":"finish"')
+    expect(received).not.toContain('list_issues')
+    // Keeps `request` reachable past the abort, which is the point of the local.
+    expect(request.signal.aborted).toBe(true)
+  })
+
+  it('answers a follow-up sent after the user stopped a turn', async () => {
+    // Stop leaves an assistant tool call with no result. Converting that to
+    // model messages throws unless the dangling call is pruned, which used to
+    // wedge the chat: every later message failed until the page was reloaded.
+    const res = await app.request(
+      '/api/chat',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            {
+              id: 'm1',
+              role: 'user',
+              parts: [{ type: 'text', text: 'Summarize Sprint 12 and draft release notes.' }],
+            },
+            {
+              id: 'm2',
+              role: 'assistant',
+              parts: [
+                { type: 'step-start' },
+                {
+                  type: 'tool-get_sprint_status',
+                  toolCallId: 'aborted-call-1',
+                  state: 'input-available',
+                  input: {},
+                },
+              ],
+            },
+            {
+              id: 'm3',
+              role: 'user',
+              parts: [{ type: 'text', text: 'How many open issues are in the current sprint?' }],
+            },
+          ],
+        }),
+      },
+      env,
+    )
+
+    expect(res.status).toBe(200)
+    const chunks = parseChunks(await res.text())
+    expect(chunks.some((chunk) => chunk.type === 'error')).toBe(false)
+    expect(textOf(chunks)).toContain('5 open issues')
+  })
+
   it('rejects a body without messages', async () => {
     const res = await app.request(
       '/api/chat',

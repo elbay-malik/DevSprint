@@ -1,4 +1,4 @@
-import type { StreamTextOnStepFinishCallback, ToolSet } from 'ai'
+import type { ToolLoopAgentOnStepFinishCallback, ToolSet } from 'ai'
 
 /**
  * One JSON line per agent step. This is the observability floor named in
@@ -7,7 +7,7 @@ import type { StreamTextOnStepFinishCallback, ToolSet } from 'ai'
  */
 export function createStepAuditLogger<TOOLS extends ToolSet>(
   label: string,
-): StreamTextOnStepFinishCallback<TOOLS> {
+): ToolLoopAgentOnStepFinishCallback<TOOLS> {
   return (step) => {
     console.log(
       JSON.stringify({

@@ -29,8 +29,20 @@ implementations are pure functions over the workspace snapshot and return the sh
 from, never a thrown error. Nothing calls `Date.now()` — the fixed demo clock `WORKSPACE_NOW`
 keeps the scripted scenarios replayable.
 
-Multi-step tool chaining (`ToolLoopAgent`) is Phase 4; this phase allows one tool round-trip plus
-the answer.
+## The agent loop
+
+`/api/chat` runs an AI SDK `ToolLoopAgent`: it calls a tool, feeds the result back, and keeps going
+until it can answer. A compound question therefore costs several steps — "summarize Sprint 12 and
+draft release notes" reads the sprint, then lists what shipped, then writes the answer from both.
+
+The loop is bounded by a step budget (`MAX_STEPS`, one model call per step), which is the
+difference between a demo and a quota incident: a model that keeps asking for tools stops at the
+budget instead of looping until the daily limit is gone. Three chained tools plus the written
+answer fit inside it.
+
+The request's abort signal is passed into the loop, so the composer's Stop button genuinely ends
+the turn server-side rather than just hiding the output — no further steps run, and no further
+tokens are spent.
 
 ## Model routing
 

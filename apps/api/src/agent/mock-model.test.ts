@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createWorkspaceSeed } from '@devsprint/shared'
 import { getBurndown, getSprintStatus } from '../workspace/queries'
-import { routeUserText, summarizeToolOutput } from './mock-model'
+import { planUserText, routeUserText, summarizeToolOutput } from './mock-model'
 
 const ALL_TOOLS = new Set([
   'list_issues',
@@ -61,6 +61,58 @@ describe('routeUserText', () => {
       },
     )
     expect(routeUserText('anything', new Set())).toMatchObject({ kind: 'text' })
+  })
+})
+
+describe('planUserText', () => {
+  it('plans a single tool for a single question', () => {
+    expect(planUserText('How many open issues are in the current sprint?', ALL_TOOLS)).toEqual([
+      { kind: 'tool-call', toolName: 'get_sprint_status', input: {} },
+    ])
+  })
+
+  it('chains the sprint then the shipped work for release notes (S-A)', () => {
+    const plan = planUserText('Summarize Sprint 12 and draft release notes for v1.5.0.', ALL_TOOLS)
+    expect(plan.map((step) => ('toolName' in step ? step.toolName : step.kind))).toEqual([
+      'get_sprint_status',
+      'list_issues',
+    ])
+    expect(plan[1]).toMatchObject({ input: { sprintId: 'sprint-12', status: 'done' } })
+  })
+
+  it('chains a tool per question in a compound ask', () => {
+    const plan = planUserText(
+      'Is Sprint 12 on track? Show me the burndown and the blocked issues.',
+      ALL_TOOLS,
+    )
+    expect(plan.map((step) => ('toolName' in step ? step.toolName : ''))).toEqual([
+      'get_burndown',
+      'list_issues',
+    ])
+  })
+
+  it('never repeats a tool or exceeds three steps', () => {
+    const plan = planUserText(
+      'Summarize the sprint, show release notes, list the issues, the burndown, and what we deployed',
+      ALL_TOOLS,
+    )
+    const names = plan.map((step) => ('toolName' in step ? step.toolName : ''))
+    expect(names.length).toBeLessThanOrEqual(3)
+    expect(new Set(names).size).toBe(names.length)
+  })
+
+  it('plans only what the caller registered', () => {
+    const plan = planUserText(
+      'Show me the burndown and the blocked issues',
+      new Set(['list_issues']),
+    )
+    expect(plan.map((step) => ('toolName' in step ? step.toolName : ''))).toEqual(['list_issues'])
+    expect(planUserText('anything', new Set())).toEqual([
+      {
+        kind: 'text',
+        text: 'None of the tools I know how to use are registered in this session.',
+      },
+    ])
   })
 })
 
