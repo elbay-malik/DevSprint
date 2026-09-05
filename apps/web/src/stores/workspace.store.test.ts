@@ -56,6 +56,28 @@ describe('useWorkspaceStore', () => {
     expect(console.warn).toHaveBeenCalledTimes(1)
   })
 
+  it('hydrate() falls back to the seed when a later refresh fails', async () => {
+    // The pane hydrates on every mount, so this is one route change away.
+    const remote = createWorkspaceSeed()
+    remote.project.name = 'DevSprint (from api)'
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(remote), { status: 200 }))
+      .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const store = useWorkspaceStore()
+    await store.hydrate()
+    expect(store.source).toBe('api')
+
+    await store.hydrate()
+
+    // The badge must never claim 'seed' while the board still shows api data.
+    expect(store.source).toBe('seed')
+    expect(store.workspace).toEqual(createWorkspaceSeed())
+    expect(store.workspace.project.name).toBe('DevSprint')
+  })
+
   it('hydrate() treats a non-2xx response as a failure', async () => {
     vi.stubGlobal(
       'fetch',

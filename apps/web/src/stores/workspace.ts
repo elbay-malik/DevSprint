@@ -27,8 +27,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       workspace.value = (await response.json()) as Workspace
       source.value = 'api'
     } catch (error) {
-      // Expected whenever the Worker is not running locally: keep the seed and
-      // warn once instead of toasting on every retry.
+      // Expected whenever the Worker is not running locally: fall back to the
+      // seed and warn once instead of toasting on every retry. The reset is
+      // what keeps `source` honest — the pane re-hydrates on every mount, so a
+      // refresh that fails after an earlier success would otherwise leave the
+      // board showing the Worker's data under a "seed data" badge.
+      workspace.value = createWorkspaceSeed()
       source.value = 'seed'
       if (!warned) {
         warned = true
