@@ -91,6 +91,28 @@ describe('planUserText', () => {
     ])
   })
 
+  it('asks for the draft instead of quietly summarising the sprint', () => {
+    // "release notes" also matches the chain rule, so without an explicit guard
+    // this question plans get_sprint_status and never mentions the comparison.
+    for (const question of [
+      'Compare the draft release notes against v1.4.2',
+      'Diff the changelog for v1.5.0',
+    ]) {
+      const plan = planUserText(question, ALL_TOOLS)
+      expect(plan).toHaveLength(1)
+      expect(plan[0]).toMatchObject({ kind: 'text' })
+      expect(plan[0]).toHaveProperty('text', expect.stringContaining('draft markdown'))
+    }
+  })
+
+  it('lets a stray "compare" leave a real intent alone', () => {
+    const plan = planUserText('Show me the burndown and compare it to the ideal line', ALL_TOOLS)
+    expect(plan.map((step) => ('toolName' in step ? step.toolName : 'text'))).toContain(
+      'get_burndown',
+    )
+    expect(plan.every((step) => step.kind === 'tool-call')).toBe(true)
+  })
+
   it('never repeats a tool or exceeds three steps', () => {
     const plan = planUserText(
       'Summarize the sprint, show release notes, list the issues, the burndown, and what we deployed',

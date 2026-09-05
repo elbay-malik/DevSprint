@@ -71,6 +71,9 @@ function searchQueryFrom(text: string): string {
 /** Longest chain the mock will script, matching the demo scenarios (S-A uses three). */
 const MAX_PLAN_LENGTH = 3
 
+const DRAFT_NEEDED =
+  'To compare release notes I need the draft markdown — paste the draft and I will diff it against the last published version.'
+
 /**
  * Every tool the question calls for, in the order a person would gather them.
  * A compound question ("summarize the sprint and draft release notes") yields
@@ -79,6 +82,14 @@ const MAX_PLAN_LENGTH = 3
  * get_burndown before the broader list rule.
  */
 export function planUserText(text: string, availableTools: ReadonlySet<string>): MockDecision[] {
+  // Comparing release notes is the one request the mock knows it cannot serve:
+  // diff_release_notes needs draft markdown the user has not given. Say so,
+  // rather than quietly summarising the sprint and never mentioning the diff.
+  // Checked up front because "release notes" also matches the chain rule below.
+  if (/diff|compare/i.test(text) && /release note|changelog/i.test(text)) {
+    return [{ kind: 'text', text: DRAFT_NEEDED }]
+  }
+
   const candidates: MockDecision[] = []
   if (/deploy|shipped|rolled out/i.test(text)) {
     const environment = environmentFrom(text)
@@ -125,11 +136,10 @@ export function planUserText(text: string, availableTools: ReadonlySet<string>):
       input: status === undefined ? { sprintId: 'sprint-12' } : { sprintId: 'sprint-12', status },
     })
   }
+  // A bare "compare" alongside a real intent must not hijack it, so this only
+  // applies when nothing else matched (see the calls.length check below).
   if (/diff|compare/i.test(text)) {
-    candidates.push({
-      kind: 'text',
-      text: 'To compare release notes I need the draft markdown — paste the draft and I will diff it against the last published version.',
-    })
+    candidates.push({ kind: 'text', text: DRAFT_NEEDED })
   }
 
   const usable = candidates.filter(
@@ -137,7 +147,8 @@ export function planUserText(text: string, availableTools: ReadonlySet<string>):
   )
   const calls = usable.filter((candidate) => candidate.kind === 'tool-call')
 
-  // A text candidate is a dead end, so it only ever stands alone.
+  // Text is a dead end — nothing follows it — so it is used only when no tool
+  // matched at all. The one case where it should win outright is handled above.
   if (calls.length === 0) {
     const firstText = usable.find((candidate) => candidate.kind === 'text')
     if (firstText) return [firstText]
