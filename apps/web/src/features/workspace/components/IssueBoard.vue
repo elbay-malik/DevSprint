@@ -32,7 +32,12 @@ const handleById = computed(() => new Map(props.users.map((user) => [user.id, `@
 <template>
   <div class="flex min-h-0 flex-col gap-4">
     <div class="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-5">
-      <div v-for="column in columns" :key="column.status" class="flex flex-col gap-2">
+      <div
+        v-for="column in columns"
+        :key="column.status"
+        :data-testid="`board-column-${column.status}`"
+        class="flex flex-col gap-2"
+      >
         <div class="flex items-center gap-2">
           <h2 class="text-muted-foreground text-sm font-medium">{{ column.label }}</h2>
           <Badge variant="secondary">{{ column.issues.length }}</Badge>

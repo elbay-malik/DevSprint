@@ -1,5 +1,11 @@
 import { expect, test } from '@playwright/test'
 
+// Approved writes mutate the Worker's workspace, so every test starts from the
+// seed rather than inheriting whatever an earlier run left behind.
+test.beforeEach(async ({ request }) => {
+  await request.post('http://localhost:8787/api/workspace/reset')
+})
+
 /**
  * The Phase 3 acceptance path, end to end through both servers: the board is
  * served by the Worker, and the composer's answer is grounded in a real tool
@@ -95,4 +101,56 @@ test('the chat still works after a turn is stopped', async ({ page }) => {
   await page.getByTestId('chat-input').press('Enter')
 
   await expect(page.getByTestId('chat-pane')).toContainText('5 open issues')
+})
+
+const CLOSE_OUT =
+  "We're closing Sprint 12 today — mark every remaining open issue in the sprint as done."
+
+test('every write is gated, one card per issue, and a denial is respected', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByTestId('workspace-source')).toHaveText(/live/i)
+
+  await page.getByTestId('chat-input').fill(CLOSE_OUT)
+  await page.getByTestId('chat-input').press('Enter')
+
+  // One gate per mutation — never a single card covering all five.
+  const cards = page.getByTestId('approval-card')
+  await expect(cards).toHaveCount(5)
+  await expect(cards.first()).toContainText('update_issue_status')
+  await expect(page.getByTestId('approval-headline').first()).toContainText('DS-7')
+
+  // Nothing has run yet: the board still shows DS-7 outside the Done column.
+  const doneColumn = page.getByTestId('board-column-done')
+  await expect(page.getByTestId('workspace-pane')).toContainText('DS-7')
+  await expect(doneColumn).not.toContainText('DS-7')
+
+  // Typing is refused while decisions are outstanding, otherwise answering the
+  // cards would silently do nothing.
+  await expect(page.getByTestId('chat-input')).toBeDisabled()
+
+  // Approve the first four, deny DS-11 with a reason (scenario S-B step 9).
+  for (let index = 0; index < 4; index += 1) {
+    await cards.nth(index).getByTestId('approval-approve').click()
+  }
+  const denied = cards.nth(4)
+  await denied.getByTestId('approval-reason').fill('Still blocked on vendor sandbox')
+  await denied.getByTestId('approval-deny').click()
+
+  // The turn resumes on its own once every card is answered.
+  const chat = page.getByTestId('chat-pane')
+  await expect(chat).toContainText('DS-7 moved in_review → done')
+  await expect(chat).toContainText('DS-11 was not approved')
+  await expect(chat).toContainText('Still blocked on vendor sandbox')
+
+  // The card keeps the decision as an audit record.
+  await expect(denied.getByTestId('approval-outcome')).toContainText('Denied')
+  await expect(cards.first().getByTestId('approval-outcome')).toContainText('Approved by you')
+
+  // The composer is usable again.
+  await expect(page.getByTestId('chat-input')).toBeEnabled()
+
+  // And the board reflects the approved writes without a reload: DS-7 has moved
+  // to Done, while the denied DS-11 has not.
+  await expect(doneColumn).toContainText('DS-7')
+  await expect(doneColumn).not.toContainText('DS-11')
 })

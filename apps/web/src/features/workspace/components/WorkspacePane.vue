@@ -1,14 +1,29 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, watch } from 'vue'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useWorkspaceStore } from '@/stores/workspace'
+import { useDevSprintChat } from '@/features/chat/composables/useDevSprintChat'
 import IssueBoard from './IssueBoard.vue'
 import SprintStatsCards from './SprintStatsCards.vue'
 
 const store = useWorkspaceStore()
+const chat = useDevSprintChat()
 
 onMounted(() => void store.hydrate())
+
+/**
+ * An approved write lands in the Worker, not in this store, so the board would
+ * otherwise keep showing the issue where it used to be. Re-reading when the turn
+ * settles is what makes the pane live, as docs/wireframes.md §1 promises:
+ * approve a status change in the chat and the issue moves columns.
+ */
+watch(
+  () => chat.status,
+  (status, previous) => {
+    if (status === 'ready' && previous !== 'ready') void store.hydrate()
+  },
+)
 </script>
 
 <template>

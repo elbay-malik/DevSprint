@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { isToolUIPart } from 'ai'
 import { useDevSprintChat } from '../composables/useDevSprintChat'
+import ApprovalCard from './ApprovalCard.vue'
 import ToolCallChip from './ToolCallChip.vue'
 
 const chat = useDevSprintChat()
@@ -15,6 +16,17 @@ const busy = computed(() => chat.status === 'submitted' || chat.status === 'stre
  */
 function isLive(messageId: string): boolean {
   return busy.value && chat.messages.at(-1)?.id === messageId
+}
+
+/**
+ * A gated call is owned by the ApprovalCard for its whole life — asking,
+ * answered, executed or denied — so the decision and its reason stay on screen
+ * as the audit record (docs/wireframes.md §3) instead of collapsing into a chip
+ * the moment the write runs. The presence of an `approval` is what marks the
+ * call as gated; ungated reads never have one.
+ */
+function isApprovalPart(part: { approval?: unknown }): boolean {
+  return part.approval !== undefined
 }
 </script>
 
@@ -36,6 +48,7 @@ function isLive(messageId: string): boolean {
       <!-- 'step-start' and any other part types are intentionally not rendered -->
       <template v-for="(part, index) in message.parts" :key="index">
         <span v-if="part.type === 'text'" class="whitespace-pre-wrap">{{ part.text }}</span>
+        <ApprovalCard v-else-if="isToolUIPart(part) && isApprovalPart(part)" :part="part" />
         <ToolCallChip v-else-if="isToolUIPart(part)" :part="part" :live="isLive(message.id)" />
       </template>
     </div>

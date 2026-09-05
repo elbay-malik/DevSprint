@@ -7,7 +7,20 @@ import { useDevSprintChat } from '../composables/useDevSprintChat'
 
 const chat = useDevSprintChat()
 const text = ref('')
-const busy = computed(() => chat.status === 'submitted' || chat.status === 'streaming')
+const streaming = computed(() => chat.status === 'submitted' || chat.status === 'streaming')
+
+/**
+ * The SDK answers approvals against the LAST message only, and it leaves the
+ * chat status on 'ready' while it waits for a human. Sending anything now would
+ * push the assistant turn out of last place and silently orphan every open card,
+ * so the composer stays locked until the decisions are in.
+ */
+const awaitingApproval = computed(() =>
+  (chat.messages.at(-1)?.parts ?? []).some(
+    (part) => 'state' in part && part.state === 'approval-requested',
+  ),
+)
+const busy = computed(() => streaming.value || awaitingApproval.value)
 
 watch(
   () => chat.error,
@@ -32,11 +45,11 @@ function onSubmit() {
     <Input
       v-model="text"
       data-testid="chat-input"
-      placeholder="Ask the copilot…"
+      :placeholder="awaitingApproval ? 'Approve or deny above to continue…' : 'Ask the copilot…'"
       :disabled="busy"
       autocomplete="off"
     />
-    <Button v-if="busy" type="button" variant="outline" @click="chat.stop()">Stop</Button>
+    <Button v-if="streaming" type="button" variant="outline" @click="chat.stop()">Stop</Button>
     <Button v-else type="submit" :disabled="!text.trim()">Send</Button>
   </form>
 </template>
