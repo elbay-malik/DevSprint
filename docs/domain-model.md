@@ -144,8 +144,10 @@ These values are computed by tools, never persisted on entities:
     so a chart can place the "today" marker.
 - Sprint `daysRemaining` = calendar days between the UTC date of `now` and `endDate` (4 for
   sprint-12 at `WORKSPACE_NOW`; 0 for the completed sprint-11), never negative.
-- `triggeredById` (Deployment) and `authorId` (ReleaseNote) may be a user id **or** the literal
-  string `'agent'` when the copilot performed the action.
+- `triggeredById` (Deployment), `authorId` (ReleaseNote) and `reporterId` (Issue) may be a user id
+  **or** the literal string `'agent'` when the copilot performed the action.
+- An issue the copilot files with no estimate gets `points: 0`, so an unestimated issue cannot
+  inflate a sprint's committed total or distort the burndown.
 
 ## 3. Seed data
 

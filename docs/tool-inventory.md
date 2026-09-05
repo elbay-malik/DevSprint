@@ -5,9 +5,11 @@ The DevSprint Copilot agent exposes exactly **10 tools**. Types (`Issue`, `Sprin
 [domain-model.md](./domain-model.md). Every scripted demo in
 [demo-scenarios.md](./demo-scenarios.md) exercises tools from this list and nothing else. Phase 3
 registers tools 1–6 (read/query and rich-data) as plain AI SDK function-calling tools in
-`apps/api`; tools 7–10 (the writes) land together with the Phase 5 approval gates and are not
-registered before then. The approval policy below is the contract implemented in Phase 5 and
-recorded in [ADR-0003](./adr/0003-hitl-approval-gates-on-write-tools.md).
+`apps/api`; Phase 5 adds the three gated writes, tools 7–9. Tool 10, `run_deployment`, stays
+unregistered until its simulation lands in Phase 8. The approval policy below is the contract
+implemented in Phase 5, recorded in
+[ADR-0003](./adr/0003-hitl-approval-gates-on-write-tools.md) (policy) and
+[ADR-0010](./adr/0010-tool-approval-mechanism-and-replay-protection.md) (mechanism).
 
 All tools return the shared envelope from domain-model.md:
 
@@ -335,15 +337,20 @@ always auto-execute; ALL writes are gated — no exceptions.**
 2. **One approval per mutation.** Approvals are granted per tool call, never per conversation or
    per batch. For `update_issue_status` this means one approval per issue: a request implying N
    status changes produces N separate calls and N separate ApprovalCards (see scenario S-B).
-3. **Mechanism (AI SDK v6).** Gating is enforced via AI SDK v6 tool approval — the current API is
-   the `toolApproval` map on the ToolLoopAgent, with statuses `'not-applicable'`, `'approved'`,
-   `'denied'`, and `'user-approval'`. The older per-tool `needsApproval` flag is **deprecated**;
-   do not use it in new code. The client renders an ApprovalCard when the approval-request part
-   arrives in the stream and responds via `addToolApprovalResponse`.
+3. **Mechanism (AI SDK v6, corrected in Phase 5).** Gating is `needsApproval: true` on the tool.
+   There is no `toolApproval` map in `ai@6.0.277` and `needsApproval` is not deprecated — this
+   paragraph previously said the opposite, which was verified wrong against the installed package
+   (see [ADR-0010](./adr/0010-tool-approval-mechanism-and-replay-protection.md)). A gated call
+   emits an approval-request part instead of executing; the client renders an ApprovalCard and
+   responds via `addToolApprovalResponse({ id, approved, reason })`, where `id` is the approval id.
+   All approvals raised in one step arrive together, so N gated calls produce N cards at once and
+   the turn resumes when the last one is answered.
 4. **Mandatory server-side re-validation.** Before executing an approved call, the server MUST
    re-validate the tool input against its schema and re-evaluate the approval policy. The message
    history that carries the approval response is client-controlled and cannot be trusted: a
-   forged or replayed "approved" message must never be sufficient to execute a write. The policy
+   forged or replayed "approved" message must never be sufficient to execute a write. Forgery is
+   covered by signing each approval request (`experimental_toolApprovalSecret`); replay is **not**
+   covered by the SDK and needs the server's own one-time-use ledger. The policy
    vs. mechanism split (policy is stable; the SDK API has churned) is recorded in
    [ADR-0003](./adr/0003-hitl-approval-gates-on-write-tools.md).
 5. **Denials.** A denied call never mutates state. The denial (with optional reason) is returned

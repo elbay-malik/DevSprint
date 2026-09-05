@@ -10,12 +10,13 @@ in an external MCP host) will get a one-click scripted-scenario button in the ch
 reviewer can run a full demo without free-typing prompts — this also acts as spend control on the
 model budget.
 
-Current repo status: repo bootstrap + Phases 0–4 are implemented (local-only but deploy-ready).
+Current repo status: repo bootstrap + Phases 0–5 are implemented (local-only but deploy-ready).
 Read-only questions are already answerable end-to-end through the six read/rich-data tools — S-D's
 burndown series (shown via the fallback tool chip until the BurndownChart card lands in Phase 7),
-sprint status, deployment history, issue lists and searches — and the agent already chains several
-tools in one turn, but every scenario still depends on Phases 5–7 (approval gates, MCP, rich
-cards; S-C additionally on Phase 8) before it is fully runnable. The "first fully runnable phase" field on each scenario says when it
+sprint status, deployment history, issue lists and searches — the agent chains several tools in one
+turn, and every write is gated behind an approval card, so S-B runs end to end today. S-E's
+recovery path works, but its ErrorCard is still the fallback tool chip until Phase 7. The
+remaining scenarios depend on Phases 6–8 (MCP, rich cards, the deployment simulation). The "first fully runnable phase" field on each scenario says when it
 lights up; see [roadmap.md](./roadmap.md).
 
 Conventions used in the step tables:
@@ -92,7 +93,13 @@ Conventions used in the step tables:
 **Success criteria**
 
 - Exactly 5 separate ApprovalCards render (never a single batch card).
-- The board columns update live as each approval resolves; DS-11 never leaves the Blocked column.
+- Nothing is written until a card is answered, and DS-11 never leaves the Blocked column.
+
+> **Choreography note (Phase 5).** The step table above reads as a strict alternation of card and
+> execution. In practice the agent asks for all five writes in one step, so the five cards appear
+> together and the approved writes execute once the last card is answered — the board therefore
+> updates in one go rather than card by card. The policy the scenario exists to prove is
+> unchanged: five separate calls, five separate approvals, no batch card, and the denial honoured.
 
 **Eval assertions**
 

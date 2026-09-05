@@ -6,14 +6,14 @@ A project/DevOps copilot over a mock sprint workspace — Vue 3 SPA (Vite 8) + H
 
 ## Status
 
-Early development. Implemented so far: repo bootstrap + Phase 0 (design docs) + Phase 1 (SPA shell) + Phase 2 (streaming chat) + Phase 3 (first real tools) + Phase 4 (multi-step agent loop) of the [16-phase roadmap](docs/roadmap.md). **Local-only but deploy-ready**: wrangler configs and deploy scripts are committed; nothing is deployed yet.
+Early development. Implemented so far: repo bootstrap + Phase 0 (design docs) + Phase 1 (SPA shell) + Phase 2 (streaming chat) + Phase 3 (first real tools) + Phase 4 (multi-step agent loop) + Phase 5 (approval gates on writes) of the [16-phase roadmap](docs/roadmap.md). **Local-only but deploy-ready**: wrangler configs and deploy scripts are committed; nothing is deployed yet.
 
 ## Architecture at a glance
 
 - **Frontend**: plain Vue 3 SPA (3.6-track) on Vite 8 (Rolldown), TypeScript strict, Pinia, Vue Router, shadcn-vue (Reka UI + Tailwind v4).
 - **Backend**: Hono on Cloudflare Workers running the AI SDK v6 `ToolLoopAgent` server-side (holds all model keys) — it chains the six read/rich-data tools over the seed workspace until it can answer, bounded by a step budget, and the composer's Stop button aborts the loop mid-turn. Groq primary, Gemini Flash fallback (see [Model providers](#model-providers)).
 - **MCP (Phase 6+)**: backend becomes an MCP client over Streamable HTTP to 2–3 custom MCP servers on Workers; the issues server gets publicly exposed.
-- **Safety**: every write tool is human-approved in-stream (HITL), with server-side re-validation.
+- **Safety**: every write is human-approved in-stream before it runs. Approval requests are signed so a forged one cannot execute, and each is single-use so a captured one is downgraded to a denial rather than applied twice. The single-use ledger is in memory, so it bounds replay within a Worker isolate rather than globally until the workspace moves to D1 in Phase 9 ([ADR-0010](docs/adr/0010-tool-approval-mechanism-and-replay-protection.md)).
 
 See [docs/](docs/README.md) for the product brief, domain model, tool inventory, demo scenarios, wireframes, and ADRs.
 
