@@ -136,6 +136,14 @@ These values are computed by tools, never persisted on entities:
   `d`.
 - Burndown `ideal(d)` = linear interpolation from `committedPoints` down to 0 across the sprint's
   calendar days.
+  - Day buckets are UTC calendar days from `startDate` to `endDate` inclusive (14 for sprint-12:
+    2026-06-22 … 2026-07-05). `remaining` is computed literally for every bucket — an issue counts
+    once the UTC date of its `completedAt` is `<= d` — so the line is flat after `now`. With `n`
+    buckets indexed `i = 0 … n−1`, `ideal(i) = committedPoints × (1 − i/(n−1))`, rounded to
+    2 decimals (`ideal(0) = committedPoints`, `ideal(n−1) = 0`). The series carries `asOf = now`
+    so a chart can place the "today" marker.
+- Sprint `daysRemaining` = calendar days between the UTC date of `now` and `endDate` (4 for
+  sprint-12 at `WORKSPACE_NOW`; 0 for the completed sprint-11), never negative.
 - `triggeredById` (Deployment) and `authorId` (ReleaseNote) may be a user id **or** the literal
   string `'agent'` when the copilot performed the action.
 

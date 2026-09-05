@@ -10,9 +10,13 @@ in an external MCP host) will get a one-click scripted-scenario button in the ch
 reviewer can run a full demo without free-typing prompts — this also acts as spend control on the
 model budget.
 
-Current repo status: this pass implements repo bootstrap + Phases 0-2 only (local-only but
-deploy-ready), so none of these scenarios is runnable yet. The "first fully runnable phase" field
-on each scenario says when it lights up; see [roadmap.md](./roadmap.md).
+Current repo status: repo bootstrap + Phases 0–3 are implemented (local-only but deploy-ready).
+Read-only questions are already answerable end-to-end through the six read/rich-data tools — S-D's
+burndown series (shown via the fallback tool chip until the BurndownChart card lands in Phase 7),
+sprint status, deployment history, issue lists and searches — but every scenario still depends on
+Phases 4–7 (multi-step chaining, approval gates, MCP, rich cards; S-C additionally on Phase 8)
+before it is fully runnable. The "first fully runnable phase" field on each scenario says when it
+lights up; see [roadmap.md](./roadmap.md).
 
 Conventions used in the step tables:
 

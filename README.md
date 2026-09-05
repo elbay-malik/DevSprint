@@ -6,12 +6,12 @@ A project/DevOps copilot over a mock sprint workspace — Vue 3 SPA (Vite 8) + H
 
 ## Status
 
-Early development. Implemented so far: repo bootstrap + Phase 0 (design docs) + Phase 1 (SPA shell) + Phase 2 (streaming chat echo) of the [16-phase roadmap](docs/roadmap.md). **Local-only but deploy-ready**: wrangler configs and deploy scripts are committed; nothing is deployed yet.
+Early development. Implemented so far: repo bootstrap + Phase 0 (design docs) + Phase 1 (SPA shell) + Phase 2 (streaming chat) + Phase 3 (first real tools via plain function calling) of the [16-phase roadmap](docs/roadmap.md). **Local-only but deploy-ready**: wrangler configs and deploy scripts are committed; nothing is deployed yet.
 
 ## Architecture at a glance
 
 - **Frontend**: plain Vue 3 SPA (3.6-track) on Vite 8 (Rolldown), TypeScript strict, Pinia, Vue Router, shadcn-vue (Reka UI + Tailwind v4).
-- **Backend**: Hono on Cloudflare Workers running the AI SDK v6 `ToolLoopAgent` server-side (holds all model keys); Groq primary, Gemini Flash fallback.
+- **Backend**: Hono on Cloudflare Workers running the AI SDK v6 agent server-side (holds all model keys) — currently `streamText` + the six read/rich-data tools over the seed workspace; `ToolLoopAgent` multi-step chaining is Phase 4. Groq primary, Gemini Flash fallback (see [Model providers](#model-providers)).
 - **MCP (Phase 6+)**: backend becomes an MCP client over Streamable HTTP to 2–3 custom MCP servers on Workers; the issues server gets publicly exposed.
 - **Safety**: every write tool is human-approved in-stream (HITL), with server-side re-validation.
 
@@ -40,8 +40,15 @@ git clone git@github.com:EleoXDA/DevSprint.git
 cd DevSprint
 corepack enable
 pnpm install
+cp apps/api/.dev.vars.example apps/api/.dev.vars   # model keys, optional (see below)
 pnpm dev        # runs all dev servers in parallel (web on :5173, api on :8787)
 ```
+
+Fill `GROQ_API_KEY` and/or `GOOGLE_GENERATIVE_AI_API_KEY` in `apps/api/.dev.vars` (gitignored). With no keys the api falls back to a scripted mock model, so the app still runs end-to-end — tool calls included — without spending any model quota.
+
+### Model providers
+
+Routing follows [ADR-0005](docs/adr/0005-model-routing-groq-primary-gemini-fallback.md): Groq `llama-3.3-70b-versatile` is the primary model and Gemini `gemini-2.5-flash` the fallback, used when Groq fails with a retryable error, a 429, or a 5xx. `MODEL_PROVIDER=auto|groq|gemini|mock` in `apps/api/.dev.vars` selects the route — `auto` (default) uses whichever keys are present and drops to the mock when there are none; `GROQ_MODEL` / `GEMINI_MODEL` override the model ids. Each chat response reports the resolved route in the `X-DevSprint-Model` header. The daily token-cap kill-switch from the ADR is deferred to Phase 11. Details in [apps/api/README.md](apps/api/README.md).
 
 ## Scripts
 

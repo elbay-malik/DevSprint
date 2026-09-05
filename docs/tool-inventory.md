@@ -3,9 +3,11 @@
 The DevSprint Copilot agent exposes exactly **10 tools**. Types (`Issue`, `Sprint`, `Deployment`,
 …), the fixed demo clock `WORKSPACE_NOW`, and the shared result envelope are defined in
 [domain-model.md](./domain-model.md). Every scripted demo in
-[demo-scenarios.md](./demo-scenarios.md) exercises tools from this list and nothing else. The
-approval policy below is the contract implemented in Phase 5 and recorded in
-[ADR-0003](./adr/0003-hitl-approval-gates-on-write-tools.md).
+[demo-scenarios.md](./demo-scenarios.md) exercises tools from this list and nothing else. Phase 3
+registers tools 1–6 (read/query and rich-data) as plain AI SDK function-calling tools in
+`apps/api`; tools 7–10 (the writes) land together with the Phase 5 approval gates and are not
+registered before then. The approval policy below is the contract implemented in Phase 5 and
+recorded in [ADR-0003](./adr/0003-hitl-approval-gates-on-write-tools.md).
 
 All tools return the shared envelope from domain-model.md:
 
@@ -164,12 +166,14 @@ z.object({
     sprintId: string,
     unit: 'points',
     committedPoints: number,
+    asOf: string, // WORKSPACE_NOW the series was computed against
     days: { date: string; remaining: number; ideal: number }[],
 } }
 ```
 
 The `days` series is shaped for direct consumption by the BurndownChart (Unovis) component;
-derivation rules for `remaining` and `ideal` live in domain-model.md.
+derivation rules for `remaining` and `ideal` live in domain-model.md. `asOf` is an additive Phase 3
+field: the Phase 7 chart uses it to draw the "today" marker without touching `Date.now()`.
 
 **Errors:** `SPRINT_NOT_FOUND`
 

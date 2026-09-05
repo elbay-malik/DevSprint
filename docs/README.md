@@ -3,7 +3,7 @@
 Design documentation for DevSprint Copilot. Start with the product brief, then follow the links
 below.
 
-> **Current repo status:** This pass implements repo bootstrap + Phases 0–2 only; local-only but
+> **Current repo status:** repo bootstrap + Phases 0–3 are implemented; local-only but
 > deploy-ready (wrangler config committed, no Cloudflare deploy).
 
 ## Index
