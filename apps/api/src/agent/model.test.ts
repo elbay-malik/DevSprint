@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { APICallError } from 'ai'
 import { MockLanguageModelV3 } from 'ai/test'
-import type { AppEnv } from '../env'
+import type { ModelEnv } from './model'
 import { DEFAULT_GEMINI_MODEL, DEFAULT_GROQ_MODEL, ModelConfigError, resolveModel } from './model'
 import { shouldFallback, withFallback } from './fallback-model'
 
-const base: AppEnv = { CORS_ORIGIN: 'http://localhost:5173' }
+const base: ModelEnv = {}
 
 function apiError(statusCode: number, isRetryable: boolean): APICallError {
   return new APICallError({

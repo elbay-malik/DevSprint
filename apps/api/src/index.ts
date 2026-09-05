@@ -9,7 +9,7 @@ import {
 } from 'ai'
 import { API_ROUTES } from '@devsprint/shared'
 import type { AppEnv } from './env'
-import { workspaceStore } from './workspace'
+import { workspaceStub, type WorkspaceApi } from './workspace/durable-object'
 import { createCopilotAgent } from './agent/agent'
 import { createStepAuditLogger } from './agent/audit'
 import { describeError, toClientErrorMessage } from './agent/errors'
@@ -22,7 +22,14 @@ import { resolveApprovalSecret, settleApprovals } from './agent/approvals'
 type ChatUIMessage = UIMessage<unknown, UIDataTypes, InferUITools<DevSprintTools>>
 
 const app = new Hono<{ Bindings: AppEnv }>()
-const tools = createTools(workspaceStore)
+
+/**
+ * The workspace lives in a Durable Object, so the tool set is built per request
+ * from the request's bindings rather than once at module scope.
+ */
+function workspaceOf(env: AppEnv): WorkspaceApi {
+  return workspaceStub(env.WORKSPACE)
+}
 
 // env bindings are only available per-request, so the cors middleware is
 // constructed inside the handler instead of at module scope
@@ -38,7 +45,7 @@ app.use('/api/*', (c, next) =>
 
 app.get('/api/health', (c) => c.json({ ok: true }))
 
-app.get(API_ROUTES.workspace, (c) => c.json(workspaceStore.get()))
+app.get(API_ROUTES.workspace, async (c) => c.json(await workspaceOf(c.env).snapshot()))
 
 /**
  * Restores the seed. The demo is a mock workspace that approved writes mutate,
@@ -46,10 +53,7 @@ app.get(API_ROUTES.workspace, (c) => c.json(workspaceStore.get()))
  * tests need a way back to a known board. Phase 9 replaces this with the daily
  * reset once the workspace lives in D1.
  */
-app.post(API_ROUTES.workspaceReset, (c) => {
-  workspaceStore.reset()
-  return c.json(workspaceStore.get())
-})
+app.post(API_ROUTES.workspaceReset, async (c) => c.json(await workspaceOf(c.env).reset()))
 
 function invalidInput(c: Context<{ Bindings: AppEnv }>, message: string) {
   return c.json({ error: { code: 'INVALID_INPUT', message } }, 400)
@@ -67,6 +71,9 @@ app.post(API_ROUTES.chat, async (c) => {
   if (!Array.isArray(messages)) {
     return invalidInput(c, '`messages` must be an array of UI messages.')
   }
+
+  const workspace = workspaceOf(c.env)
+  const tools = createTools(workspace)
 
   let uiMessages: ChatUIMessage[]
   try {
@@ -97,7 +104,7 @@ app.post(API_ROUTES.chat, async (c) => {
 
   const agent = createCopilotAgent({
     model,
-    instructions: buildSystemPrompt(workspaceStore.get()),
+    instructions: buildSystemPrompt(await workspace.snapshot()),
     tools,
     approvalSecret: resolveApprovalSecret(c.env.TOOL_APPROVAL_SECRET),
   })
@@ -127,5 +134,7 @@ app.post(API_ROUTES.chat, async (c) => {
     },
   })
 })
+
+export { WorkspaceDO } from './workspace/durable-object'
 
 export default app

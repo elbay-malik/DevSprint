@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { simulateReadableStream } from 'ai'
-import { createWorkspaceStore } from '../workspace/store'
+import { createLocalWorkspaceApi, createWorkspaceStore } from '../workspace/store'
 import { createCopilotAgent, MAX_STEPS } from './agent'
 import { createTools } from './tools'
 import type {
@@ -54,7 +54,7 @@ function loopingModel() {
   return { model, seen }
 }
 
-const tools = createTools(createWorkspaceStore())
+const tools = createTools(createLocalWorkspaceApi(createWorkspaceStore()))
 
 describe('createCopilotAgent', () => {
   it('stops a runaway loop at the step budget', async () => {

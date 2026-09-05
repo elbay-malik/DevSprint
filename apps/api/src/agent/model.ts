@@ -8,6 +8,15 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createGroq } from '@ai-sdk/groq'
 import { APICallError, type LanguageModel } from 'ai'
 import type { AppEnv } from '../env'
+
+/**
+ * Only the model settings — routing has no business reading the workspace
+ * binding or the approval secret.
+ */
+export type ModelEnv = Pick<
+  AppEnv,
+  'MODEL_PROVIDER' | 'GROQ_API_KEY' | 'GOOGLE_GENERATIVE_AI_API_KEY' | 'GROQ_MODEL' | 'GEMINI_MODEL'
+>
 import { withFallback } from './fallback-model'
 import { createMockModel } from './mock-model'
 
@@ -67,7 +76,7 @@ function mockModel(): ResolvedModel {
   return { model: createMockModel(), label: 'mock' }
 }
 
-export function resolveModel(env: AppEnv): ResolvedModel {
+export function resolveModel(env: ModelEnv): ResolvedModel {
   const provider = nonEmpty(env.MODEL_PROVIDER) ?? 'auto'
   if (!isModelProvider(provider)) {
     throw new ModelConfigError(

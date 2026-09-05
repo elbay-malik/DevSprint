@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { Workspace } from '@devsprint/shared'
 import app from './index'
-import { workspaceStore } from './workspace'
+import { fakeWorkspaceBinding } from '../test/workspace-binding'
 
-const env = { CORS_ORIGIN: 'http://localhost:5173', MODEL_PROVIDER: 'mock' }
+const workspace = fakeWorkspaceBinding()
+const env = {
+  CORS_ORIGIN: 'http://localhost:5173',
+  MODEL_PROVIDER: 'mock',
+  WORKSPACE: workspace.binding,
+}
 
 function ask(text: string, overrides: Record<string, string> = {}) {
   return app.request(
@@ -47,13 +52,13 @@ describe('GET /api/health', () => {
 describe('POST /api/workspace/reset', () => {
   it('puts the board back to the seed after a write', async () => {
     const { updateIssueStatus } = await import('./workspace/mutations')
-    updateIssueStatus(workspaceStore.get(), { issueKey: 'DS-7', status: 'done' })
-    expect(workspaceStore.get().issues.find((i) => i.key === 'DS-7')?.status).toBe('done')
+    updateIssueStatus(workspace.store.get(), { issueKey: 'DS-7', status: 'done' })
+    expect(workspace.store.get().issues.find((i) => i.key === 'DS-7')?.status).toBe('done')
 
     const res = await app.request('/api/workspace/reset', { method: 'POST' }, env)
 
     expect(res.status).toBe(200)
-    expect(workspaceStore.get().issues.find((i) => i.key === 'DS-7')?.status).toBe('in_review')
+    expect(workspace.store.get().issues.find((i) => i.key === 'DS-7')?.status).toBe('in_review')
   })
 })
 

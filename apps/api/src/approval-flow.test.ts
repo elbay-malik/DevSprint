@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import app from './index'
 import { resetApprovalLedger } from './agent/approvals'
-import { workspaceStore } from './workspace'
+import { fakeWorkspaceBinding } from '../test/workspace-binding'
 
-const env = { CORS_ORIGIN: 'http://localhost:5173', MODEL_PROVIDER: 'mock' }
+const workspace = fakeWorkspaceBinding()
+const env = {
+  CORS_ORIGIN: 'http://localhost:5173',
+  MODEL_PROVIDER: 'mock',
+  WORKSPACE: workspace.binding,
+}
 
 interface Chunk {
   type: string
@@ -95,7 +100,7 @@ function answeredAssistantMessage(
 
 describe('approval gates (scenario S-B)', () => {
   beforeEach(() => {
-    workspaceStore.reset()
+    workspace.store.reset()
     resetApprovalLedger()
   })
 
@@ -121,7 +126,7 @@ describe('approval gates (scenario S-B)', () => {
     expect(approvals.every((approval) => typeof approval.signature === 'string')).toBe(true)
 
     // Nothing ran: the board is untouched while the human decides.
-    const sprint = workspaceStore.get().issues.filter((issue) => issue.sprintId === 'sprint-12')
+    const sprint = workspace.store.get().issues.filter((issue) => issue.sprintId === 'sprint-12')
     expect(sprint.filter((issue) => issue.status === 'done')).toHaveLength(2)
   })
 
@@ -140,7 +145,7 @@ describe('approval gates (scenario S-B)', () => {
     expect(second.chunks.filter((chunk) => chunk.type === 'tool-output-denied')).toHaveLength(1)
 
     const board = new Map(
-      workspaceStore.get().issues.map((issue) => [issue.key, issue.status] as const),
+      workspace.store.get().issues.map((issue) => [issue.key, issue.status] as const),
     )
     expect(board.get('DS-7')).toBe('done')
     expect(board.get('DS-10')).toBe('done')
@@ -158,7 +163,7 @@ describe('approval gates (scenario S-B)', () => {
     const assistant = answeredAssistantMessage(first.chunks, () => ({ approved: true }))
 
     await post([userMessage(CLOSE_OUT), assistant])
-    const board = workspaceStore.get()
+    const board = workspace.store.get()
     const updatedAt = board.issues.find((issue) => issue.key === 'DS-7')?.updatedAt
 
     // The same approvals again: a captured approval must not drive a second write.
@@ -168,7 +173,7 @@ describe('approval gates (scenario S-B)', () => {
     expect(replay.chunks.filter((chunk) => chunk.type === 'tool-output-available')).toHaveLength(0)
     expect(replay.chunks.filter((chunk) => chunk.type === 'tool-output-denied')).toHaveLength(5)
     // State is untouched by the replay.
-    expect(workspaceStore.get().issues.find((issue) => issue.key === 'DS-7')?.updatedAt).toBe(
+    expect(workspace.store.get().issues.find((issue) => issue.key === 'DS-7')?.updatedAt).toBe(
       updatedAt,
     )
     // And the conversation still works rather than being wedged forever.
@@ -188,7 +193,7 @@ describe('approval gates (scenario S-B)', () => {
     expect(second.chunks.some((chunk) => chunk.type === 'error')).toBe(true)
     // The board is untouched.
     const board = new Map(
-      workspaceStore.get().issues.map((issue) => [issue.key, issue.status] as const),
+      workspace.store.get().issues.map((issue) => [issue.key, issue.status] as const),
     )
     expect(board.get('DS-7')).toBe('in_review')
   })

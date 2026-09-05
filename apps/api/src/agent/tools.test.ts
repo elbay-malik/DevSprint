@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { READ_TOOL_NAMES, TOOL_DESCRIPTIONS, WRITE_TOOL_NAMES } from '@devsprint/shared/tools'
-import { createWorkspaceStore } from '../workspace/store'
+import { createLocalWorkspaceApi, createWorkspaceStore } from '../workspace/store'
 import { createReadTools, createTools, createWriteTools } from './tools'
 
 const store = createWorkspaceStore()
-const tools = createReadTools(store)
+const tools = createReadTools(createLocalWorkspaceApi(store))
 
 /** `execute` is optional on the SDK's Tool type; every tool here defines one. */
 async function run(name: keyof typeof tools, input: unknown): Promise<unknown> {
@@ -43,7 +43,7 @@ describe('createReadTools', () => {
 
   it('reads the store on every call rather than a captured snapshot', async () => {
     const mutable = createWorkspaceStore()
-    const live = createReadTools(mutable)
+    const live = createReadTools(createLocalWorkspaceApi(mutable))
     mutable.get().issues.push({
       ...mutable.get().issues[0]!,
       id: 'ds-99',
@@ -62,7 +62,7 @@ describe('createReadTools', () => {
 })
 
 describe('createWriteTools', () => {
-  const writeTools = createWriteTools(createWorkspaceStore())
+  const writeTools = createWriteTools(createLocalWorkspaceApi(createWorkspaceStore()))
 
   it('registers the three gated writes and not the long-running one', () => {
     expect(Object.keys(writeTools).sort()).toEqual([...WRITE_TOOL_NAMES].sort())
@@ -79,14 +79,14 @@ describe('createWriteTools', () => {
   })
 
   it('gates no read', () => {
-    const all = createTools(createWorkspaceStore())
+    const all = createTools(createLocalWorkspaceApi(createWorkspaceStore()))
     for (const name of READ_TOOL_NAMES) {
       expect(all[name].needsApproval).toBeUndefined()
     }
   })
 
   it('exposes reads and writes together to the agent', () => {
-    const all = createTools(createWorkspaceStore())
+    const all = createTools(createLocalWorkspaceApi(createWorkspaceStore()))
     expect(Object.keys(all).sort()).toEqual([...READ_TOOL_NAMES, ...WRITE_TOOL_NAMES].sort())
   })
 })

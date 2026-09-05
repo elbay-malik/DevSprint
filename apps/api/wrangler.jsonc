@@ -17,4 +17,10 @@
   "observability": {
     "enabled": true,
   },
+  // The one copy of the workspace. It lives here, and the MCP servers bind it
+  // cross-script, so both clients see the same board (scenario S-F).
+  "durable_objects": {
+    "bindings": [{ "name": "WORKSPACE", "class_name": "WorkspaceDO" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["WorkspaceDO"] }],
 }

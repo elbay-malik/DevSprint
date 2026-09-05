@@ -20,77 +20,68 @@ import {
   type ReadToolName,
   type WriteToolName,
 } from '@devsprint/shared/tools'
-import type { WorkspaceStore } from '../workspace/store'
-import {
-  diffReleaseNotes,
-  getBurndown,
-  getDeploymentHistory,
-  getSprintStatus,
-  listIssues,
-  searchIssues,
-} from '../workspace/queries'
-import { createIssue, createReleaseNotes, updateIssueStatus } from '../workspace/mutations'
+import type { WorkspaceApi } from '@devsprint/shared/tools'
 
-export function createReadTools(store: WorkspaceStore) {
+export function createReadTools(workspace: WorkspaceApi) {
   return {
     list_issues: tool({
       description: TOOL_DESCRIPTIONS.list_issues,
       inputSchema: READ_TOOL_INPUT_SCHEMAS.list_issues,
-      execute: (input) => listIssues(store.get(), input),
+      execute: (input) => workspace.listIssues(input),
     }),
     search_issues: tool({
       description: TOOL_DESCRIPTIONS.search_issues,
       inputSchema: READ_TOOL_INPUT_SCHEMAS.search_issues,
-      execute: (input) => searchIssues(store.get(), input),
+      execute: (input) => workspace.searchIssues(input),
     }),
     get_sprint_status: tool({
       description: TOOL_DESCRIPTIONS.get_sprint_status,
       inputSchema: READ_TOOL_INPUT_SCHEMAS.get_sprint_status,
-      execute: (input) => getSprintStatus(store.get(), input),
+      execute: (input) => workspace.getSprintStatus(input),
     }),
     get_deployment_history: tool({
       description: TOOL_DESCRIPTIONS.get_deployment_history,
       inputSchema: READ_TOOL_INPUT_SCHEMAS.get_deployment_history,
-      execute: (input) => getDeploymentHistory(store.get(), input),
+      execute: (input) => workspace.getDeploymentHistory(input),
     }),
     get_burndown: tool({
       description: TOOL_DESCRIPTIONS.get_burndown,
       inputSchema: READ_TOOL_INPUT_SCHEMAS.get_burndown,
-      execute: (input) => getBurndown(store.get(), input),
+      execute: (input) => workspace.getBurndown(input),
     }),
     diff_release_notes: tool({
       description: TOOL_DESCRIPTIONS.diff_release_notes,
       inputSchema: READ_TOOL_INPUT_SCHEMAS.diff_release_notes,
-      execute: (input) => diffReleaseNotes(store.get(), input),
+      execute: (input) => workspace.diffReleaseNotes(input),
     }),
   } satisfies Record<ReadToolName, Tool>
 }
 
-export function createWriteTools(store: WorkspaceStore) {
+export function createWriteTools(workspace: WorkspaceApi) {
   return {
     create_issue: tool({
       description: TOOL_DESCRIPTIONS.create_issue,
       inputSchema: WRITE_TOOL_INPUT_SCHEMAS.create_issue,
       needsApproval: true,
-      execute: (input) => createIssue(store.get(), input),
+      execute: (input) => workspace.createIssue(input),
     }),
     update_issue_status: tool({
       description: TOOL_DESCRIPTIONS.update_issue_status,
       inputSchema: WRITE_TOOL_INPUT_SCHEMAS.update_issue_status,
       needsApproval: true,
-      execute: (input) => updateIssueStatus(store.get(), input),
+      execute: (input) => workspace.updateIssueStatus(input),
     }),
     create_release_notes: tool({
       description: TOOL_DESCRIPTIONS.create_release_notes,
       inputSchema: WRITE_TOOL_INPUT_SCHEMAS.create_release_notes,
       needsApproval: true,
-      execute: (input) => createReleaseNotes(store.get(), input),
+      execute: (input) => workspace.createReleaseNotes(input),
     }),
   } satisfies Record<WriteToolName, Tool>
 }
 
-export function createTools(store: WorkspaceStore) {
-  return { ...createReadTools(store), ...createWriteTools(store) }
+export function createTools(workspace: WorkspaceApi) {
+  return { ...createReadTools(workspace), ...createWriteTools(workspace) }
 }
 
 export type ReadTools = ReturnType<typeof createReadTools>
