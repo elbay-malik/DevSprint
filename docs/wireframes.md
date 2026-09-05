@@ -153,9 +153,11 @@ scenario specs).
 - **Responsive behavior**: below 1024px the two panes stack vertically — chat first, workspace
   behind a tab — so the phone experience is chat-led.
 - **Current scope**: this wireframe is the TARGET layout. The repo currently ships the two panes,
-  the 5-column board with seed data, and a composer backed by the real tool-calling Worker
-  (Phase 3); ToolCallChip renders every tool call — name, state, collapsed args/result JSON — as
-  the Phase 3 fallback rendering. Tabs, sprint selector, and scenario buttons are still pending
-  (Phase 4+).
+  the 5-column board with seed data, and a composer backed by the real agent loop, which chains
+  several tools in one turn (Phase 4); ToolCallChip renders every tool call — name, state,
+  collapsed args/result JSON — as the Phase 3 fallback rendering, one chip per call in transcript
+  order. The Stop button aborts the loop mid-turn, and a call it interrupts is labelled `stopped`
+  rather than left claiming to run. Tabs, sprint selector, and scenario buttons are still pending
+  (Phase 7+).
 - **Auto-scroll**: the chat pane follows new tokens with scroll-anchoring; a manual scroll-up
   releases the anchor (a jump-to-bottom affordance re-engages it).
