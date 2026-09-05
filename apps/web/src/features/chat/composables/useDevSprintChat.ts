@@ -1,12 +1,15 @@
 import { Chat } from '@ai-sdk/vue'
-import { DefaultChatTransport, type UIMessage } from 'ai'
+import { DefaultChatTransport } from 'ai'
 import { CHAT_ENDPOINT } from '@/lib/api'
+import type { DevSprintUIMessage } from '../types'
 
-let chat: Chat<UIMessage> | undefined
+export type { DevSprintUIMessage } from '../types'
+
+let chat: Chat<DevSprintUIMessage> | undefined
 
 /** Module-level singleton so every component shares one conversation. */
-export function useDevSprintChat(): Chat<UIMessage> {
-  chat ??= new Chat<UIMessage>({
+export function useDevSprintChat(): Chat<DevSprintUIMessage> {
+  chat ??= new Chat<DevSprintUIMessage>({
     transport: new DefaultChatTransport({ api: CHAT_ENDPOINT }),
   })
   return chat

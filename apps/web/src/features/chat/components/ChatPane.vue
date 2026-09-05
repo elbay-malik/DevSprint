@@ -10,7 +10,8 @@ import ChatMessageList from './ChatMessageList.vue'
     <header class="px-4 py-3 lg:px-6">
       <h2 class="text-sm font-semibold">Copilot</h2>
       <p class="text-muted-foreground text-xs">
-        Streaming echo for now — the agent arrives in Phase 3.
+        Answers are grounded in the workspace via read-only tools. Writes arrive with approvals in
+        Phase 5.
       </p>
     </header>
     <Separator />

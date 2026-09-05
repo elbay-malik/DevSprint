@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { isToolUIPart } from 'ai'
 import { useDevSprintChat } from '../composables/useDevSprintChat'
+import ToolCallChip from './ToolCallChip.vue'
 
 const chat = useDevSprintChat()
 </script>
@@ -7,20 +9,22 @@ const chat = useDevSprintChat()
 <template>
   <div class="flex flex-col gap-3 p-4 lg:px-6">
     <p v-if="chat.messages.length === 0" class="text-muted-foreground text-sm">
-      No messages yet. Say hello to test the streaming echo.
+      Ask about the sprint — try “How many open issues are in the current sprint?”
     </p>
     <div
       v-for="message in chat.messages"
       :key="message.id"
-      class="max-w-[85%] rounded-lg px-3 py-2 text-sm"
+      class="flex max-w-[85%] flex-col gap-2 rounded-lg px-3 py-2 text-sm"
       :class="
         message.role === 'user'
           ? 'bg-primary text-primary-foreground self-end'
           : 'bg-muted self-start'
       "
     >
+      <!-- 'step-start' and any other part types are intentionally not rendered -->
       <template v-for="(part, index) in message.parts" :key="index">
         <span v-if="part.type === 'text'" class="whitespace-pre-wrap">{{ part.text }}</span>
+        <ToolCallChip v-else-if="isToolUIPart(part)" :part="part" />
       </template>
     </div>
     <div

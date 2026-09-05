@@ -2,14 +2,42 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { createWorkspaceSeed, type Workspace } from '@devsprint/shared'
 import { computeSprintStats } from '@/features/workspace/lib/sprint-stats'
+import { WORKSPACE_ENDPOINT } from '@/lib/api'
+
+export type WorkspaceSource = 'seed' | 'api'
 
 /**
- * Workspace state, seeded from the shared fixtures. This store is the seam
- * the Phase 3+ API integration replaces (fetching from the api Worker instead
- * of the static seed).
+ * Workspace state. Starts from the shared seed so the board renders instantly
+ * (and keeps working while the api Worker is down), then `hydrate()` swaps in
+ * the Worker's copy — the same in-memory workspace the agent's tools read.
+ * From Phase 5 on, approved writes land in the Worker and show up here on the
+ * next hydrate; Phase 9 moves the source of truth to D1.
  */
 export const useWorkspaceStore = defineStore('workspace', () => {
   const workspace = ref<Workspace>(createWorkspaceSeed())
+  const source = ref<WorkspaceSource>('seed')
+  const hydrating = ref(false)
+  let warned = false
+
+  async function hydrate(): Promise<void> {
+    hydrating.value = true
+    try {
+      const response = await fetch(WORKSPACE_ENDPOINT)
+      if (!response.ok) throw new Error(`GET ${WORKSPACE_ENDPOINT} responded ${response.status}`)
+      workspace.value = (await response.json()) as Workspace
+      source.value = 'api'
+    } catch (error) {
+      // Expected whenever the Worker is not running locally: keep the seed and
+      // warn once instead of toasting on every retry.
+      source.value = 'seed'
+      if (!warned) {
+        warned = true
+        console.warn('[workspace] api unreachable, showing seed data:', error)
+      }
+    } finally {
+      hydrating.value = false
+    }
+  }
 
   const activeSprint = computed(() =>
     workspace.value.sprints.find((sprint) => sprint.state === 'active'),
@@ -23,5 +51,15 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const stats = computed(() => computeSprintStats(sprintIssues.value))
   const users = computed(() => workspace.value.users)
 
-  return { workspace, activeSprint, sprintIssues, backlogIssues, stats, users }
+  return {
+    workspace,
+    source,
+    hydrating,
+    hydrate,
+    activeSprint,
+    sprintIssues,
+    backlogIssues,
+    stats,
+    users,
+  }
 })
