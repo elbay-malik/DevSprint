@@ -15,7 +15,6 @@
   "dependencies": {
     "@devsprint/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "catalog:",
-    "hono": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

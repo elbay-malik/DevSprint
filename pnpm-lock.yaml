@@ -144,9 +144,6 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.30.0(zod@4.4.3)
-      hono:
-        specifier: 'catalog:'
-        version: 4.12.28
       zod:
         specifier: 'catalog:'
         version: 4.4.3

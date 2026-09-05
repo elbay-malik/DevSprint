@@ -6,8 +6,9 @@ import { workspaceOf } from './workspace'
 /**
  * The publicly exposed issues MCP server (ADR-0002). An external host such as
  * Claude Desktop adds this URL as a remote server and gets the four issue
- * tools; `apps/api` connects to the same endpoint as an MCP client. Both drive
- * one workspace, which is what scenario S-F is there to prove.
+ * tools. It drives the same workspace the SPA shows, which is what scenario S-F
+ * is there to prove. Routing the in-app agent's own tools through an MCP client
+ * to this endpoint is the remaining half of Phase 6.
  *
  * Stateless on purpose: a fresh server and transport per request, and no
  * session id generator. Cloudflare's current guidance is to build stateless
