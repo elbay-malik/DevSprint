@@ -14,7 +14,9 @@ Current repo status: repo bootstrap + Phases 0–5 are implemented (local-only b
 Read-only questions are already answerable end-to-end through the six read/rich-data tools — S-D's
 burndown series (shown via the fallback tool chip until the BurndownChart card lands in Phase 7),
 sprint status, deployment history, issue lists and searches — the agent chains several tools in one
-turn, and every write is gated behind an approval card, so S-B runs end to end today. S-E's
+turn, and every write is gated behind an approval card, so S-B runs end to end today. S-F's tools,
+writes and shared workspace are verified locally against `apps/mcp-issues`; the scenario as written
+also needs the deploy its preconditions call for, which is Phase 14. S-E's
 recovery path works, but its ErrorCard is still the fallback tool chip until Phase 7. The
 remaining scenarios depend on Phases 6–8 (MCP, rich cards, the deployment simulation). The "first fully runnable phase" field on each scenario says when it
 lights up; see [roadmap.md](./roadmap.md).
