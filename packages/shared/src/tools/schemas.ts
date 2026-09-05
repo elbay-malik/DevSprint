@@ -3,9 +3,11 @@
  * Source of truth: docs/tool-inventory.md — schemas and the quoted trigger
  * descriptions are transcribed verbatim; keep both in sync.
  *
- * Phase 3 ships the six read/query and rich-data tools (1–6). The gated write
- * tools (7–10) arrive with the HITL approval gates in Phase 5 and must never be
- * exposed ungated (docs/tool-inventory.md §3, ADR-0003).
+ * Tools 1–6 are read/query and rich-data: they always auto-execute. Tools 7–9
+ * are gated writes — they only run after explicit human approval, with no
+ * exceptions and no batching (docs/tool-inventory.md §3, ADR-0003). Tool 10,
+ * `run_deployment`, is the long-running write and lands with its simulation in
+ * Phase 8.
  */
 import { z } from 'zod'
 import { ISSUE_STATUSES } from '../workspace/types'
@@ -14,6 +16,13 @@ export const issueStatusSchema = z.enum(ISSUE_STATUSES)
 export const issueTypeSchema = z.enum(['feature', 'bug', 'chore', 'spike'])
 export const prioritySchema = z.enum(['low', 'medium', 'high', 'urgent'])
 export const environmentSchema = z.enum(['staging', 'production'])
+
+export const WRITE_TOOL_NAMES = [
+  'create_issue',
+  'update_issue_status',
+  'create_release_notes',
+] as const
+export type WriteToolName = (typeof WRITE_TOOL_NAMES)[number]
 
 export const READ_TOOL_NAMES = [
   'list_issues',
@@ -26,7 +35,7 @@ export const READ_TOOL_NAMES = [
 export type ReadToolName = (typeof READ_TOOL_NAMES)[number]
 
 /** Trigger-condition descriptions, verbatim from docs/tool-inventory.md §2. */
-export const TOOL_DESCRIPTIONS: Record<ReadToolName, string> = {
+export const TOOL_DESCRIPTIONS: Record<ReadToolName | WriteToolName, string> = {
   list_issues:
     'Use when the user asks what issues exist or wants a filtered view of issues by sprint, status, assignee, type, or label.',
   search_issues:
@@ -39,6 +48,12 @@ export const TOOL_DESCRIPTIONS: Record<ReadToolName, string> = {
     'Use when the user asks whether a sprint is on track, asks about trend/velocity, or requests a burndown or progress chart.',
   diff_release_notes:
     'Use when the user wants to compare draft release notes against the last published version before saving or publishing.',
+  create_issue:
+    'Use when the user asks to add, file, or log a new issue, bug, task, or spike in the workspace.',
+  update_issue_status:
+    'Use when the user asks to move, close, block, unblock, or reopen an existing issue (any status change).',
+  create_release_notes:
+    'Use when the user asks to draft or save release notes for a version. The agent composes the markdown itself (from done issues) and passes it in.',
 }
 
 export const listIssuesInputSchema = z.object({
@@ -76,6 +91,32 @@ export const diffReleaseNotesInputSchema = z.object({
   baseVersion: z.string().optional(),
 })
 
+export const createIssueInputSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().optional(),
+  type: issueTypeSchema,
+  priority: prioritySchema.default('medium'),
+  /** null puts the issue in the backlog. */
+  sprintId: z.string().nullable().default(null),
+  assigneeId: z.string().optional(),
+  points: z.number().int().positive().optional(),
+  labels: z.array(z.string()).optional(),
+})
+
+export const updateIssueStatusInputSchema = z.object({
+  /** Human key, e.g. 'DS-7'. */
+  issueKey: z.string(),
+  status: issueStatusSchema,
+  comment: z.string().optional(),
+})
+
+export const createReleaseNotesInputSchema = z.object({
+  /** e.g. 'v1.5.0'. */
+  version: z.string(),
+  markdown: z.string().min(1),
+  sprintId: z.string().optional(),
+})
+
 export const READ_TOOL_INPUT_SCHEMAS = {
   list_issues: listIssuesInputSchema,
   search_issues: searchIssuesInputSchema,
@@ -85,9 +126,18 @@ export const READ_TOOL_INPUT_SCHEMAS = {
   diff_release_notes: diffReleaseNotesInputSchema,
 } satisfies Record<ReadToolName, z.ZodType>
 
+export const WRITE_TOOL_INPUT_SCHEMAS = {
+  create_issue: createIssueInputSchema,
+  update_issue_status: updateIssueStatusInputSchema,
+  create_release_notes: createReleaseNotesInputSchema,
+} satisfies Record<WriteToolName, z.ZodType>
+
 export type ListIssuesInput = z.infer<typeof listIssuesInputSchema>
 export type SearchIssuesInput = z.infer<typeof searchIssuesInputSchema>
 export type GetSprintStatusInput = z.infer<typeof getSprintStatusInputSchema>
 export type GetDeploymentHistoryInput = z.infer<typeof getDeploymentHistoryInputSchema>
 export type GetBurndownInput = z.infer<typeof getBurndownInputSchema>
 export type DiffReleaseNotesInput = z.infer<typeof diffReleaseNotesInputSchema>
+export type CreateIssueInput = z.infer<typeof createIssueInputSchema>
+export type UpdateIssueStatusInput = z.infer<typeof updateIssueStatusInputSchema>
+export type CreateReleaseNotesInput = z.infer<typeof createReleaseNotesInputSchema>

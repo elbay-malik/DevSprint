@@ -3,6 +3,8 @@ import {
   READ_TOOL_INPUT_SCHEMAS,
   READ_TOOL_NAMES,
   TOOL_DESCRIPTIONS,
+  WRITE_TOOL_INPUT_SCHEMAS,
+  WRITE_TOOL_NAMES,
   getDeploymentHistoryInputSchema,
   listIssuesInputSchema,
   searchIssuesInputSchema,
@@ -19,12 +21,29 @@ describe('tool contracts', () => {
       'get_burndown',
       'diff_release_notes',
     ])
-    expect(Object.keys(TOOL_DESCRIPTIONS).sort()).toEqual([...READ_TOOL_NAMES].sort())
     expect(Object.keys(READ_TOOL_INPUT_SCHEMAS).sort()).toEqual([...READ_TOOL_NAMES].sort())
   })
 
+  it('covers the three gated write tools, leaving run_deployment to Phase 8', () => {
+    expect([...WRITE_TOOL_NAMES]).toEqual([
+      'create_issue',
+      'update_issue_status',
+      'create_release_notes',
+    ])
+    expect(Object.keys(WRITE_TOOL_INPUT_SCHEMAS).sort()).toEqual([...WRITE_TOOL_NAMES].sort())
+    expect(Object.keys(TOOL_DESCRIPTIONS).sort()).toEqual(
+      [...READ_TOOL_NAMES, ...WRITE_TOOL_NAMES].sort(),
+    )
+  })
+
+  it('keeps a status change single-issue so one approval cannot authorise many', () => {
+    const schema = WRITE_TOOL_INPUT_SCHEMAS.update_issue_status
+    expect(schema.safeParse({ issueKey: 'DS-7', status: 'done' }).success).toBe(true)
+    expect(schema.safeParse({ issueKey: ['DS-7', 'DS-8'], status: 'done' }).success).toBe(false)
+  })
+
   it('writes descriptions as trigger conditions', () => {
-    for (const name of READ_TOOL_NAMES) {
+    for (const name of [...READ_TOOL_NAMES, ...WRITE_TOOL_NAMES]) {
       expect(TOOL_DESCRIPTIONS[name]).toMatch(/^Use when the user/)
     }
   })

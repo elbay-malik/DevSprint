@@ -2,14 +2,24 @@
  * Output payloads of the agent tools (the `data` half of `ToolResult<T>`).
  * Source of truth: docs/tool-inventory.md §2 — keep in sync.
  */
-import type { Deployment, Issue, IssueStatus, Sprint, ToolResult } from '../workspace/types'
 import type {
+  Deployment,
+  Issue,
+  IssueStatus,
+  ReleaseNote,
+  Sprint,
+  ToolResult,
+} from '../workspace/types'
+import type {
+  CreateIssueInput,
+  CreateReleaseNotesInput,
   DiffReleaseNotesInput,
   GetBurndownInput,
   GetDeploymentHistoryInput,
   GetSprintStatusInput,
   ListIssuesInput,
   SearchIssuesInput,
+  UpdateIssueStatusInput,
 } from './schemas'
 
 export type IssueSummary = Pick<
@@ -87,6 +97,19 @@ export interface ReleaseNotesDiffData {
   changedSections: ChangedSection[]
 }
 
+export interface CreateIssueData {
+  issue: Issue
+}
+
+export interface UpdateIssueStatusData {
+  issue: Issue
+  previousStatus: IssueStatus
+}
+
+export interface CreateReleaseNotesData {
+  releaseNote: ReleaseNote
+}
+
 /**
  * Tool name → { input, output } map, shaped for the AI SDK's `UITools`
  * constraint so the SPA can type its `UIMessage` parts (`tool-list_issues`, …)
@@ -103,4 +126,13 @@ export type DevSprintUITools = {
   }
   get_burndown: { input: GetBurndownInput; output: ToolResult<BurndownData> }
   diff_release_notes: { input: DiffReleaseNotesInput; output: ToolResult<ReleaseNotesDiffData> }
+  create_issue: { input: CreateIssueInput; output: ToolResult<CreateIssueData> }
+  update_issue_status: {
+    input: UpdateIssueStatusInput
+    output: ToolResult<UpdateIssueStatusData>
+  }
+  create_release_notes: {
+    input: CreateReleaseNotesInput
+    output: ToolResult<CreateReleaseNotesData>
+  }
 }

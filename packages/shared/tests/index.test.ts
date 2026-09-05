@@ -6,7 +6,8 @@ describe('API_ROUTES', () => {
     expect(API_ROUTES.chat).toBe('/api/chat')
   })
 
-  it('exposes the workspace endpoint path', () => {
+  it('exposes the workspace endpoint paths', () => {
     expect(API_ROUTES.workspace).toBe('/api/workspace')
+    expect(API_ROUTES.workspaceReset).toBe('/api/workspace/reset')
   })
 })
