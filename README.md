@@ -13,7 +13,7 @@ Early development. Implemented so far: repo bootstrap + Phase 0 (design docs) + 
 - **Frontend**: plain Vue 3 SPA (3.6-track) on Vite 8 (Rolldown), TypeScript strict, Pinia, Vue Router, shadcn-vue (Reka UI + Tailwind v4).
 - **Backend**: Hono on Cloudflare Workers running the AI SDK v6 `ToolLoopAgent` server-side (holds all model keys) — it chains the six read/rich-data tools over the seed workspace until it can answer, bounded by a step budget, and the composer's Stop button aborts the loop mid-turn. Groq primary, Gemini Flash fallback (see [Model providers](#model-providers)).
 - **MCP (Phase 6+)**: backend becomes an MCP client over Streamable HTTP to 2–3 custom MCP servers on Workers; the issues server gets publicly exposed.
-- **Safety**: every write is human-approved in-stream before it runs. Approval requests are signed so a forged one cannot execute, and each is single-use so a captured one is downgraded to a denial rather than applied twice. The single-use ledger is in memory, so it bounds replay within a Worker isolate rather than globally until the workspace moves to D1 in Phase 9 ([ADR-0010](docs/adr/0010-tool-approval-mechanism-and-replay-protection.md)).
+- **Safety**: every write the agent can make is human-approved in-stream before it runs. Approval requests are signed so a forged one cannot execute, and each is single-use so a captured one is downgraded to a denial rather than applied twice. The single-use ledger is in memory, so it bounds replay within a Worker isolate rather than globally until the workspace moves to D1 in Phase 9 ([ADR-0010](docs/adr/0010-tool-approval-mechanism-and-replay-protection.md)).
 
 See [docs/](docs/README.md) for the product brief, domain model, tool inventory, demo scenarios, wireframes, and ADRs.
 

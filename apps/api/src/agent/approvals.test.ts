@@ -52,6 +52,20 @@ describe('resolveApprovalSecret', () => {
     expect(resolveApprovalSecret('  s3cret  ')).toBe('s3cret')
   })
 
+  it('resets the warn-once latch too, so the warning is not order-dependent', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    resolveApprovalSecret(undefined)
+    expect(warn).toHaveBeenCalledTimes(1)
+
+    // Without clearing the latch, whichever test ran first would swallow the
+    // warning for every test after it.
+    resetApprovalLedger()
+    warn.mockClear()
+    resolveApprovalSecret(undefined)
+
+    expect(warn).toHaveBeenCalledTimes(1)
+  })
+
   it('never runs unsigned: an unset secret still yields one, with a warning', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
 

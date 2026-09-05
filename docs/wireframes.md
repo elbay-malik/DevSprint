@@ -157,7 +157,7 @@ scenario specs).
   several tools in one turn (Phase 4); ToolCallChip renders every tool call — name, state,
   collapsed args/result JSON — as the Phase 3 fallback rendering, one chip per call in transcript
   order. The Stop button aborts the loop mid-turn, and a call it interrupts is labelled `stopped`
-  rather than left claiming to run. Every write is gated: an ApprovalCard renders per gated call and
+  rather than left claiming to run. Every write the agent can make is gated: an ApprovalCard renders per gated call and
   stays in the transcript afterwards as the record of what was decided, while the composer is locked
   until the outstanding cards are answered. Tabs, sprint selector, and scenario buttons are still
   pending (Phase 7+).

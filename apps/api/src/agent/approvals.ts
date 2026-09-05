@@ -56,10 +56,15 @@ export function resolveApprovalSecret(configured: string | undefined): string {
  */
 const spentApprovals = new Set<string>()
 
-/** Test seam — the ledger is module state, so suites must be able to reset it. */
+/**
+ * Test seam. Every piece of module state has to go back, the warn-once latch
+ * included — leaving it set makes any test that asserts on the warning depend on
+ * which test ran first.
+ */
 export function resetApprovalLedger(): void {
   spentApprovals.clear()
   ephemeralSecret = undefined
+  warnedEphemeral = false
 }
 
 interface RespondedApproval {

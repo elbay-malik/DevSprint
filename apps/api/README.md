@@ -5,11 +5,12 @@ model key) and exposes the mock workspace over HTTP.
 
 ## Endpoints
 
-| Route            | Method | Purpose                                                                 |
-| ---------------- | ------ | ----------------------------------------------------------------------- |
-| `/api/health`    | GET    | Liveness probe — `{ "ok": true }`                                       |
-| `/api/workspace` | GET    | The current workspace snapshot; the SPA hydrates its board from it      |
-| `/api/chat`      | POST   | AI SDK v6 UI message stream — tool calls, tool results, streamed answer |
+| Route                  | Method | Purpose                                                                 |
+| ---------------------- | ------ | ----------------------------------------------------------------------- |
+| `/api/health`          | GET    | Liveness probe — `{ "ok": true }`                                       |
+| `/api/workspace`       | GET    | The current workspace snapshot; the SPA hydrates its board from it      |
+| `/api/workspace/reset` | POST   | Restores the seed board — the demo's reset control                      |
+| `/api/chat`            | POST   | AI SDK v6 UI message stream — tool calls, tool results, streamed answer |
 
 ## Tools
 
@@ -19,6 +20,18 @@ model key) and exposes the mock workspace over HTTP.
 
 Three write tools are registered and gated: `create_issue`, `update_issue_status` and
 `create_release_notes`. `run_deployment` waits for its simulation in Phase 8.
+
+### The reset endpoint is deliberately not gated
+
+`POST /api/workspace/reset` restores the seed without an approval card, so "every write is gated"
+would be an overclaim — every write **the agent can make** is gated. Reset is a demo control, not
+something the copilot can reach: it is absent from the tool set, so no prompt can make the agent
+call it, and the worst it can do is put the mock workspace back to a known board.
+
+It is deliberately left open rather than restricted to dev, because
+[wireframes.md](../../docs/wireframes.md) §1 puts a Reset demo button in the live demo's header and
+a dev-only guard would remove it exactly where it is useful. Protecting it from abuse belongs with
+the per-IP rate limits in Phase 11, and Phase 9's daily reset supersedes it.
 
 ## Approvals
 
