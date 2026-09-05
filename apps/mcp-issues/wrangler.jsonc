@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "devsprint-mcp-issues",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "dev": {
+    "port": 8788,
+    // Distinct from the api Worker's default 9229: `pnpm dev` runs both, and
+    // two wrangler processes cannot share one inspector port.
+    "inspector_port": 9230,
+  },
+  "observability": {
+    "enabled": true,
+  },
+  // The workspace Durable Object is defined in the api Worker; this binds the
+  // same class cross-script so both Workers see one board. Locally that means
+  // `devsprint-api` must be running too — `pnpm dev` starts both.
+  "durable_objects": {
+    "bindings": [
+      { "name": "WORKSPACE", "class_name": "WorkspaceDO", "script_name": "devsprint-api" },
+    ],
+  },
+}
