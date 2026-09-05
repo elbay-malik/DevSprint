@@ -17,11 +17,25 @@ model key) and exposes the mock workspace over HTTP.
 [docs/tool-inventory.md](../../docs/tool-inventory.md): `list_issues`, `search_issues`,
 `get_sprint_status`, `get_deployment_history`, `get_burndown`, and `diff_release_notes`.
 
-The four write tools (`create_issue`, `update_issue_status`, `create_release_notes`,
-`run_deployment`) are deliberately **not** registered yet. Every write is gated behind an
-in-stream approval card with server-side re-validation, which lands in Phase 5
-([ADR-0003](../../docs/adr/0003-hitl-approval-gates-on-write-tools.md)) — registering them earlier
-would mean running an ungated write.
+Three write tools are registered and gated: `create_issue`, `update_issue_status` and
+`create_release_notes`. `run_deployment` waits for its simulation in Phase 8.
+
+## Approvals
+
+A gated tool carries `needsApproval: true`, so the agent stops and asks instead of running it. The
+request is signed with `TOOL_APPROVAL_SECRET`, which is what stops a client fabricating an approval
+— without a secret the SDK happily executes an invented one. Because the signature contains no
+nonce, a captured approval would otherwise replay forever, so each approval id is single-use: a
+repeat is downgraded to a denial rather than applied again
+([ADR-0010](../../docs/adr/0010-tool-approval-mechanism-and-replay-protection.md)). Downgrading
+rather than rejecting the request matters — answered approvals stay in the client's transcript, so
+refusing outright would strand the conversation the first time a resume failed.
+
+Two limits worth knowing. The single-use ledger is in memory, so on Workers it bounds replay within
+an isolate rather than globally; D1 (Phase 9) is where it belongs. And with no secret configured
+the Worker signs with a random per-isolate secret and warns, rather than running unsigned — that
+keeps keyless dev and CI working, but approvals stop verifying after a restart, so set the secret
+before deploying.
 
 Tool descriptions and input schemas come verbatim from `@devsprint/shared/tools`; the query
 implementations are pure functions over the workspace snapshot and return the shared

@@ -9,11 +9,14 @@ import { simulateReadableStream } from 'ai'
 import { ISSUE_STATUSES, type IssueStatus, type ToolResult } from '@devsprint/shared'
 import type {
   BurndownData,
+  CreateIssueData,
+  CreateReleaseNotesData,
   DeploymentHistoryData,
   ListIssuesData,
   ReleaseNotesDiffData,
   SearchIssuesData,
   SprintStatusData,
+  UpdateIssueStatusData,
 } from '@devsprint/shared/tools'
 import { utcDateOf } from '../workspace/dates'
 import type {
@@ -25,9 +28,12 @@ import type {
   LanguageModelV3Usage,
 } from './provider-types'
 
-export type MockDecision =
-  | { kind: 'tool-call'; toolName: string; input: Record<string, unknown> }
-  | { kind: 'text'; text: string }
+export interface MockToolCall {
+  toolName: string
+  input: Record<string, unknown>
+}
+
+export type MockDecision = ({ kind: 'tool-call' } & MockToolCall) | { kind: 'text'; text: string }
 
 /** `1 issue` / `2 issues` — the summaries are read by a person. */
 function plural(count: number, noun: string): string {
@@ -120,6 +126,15 @@ export function planUserText(text: string, availableTools: ReadonlySet<string>):
         input: { sprintId: 'sprint-12', status: 'done' },
       },
     )
+  }
+  // Closing out a sprint starts by finding what is still open; the writes are
+  // then derived from that result rather than guessed.
+  if (/clos|wrap up|mark every|every remaining|all remaining|finish the sprint/i.test(text)) {
+    candidates.push({
+      kind: 'tool-call',
+      toolName: 'list_issues',
+      input: { sprintId: 'sprint-12' },
+    })
   }
   if (/summar|how is|how are|health/i.test(text)) {
     candidates.push({ kind: 'tool-call', toolName: 'get_sprint_status', input: {} })
@@ -253,6 +268,19 @@ function summarizeDiff(data: ReleaseNotesDiffData): string {
   return `Compared with ${data.baseVersion} — ${groups.join('; ')}.`
 }
 
+function summarizeStatusChange(data: UpdateIssueStatusData): string {
+  return `${data.issue.key} moved ${data.previousStatus} → ${data.issue.status}.`
+}
+
+function summarizeCreatedIssue(data: CreateIssueData): string {
+  const where = data.issue.sprintId === null ? 'the backlog' : data.issue.sprintId
+  return `Created ${data.issue.key} "${data.issue.title}" in ${where}.`
+}
+
+function summarizeCreatedReleaseNotes(data: CreateReleaseNotesData): string {
+  return `Saved ${data.releaseNote.version} release notes as a ${data.releaseNote.status}.`
+}
+
 /** One grounded sentence per tool; the `ok: false` envelope is surfaced by code. */
 export function summarizeToolOutput(toolName: string, output: unknown): string {
   if (!isEnvelope(output)) return `${toolName} returned an unexpected result.`
@@ -271,6 +299,12 @@ export function summarizeToolOutput(toolName: string, output: unknown): string {
       return summarizeBurndown(output.data as BurndownData)
     case 'diff_release_notes':
       return summarizeDiff(output.data as ReleaseNotesDiffData)
+    case 'update_issue_status':
+      return summarizeStatusChange(output.data as UpdateIssueStatusData)
+    case 'create_issue':
+      return summarizeCreatedIssue(output.data as CreateIssueData)
+    case 'create_release_notes':
+      return summarizeCreatedReleaseNotes(output.data as CreateReleaseNotesData)
     default:
       return `${toolName} returned ${JSON.stringify(output.data)}.`
   }
@@ -299,13 +333,62 @@ function unwrapOutput(output: ToolResultOutput): unknown {
   }
 }
 
-function summarizeToolMessage(message: ToolMessage): string {
+/**
+ * A denied call never runs, and the model has to say so rather than imply the
+ * write happened — scenario S-B turns on the final answer admitting the denial.
+ */
+function summarizeToolResultPart(
+  part: { toolName: string; toolCallId: string; output: ToolResultOutput },
+  inputByToolCallId: ReadonlyMap<string, unknown>,
+): string {
+  if (part.output.type === 'execution-denied') {
+    // A tool result carries no input, so the denial sentence has to name its
+    // subject by looking back at the call the user turned down.
+    const target = describeWriteTarget(part.toolName, inputByToolCallId.get(part.toolCallId))
+    const reason = part.output.reason
+    return reason === undefined
+      ? `${target} was not approved, so nothing changed.`
+      : `${target} was not approved (${reason}), so nothing changed.`
+  }
+  return summarizeToolOutput(part.toolName, unwrapOutput(part.output))
+}
+
+/** What a rejected write would have touched, for the denial sentence. */
+function describeWriteTarget(toolName: string, input: unknown): string {
+  if (typeof input === 'object' && input !== null) {
+    if ('issueKey' in input && typeof input.issueKey === 'string') return input.issueKey
+    if ('version' in input && typeof input.version === 'string') {
+      return `release notes ${input.version}`
+    }
+    if ('title' in input && typeof input.title === 'string') return `"${input.title}"`
+  }
+  return toolName
+}
+
+function summarizeToolMessage(
+  message: ToolMessage,
+  inputByToolCallId: ReadonlyMap<string, unknown>,
+): string {
   const summaries = message.content.flatMap((part) =>
-    part.type === 'tool-result'
-      ? [summarizeToolOutput(part.toolName, unwrapOutput(part.output))]
-      : [],
+    part.type === 'tool-result' ? [summarizeToolResultPart(part, inputByToolCallId)] : [],
   )
   return summaries.length > 0 ? summaries.join(' ') : 'The tool returned no result.'
+}
+
+/** Tool call id → the input the agent asked for, gathered from the transcript. */
+function inputsByToolCallId(prompt: LanguageModelV3Prompt): Map<string, unknown> {
+  const inputs = new Map<string, unknown>()
+  for (const message of prompt) {
+    if (message.role !== 'assistant') continue
+    for (const part of message.content) {
+      if (part.type !== 'tool-call') continue
+      inputs.set(
+        part.toolCallId,
+        typeof part.input === 'string' ? safeJson(part.input) : part.input,
+      )
+    }
+  }
+  return inputs
 }
 
 function userTextOf(message: LanguageModelV3Message | undefined): string {
@@ -349,14 +432,103 @@ function textChunks(text: string): LanguageModelV3StreamPart[] {
   ]
 }
 
-function toolCallChunks(
-  toolName: string,
-  input: Record<string, unknown>,
-): LanguageModelV3StreamPart[] {
+/**
+ * Several calls may share one step. That is how a close-out request produces a
+ * gate per issue: the model asks for every write at once and the SDK pauses on
+ * all of them, one approval each.
+ */
+function toolCallChunks(calls: MockToolCall[]): LanguageModelV3StreamPart[] {
   return [
-    { type: 'tool-call', toolCallId: crypto.randomUUID(), toolName, input: JSON.stringify(input) },
+    ...calls.map((call): LanguageModelV3StreamPart => ({
+      type: 'tool-call',
+      toolCallId: crypto.randomUUID(),
+      toolName: call.toolName,
+      input: JSON.stringify(call.input),
+    })),
     finish('tool-calls'),
   ]
+}
+
+/** Issue keys the agent has already asked to change this turn. */
+function issueKeysAlreadyRequested(prompt: LanguageModelV3Prompt): Set<string> {
+  const keys = new Set<string>()
+  const lastUserIndex = prompt.findLastIndex((message) => message.role === 'user')
+  for (const message of prompt.slice(lastUserIndex + 1)) {
+    if (message.role !== 'assistant') continue
+    for (const part of message.content) {
+      if (part.type !== 'tool-call' || part.toolName !== 'update_issue_status') continue
+      const input: unknown = typeof part.input === 'string' ? safeJson(part.input) : part.input
+      if (typeof input === 'object' && input !== null && 'issueKey' in input) {
+        const { issueKey } = input
+        if (typeof issueKey === 'string') keys.add(issueKey)
+      }
+    }
+  }
+  return keys
+}
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
+}
+
+/** The `issues` array of a `list_issues` payload, defensively narrowed. */
+function readIssueSummaries(data: unknown): Array<{ key: string; status: string }> {
+  if (typeof data !== 'object' || data === null || !('issues' in data)) return []
+  const { issues } = data
+  if (!Array.isArray(issues)) return []
+  return issues.flatMap((issue: unknown) =>
+    typeof issue === 'object' &&
+    issue !== null &&
+    'key' in issue &&
+    typeof issue.key === 'string' &&
+    'status' in issue &&
+    typeof issue.status === 'string'
+      ? [{ key: issue.key, status: issue.status }]
+      : [],
+  )
+}
+
+/** Open issues named by a `list_issues` result already gathered this turn. */
+function openIssueKeysFromResults(messages: ToolMessage[]): string[] {
+  const keys: string[] = []
+  for (const message of messages) {
+    for (const part of message.content) {
+      if (part.type !== 'tool-result' || part.toolName !== 'list_issues') continue
+      const output = unwrapOutput(part.output)
+      if (!isEnvelope(output) || !output.ok) continue
+      const issues = readIssueSummaries(output.data)
+      for (const issue of issues) {
+        if (issue.status !== 'done') keys.push(issue.key)
+      }
+    }
+  }
+  return keys
+}
+
+/**
+ * "Close out the sprint" becomes one gated write per open issue — never a batch
+ * call, so each mutation gets its own approval (docs/tool-inventory.md §3).
+ * Driven by the issues the `list_issues` result actually returned, so the mock
+ * stays grounded rather than hard-coding keys.
+ */
+function closeOutCalls(
+  text: string,
+  prompt: LanguageModelV3Prompt,
+  gathered: ToolMessage[],
+  availableTools: ReadonlySet<string>,
+): MockToolCall[] {
+  if (!availableTools.has('update_issue_status')) return []
+  if (!/clos|wrap up|mark every|every remaining|all remaining|finish the sprint/i.test(text)) {
+    return []
+  }
+  const already = issueKeysAlreadyRequested(prompt)
+  return openIssueKeysFromResults(gathered)
+    .filter((key) => !already.has(key))
+    .map((key) => ({ toolName: 'update_issue_status', input: { issueKey: key, status: 'done' } }))
 }
 
 /** The most recent user turn — the one the current plan answers. */
@@ -383,19 +555,26 @@ function toolMessagesSinceUserTurn(prompt: LanguageModelV3Prompt): ToolMessage[]
  * exercise multi-step chaining rather than a single round-trip.
  */
 export function scriptChunks(options: LanguageModelV3CallOptions): LanguageModelV3StreamPart[] {
-  const plan = planUserText(lastUserText(options.prompt), availableToolNames(options))
-  const done = toolMessagesSinceUserTurn(options.prompt)
-  const next = plan[done.length]
+  const text = lastUserText(options.prompt)
+  const available = availableToolNames(options)
+  const plan = planUserText(text, available)
+  const gathered = toolMessagesSinceUserTurn(options.prompt)
+  const next = plan[gathered.length]
 
   let body: LanguageModelV3StreamPart[]
-  if (next === undefined) {
-    // Plan exhausted: answer from everything gathered, oldest first.
-    const summary = done.map(summarizeToolMessage).join(' ')
-    body = textChunks(summary.length > 0 ? summary : 'I have nothing to report.')
-  } else if (next.kind === 'text') {
-    body = textChunks(next.text)
+  if (next !== undefined) {
+    body = next.kind === 'text' ? textChunks(next.text) : toolCallChunks([next])
   } else {
-    body = toolCallChunks(next.toolName, next.input)
+    // Reads are done. A close-out request now turns each open issue into its own
+    // gated write; anything else goes straight to the answer.
+    const writes = closeOutCalls(text, options.prompt, gathered, available)
+    if (writes.length > 0) {
+      body = toolCallChunks(writes)
+    } else {
+      const inputs = inputsByToolCallId(options.prompt)
+      const summary = gathered.map((message) => summarizeToolMessage(message, inputs)).join(' ')
+      body = textChunks(summary.length > 0 ? summary : 'I have nothing to report.')
+    }
   }
   return [{ type: 'stream-start', warnings: [] }, ...body]
 }

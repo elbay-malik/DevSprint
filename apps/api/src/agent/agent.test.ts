@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { simulateReadableStream } from 'ai'
 import { createWorkspaceStore } from '../workspace/store'
 import { createCopilotAgent, MAX_STEPS } from './agent'
-import { createReadTools } from './tools'
+import { createTools } from './tools'
 import type {
   LanguageModelV3,
   LanguageModelV3CallOptions,
@@ -54,12 +54,17 @@ function loopingModel() {
   return { model, seen }
 }
 
-const tools = createReadTools(createWorkspaceStore())
+const tools = createTools(createWorkspaceStore())
 
 describe('createCopilotAgent', () => {
   it('stops a runaway loop at the step budget', async () => {
     const { model, seen } = loopingModel()
-    const agent = createCopilotAgent({ model, instructions: 'test', tools })
+    const agent = createCopilotAgent({
+      model,
+      instructions: 'test',
+      tools,
+      approvalSecret: 'test-secret',
+    })
 
     const result = await agent.stream({ messages: [{ role: 'user', content: 'go' }] })
     await result.consumeStream()
@@ -71,7 +76,12 @@ describe('createCopilotAgent', () => {
 
   it('spends the last permitted step writing an answer, not on another tool', async () => {
     const { model, seen } = loopingModel()
-    const agent = createCopilotAgent({ model, instructions: 'test', tools })
+    const agent = createCopilotAgent({
+      model,
+      instructions: 'test',
+      tools,
+      approvalSecret: 'test-secret',
+    })
 
     const result = await agent.stream({ messages: [{ role: 'user', content: 'go' }] })
     await result.consumeStream()
@@ -91,7 +101,12 @@ describe('createCopilotAgent', () => {
 
   it('sends the instructions as the system message', async () => {
     const { model, seen } = loopingModel()
-    const agent = createCopilotAgent({ model, instructions: 'YOU ARE THE COPILOT', tools })
+    const agent = createCopilotAgent({
+      model,
+      instructions: 'YOU ARE THE COPILOT',
+      tools,
+      approvalSecret: 'test-secret',
+    })
 
     const result = await agent.stream({ messages: [{ role: 'user', content: 'go' }] })
     await result.consumeStream()
@@ -101,7 +116,12 @@ describe('createCopilotAgent', () => {
 
   it('exposes every read tool to the model', async () => {
     const { model, seen } = loopingModel()
-    const agent = createCopilotAgent({ model, instructions: 'test', tools })
+    const agent = createCopilotAgent({
+      model,
+      instructions: 'test',
+      tools,
+      approvalSecret: 'test-secret',
+    })
 
     const result = await agent.stream({ messages: [{ role: 'user', content: 'go' }] })
     await result.consumeStream()

@@ -24,8 +24,19 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toMatch(/active \(current\) sprint is sprint-12/)
   })
 
-  it('tells the model writes do not exist yet', () => {
-    expect(prompt).toMatch(/write actions are not available yet/i)
+  it('tells the model that writes exist and are approved one at a time', () => {
+    // The Phase 4 prompt said writes did not exist. Left in place, a real model
+    // would refuse every gated tool while the scripted mock — which ignores the
+    // prompt entirely — kept the tests green.
+    expect(prompt).not.toMatch(/write actions are not available/i)
+    expect(prompt).toContain('update_issue_status')
+    expect(prompt).toMatch(/one call per change/i)
+    expect(prompt).toMatch(/denied/i)
+  })
+
+  it('still says deployment is unavailable until Phase 8', () => {
+    expect(prompt).toMatch(/deploy/i)
+    expect(prompt).toMatch(/not available yet/i)
   })
 
   it('is deterministic', () => {

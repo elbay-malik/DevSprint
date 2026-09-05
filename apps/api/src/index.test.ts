@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Workspace } from '@devsprint/shared'
 import app from './index'
+import { workspaceStore } from './workspace'
 
 const env = { CORS_ORIGIN: 'http://localhost:5173', MODEL_PROVIDER: 'mock' }
 
@@ -40,6 +41,19 @@ describe('GET /api/health', () => {
     const res = await app.request('/api/health', {}, env)
     expect(res.status).toBe(200)
     await expect(res.json()).resolves.toEqual({ ok: true })
+  })
+})
+
+describe('POST /api/workspace/reset', () => {
+  it('puts the board back to the seed after a write', async () => {
+    const { updateIssueStatus } = await import('./workspace/mutations')
+    updateIssueStatus(workspaceStore.get(), { issueKey: 'DS-7', status: 'done' })
+    expect(workspaceStore.get().issues.find((i) => i.key === 'DS-7')?.status).toBe('done')
+
+    const res = await app.request('/api/workspace/reset', { method: 'POST' }, env)
+
+    expect(res.status).toBe(200)
+    expect(workspaceStore.get().issues.find((i) => i.key === 'DS-7')?.status).toBe('in_review')
   })
 })
 

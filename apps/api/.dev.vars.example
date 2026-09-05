@@ -14,3 +14,7 @@
 # Model id overrides — defaults shown.
 # GROQ_MODEL=llama-3.3-70b-versatile
 # GEMINI_MODEL=gemini-2.5-flash
+
+# Signs tool approvals so a forged one cannot execute a write. Unset falls back
+# to a random per-isolate secret (fine locally, set a real one before deploying).
+# TOOL_APPROVAL_SECRET=

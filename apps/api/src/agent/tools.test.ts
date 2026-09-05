@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { READ_TOOL_NAMES, TOOL_DESCRIPTIONS } from '@devsprint/shared/tools'
+import { READ_TOOL_NAMES, TOOL_DESCRIPTIONS, WRITE_TOOL_NAMES } from '@devsprint/shared/tools'
 import { createWorkspaceStore } from '../workspace/store'
-import { createReadTools } from './tools'
+import { createReadTools, createTools, createWriteTools } from './tools'
 
 const store = createWorkspaceStore()
 const tools = createReadTools(store)
@@ -18,13 +18,8 @@ describe('createReadTools', () => {
     expect(Object.keys(tools).sort()).toEqual([...READ_TOOL_NAMES].sort())
   })
 
-  it('never registers a write tool before the Phase 5 approval gates', () => {
-    for (const write of [
-      'create_issue',
-      'update_issue_status',
-      'create_release_notes',
-      'run_deployment',
-    ]) {
+  it('keeps the read set free of writes', () => {
+    for (const write of [...WRITE_TOOL_NAMES, 'run_deployment']) {
       expect(Object.keys(tools)).not.toContain(write)
     }
   })
@@ -63,5 +58,35 @@ describe('createReadTools', () => {
       { toolCallId: 'test-call', messages: [] },
     )
     expect(JSON.stringify(result)).toContain('DS-99')
+  })
+})
+
+describe('createWriteTools', () => {
+  const writeTools = createWriteTools(createWorkspaceStore())
+
+  it('registers the three gated writes and not the long-running one', () => {
+    expect(Object.keys(writeTools).sort()).toEqual([...WRITE_TOOL_NAMES].sort())
+    // run_deployment arrives with its simulation in Phase 8.
+    expect(Object.keys(writeTools)).not.toContain('run_deployment')
+  })
+
+  it('gates every write', () => {
+    // `needsApproval` is the entire gate: the SDK auto-executes a tool that
+    // omits it, so a missing flag would silently let a write run unapproved.
+    for (const name of WRITE_TOOL_NAMES) {
+      expect(writeTools[name].needsApproval).toBe(true)
+    }
+  })
+
+  it('gates no read', () => {
+    const all = createTools(createWorkspaceStore())
+    for (const name of READ_TOOL_NAMES) {
+      expect(all[name].needsApproval).toBeUndefined()
+    }
+  })
+
+  it('exposes reads and writes together to the agent', () => {
+    const all = createTools(createWorkspaceStore())
+    expect(Object.keys(all).sort()).toEqual([...READ_TOOL_NAMES, ...WRITE_TOOL_NAMES].sort())
   })
 })

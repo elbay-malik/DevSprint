@@ -1,5 +1,5 @@
 import { stepCountIs, ToolLoopAgent, type LanguageModel } from 'ai'
-import type { ReadTools } from './tools'
+import type { DevSprintTools } from './tools'
 
 /**
  * Step budget for one turn. A step is one model call, so a chain of three tools
@@ -13,7 +13,12 @@ export interface CopilotAgentOptions {
   model: LanguageModel
   /** System prompt; the agent's own `instructions`, not a message in the history. */
   instructions: string
-  tools: ReadTools
+  tools: DevSprintTools
+  /**
+   * Signs each approval request so a forged one cannot execute a write. Always
+   * supplied — see agent/approvals.ts for why running unsigned is not an option.
+   */
+  approvalSecret: string
 }
 
 /**
@@ -23,11 +28,17 @@ export interface CopilotAgentOptions {
  * A fresh agent per request is deliberate — `instructions` embed the workspace
  * snapshot, and the model route is resolved from the request environment.
  */
-export function createCopilotAgent({ model, instructions, tools }: CopilotAgentOptions) {
+export function createCopilotAgent({
+  model,
+  instructions,
+  tools,
+  approvalSecret,
+}: CopilotAgentOptions) {
   return new ToolLoopAgent({
     model,
     instructions,
     tools,
+    experimental_toolApprovalSecret: approvalSecret,
     stopWhen: stepCountIs(MAX_STEPS),
     // On the final permitted step take the tools away, so the budget is spent
     // writing an answer instead of asking for one more tool. Without this a

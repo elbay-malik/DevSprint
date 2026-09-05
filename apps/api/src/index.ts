@@ -15,13 +15,14 @@ import { createStepAuditLogger } from './agent/audit'
 import { describeError, toClientErrorMessage } from './agent/errors'
 import { ModelConfigError, resolveModel } from './agent/model'
 import { buildSystemPrompt } from './agent/system-prompt'
-import { createReadTools, type ReadTools } from './agent/tools'
+import { createTools, type DevSprintTools } from './agent/tools'
+import { resolveApprovalSecret, settleApprovals } from './agent/approvals'
 
 /** Mirrors the SPA's `DevSprintUIMessage` so tool parts validate against the real schemas. */
-type ChatUIMessage = UIMessage<unknown, UIDataTypes, InferUITools<ReadTools>>
+type ChatUIMessage = UIMessage<unknown, UIDataTypes, InferUITools<DevSprintTools>>
 
 const app = new Hono<{ Bindings: AppEnv }>()
-const tools = createReadTools(workspaceStore)
+const tools = createTools(workspaceStore)
 
 // env bindings are only available per-request, so the cors middleware is
 // constructed inside the handler instead of at module scope
@@ -38,6 +39,17 @@ app.use('/api/*', (c, next) =>
 app.get('/api/health', (c) => c.json({ ok: true }))
 
 app.get(API_ROUTES.workspace, (c) => c.json(workspaceStore.get()))
+
+/**
+ * Restores the seed. The demo is a mock workspace that approved writes mutate,
+ * so both the "Reset demo" affordance in docs/wireframes.md §1 and the browser
+ * tests need a way back to a known board. Phase 9 replaces this with the daily
+ * reset once the workspace lives in D1.
+ */
+app.post(API_ROUTES.workspaceReset, (c) => {
+  workspaceStore.reset()
+  return c.json(workspaceStore.get())
+})
 
 function invalidInput(c: Context<{ Bindings: AppEnv }>, message: string) {
   return c.json({ error: { code: 'INVALID_INPUT', message } }, 400)
@@ -63,6 +75,15 @@ app.post(API_ROUTES.chat, async (c) => {
     return invalidInput(c, `Invalid UI messages: ${describeError(error).message}`)
   }
 
+  // An approval that has already been acted on is downgraded to a denial rather
+  // than executed again. The SDK's signature stops forgery but carries no nonce,
+  // so a captured approval would otherwise replay indefinitely (ADR-0003 asks
+  // for both to be covered).
+  const { replayed } = settleApprovals(uiMessages)
+  if (replayed > 0) {
+    console.warn(JSON.stringify({ event: 'approval-replay-blocked', count: replayed }))
+  }
+
   let resolved
   try {
     resolved = resolveModel(c.env)
@@ -78,6 +99,7 @@ app.post(API_ROUTES.chat, async (c) => {
     model,
     instructions: buildSystemPrompt(workspaceStore.get()),
     tools,
+    approvalSecret: resolveApprovalSecret(c.env.TOOL_APPROVAL_SECRET),
   })
 
   // The request signal is what makes the composer's Stop button real: aborting

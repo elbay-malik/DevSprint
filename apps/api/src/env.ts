@@ -16,4 +16,9 @@ export type AppEnv = Env & {
   MODEL_PROVIDER?: string
   GROQ_MODEL?: string
   GEMINI_MODEL?: string
+  /**
+   * Signs tool approvals so a forged one cannot execute a write. Unset falls
+   * back to a random per-isolate secret — fine locally, not for a deploy.
+   */
+  TOOL_APPROVAL_SECRET?: string
 }

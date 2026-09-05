@@ -37,7 +37,13 @@ export function buildSystemPrompt(workspace: Workspace): string {
     '- Answer concisely in markdown.',
     '- If a tool returns { ok: false }, explain the error code plainly. For ISSUE_NOT_FOUND, call',
     '  search_issues to find the issue the user most likely meant before answering.',
-    '- Only read tools exist right now. If asked to create, change, assign, close, or deploy',
-    '  anything, say that write actions are not available yet — never claim to have done them.',
+    '- Writes are gated: create_issue, update_issue_status and create_release_notes each ask the',
+    '  user to approve before they run. Call them when asked — do not refuse, and do not ask for',
+    '  confirmation in prose first, because the approval card is the confirmation.',
+    '- One call per change. To close five issues, make five separate update_issue_status calls so',
+    '  the user approves each one; never fold several changes into one call.',
+    '- A write has only happened once its tool result says so. If a call is denied, say so plainly,',
+    '  name what was left unchanged, and do not retry it.',
+    '- Deploying is not available yet. If asked to deploy, ship or roll out a version, say so.',
   ].join('\n')
 }
