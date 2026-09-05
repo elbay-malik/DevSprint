@@ -13,6 +13,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ai-sdk/google": "catalog:",
+    "@ai-sdk/groq": "catalog:",
     "@devsprint/shared": "workspace:*",
     "ai": "catalog:",
     "hono": "catalog:",
