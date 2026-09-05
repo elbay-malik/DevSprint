@@ -6,8 +6,8 @@ import ToolCallChip from './ToolCallChip.vue'
 
 type ChipPart = ToolUIPart<DevSprintUITools> | DynamicToolUIPart
 
-function mountChip(part: ChipPart) {
-  return mount(ToolCallChip, { props: { part } })
+function mountChip(part: ChipPart, live?: boolean) {
+  return mount(ToolCallChip, { props: live === undefined ? { part } : { part, live } })
 }
 
 describe('ToolCallChip', () => {
@@ -82,6 +82,37 @@ describe('ToolCallChip', () => {
     expect(wrapper.get('[data-testid="tool-call-state"]').text()).toBe('failed')
     expect(wrapper.text()).toContain('Tool execution timed out')
     expect(wrapper.findAll('summary')).toHaveLength(1)
+  })
+
+  it('shows a call left mid-flight as stopped once the turn ends', () => {
+    // What the Stop button leaves behind: a call that never reached a result.
+    // Claiming "running…" for the rest of the session would be a lie.
+    const wrapper = mountChip(
+      {
+        type: 'tool-get_sprint_status',
+        toolCallId: 'call-6',
+        state: 'input-available',
+        input: { sprintId: 'sprint-12' },
+      },
+      false,
+    )
+
+    expect(wrapper.get('[data-testid="tool-call-state"]').text()).toBe('stopped')
+  })
+
+  it('leaves a resolved call alone when the turn ends', () => {
+    const wrapper = mountChip(
+      {
+        type: 'tool-get_sprint_status',
+        toolCallId: 'call-7',
+        state: 'output-available',
+        input: {},
+        output: { ok: true, data: { sprint: { id: 'sprint-12' } } } as never,
+      },
+      false,
+    )
+
+    expect(wrapper.get('[data-testid="tool-call-state"]').text()).toBe('ok')
   })
 
   it('labels approval states as awaiting approval', () => {

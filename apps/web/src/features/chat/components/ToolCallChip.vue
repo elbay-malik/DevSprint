@@ -12,9 +12,18 @@ import { Badge } from '@/components/ui/badge'
  * replace it per tool from Phase 7; approval states are labelled already so the
  * Phase 5 ApprovalCard can slot in without touching this component.
  */
-const props = defineProps<{
-  part: ToolUIPart<DevSprintUITools> | DynamicToolUIPart
-}>()
+const props = withDefaults(
+  defineProps<{
+    part: ToolUIPart<DevSprintUITools> | DynamicToolUIPart
+    /**
+     * Whether the turn is still running. A call left mid-flight by the Stop
+     * button never reaches a terminal state, so without this it would claim to
+     * be running forever.
+     */
+    live?: boolean
+  }>(),
+  { live: true },
+)
 
 type Tone = 'pending' | 'success' | 'error' | 'muted'
 
@@ -50,7 +59,9 @@ const status = computed((): ChipStatus => {
   switch (part.state) {
     case 'input-streaming':
     case 'input-available':
-      return { label: 'running…', tone: 'pending' }
+      return props.live
+        ? { label: 'running…', tone: 'pending' }
+        : { label: 'stopped', tone: 'muted' }
     case 'approval-requested':
     case 'approval-responded':
       return { label: 'awaiting approval', tone: 'pending' }

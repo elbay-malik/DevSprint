@@ -1,9 +1,21 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { isToolUIPart } from 'ai'
 import { useDevSprintChat } from '../composables/useDevSprintChat'
 import ToolCallChip from './ToolCallChip.vue'
 
 const chat = useDevSprintChat()
+
+const busy = computed(() => chat.status === 'submitted' || chat.status === 'streaming')
+
+/**
+ * Only the last message can be the one streaming, so only its chips may claim
+ * to be running. A global flag would resurrect an earlier turn's aborted call
+ * as "running…" for the whole of every later turn.
+ */
+function isLive(messageId: string): boolean {
+  return busy.value && chat.messages.at(-1)?.id === messageId
+}
 </script>
 
 <template>
@@ -24,7 +36,7 @@ const chat = useDevSprintChat()
       <!-- 'step-start' and any other part types are intentionally not rendered -->
       <template v-for="(part, index) in message.parts" :key="index">
         <span v-if="part.type === 'text'" class="whitespace-pre-wrap">{{ part.text }}</span>
-        <ToolCallChip v-else-if="isToolUIPart(part)" :part="part" />
+        <ToolCallChip v-else-if="isToolUIPart(part)" :part="part" :live="isLive(message.id)" />
       </template>
     </div>
     <div
