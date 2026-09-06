@@ -147,6 +147,28 @@ describe('ApprovalCard', () => {
     )
   })
 
+  it('reports a deployment by its own status, not as applied', () => {
+    // run_deployment reaches output-available on its first frame and stays
+    // there for the whole run, so a plain ok:true would read "applied" while
+    // the deploy was still going — and again after a run the user cancelled.
+    const deploying = (status: string) => ({
+      ...requested({ environment: 'staging', version: 'v1.5.0' }, 'run_deployment'),
+      state: 'output-available',
+      output: { ok: true, data: { deployment: { id: 'dep-9', status, stages: [] } } },
+      approval: { id: 'approval-1', approved: true, signature: 'sig' },
+    })
+
+    const running = mountCard(deploying('running'))
+    expect(running.get('[data-testid="approval-outcome"]').text()).toContain('running')
+    expect(running.get('[data-testid="approval-outcome"]').text()).not.toContain('applied')
+
+    const cancelled = mountCard(deploying('cancelled'))
+    const outcome = cancelled.get('[data-testid="approval-outcome"]')
+    expect(outcome.text()).toContain('cancelled')
+    // The user asked for it, so it is not styled as something that went wrong.
+    expect(outcome.text()).not.toMatch(/failed/i)
+  })
+
   it('surfaces a failed write rather than implying it worked', () => {
     const wrapper = mountCard({
       ...requested({ issueKey: 'DS-42', status: 'done' }),

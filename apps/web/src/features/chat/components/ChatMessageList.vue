@@ -28,6 +28,15 @@ function isLive(messageId: string): boolean {
 function isApprovalPart(part: { approval?: unknown }): boolean {
   return part.approval !== undefined
 }
+
+/**
+ * A deployment is gated *and* long-running, so it needs both: the approval card
+ * stays as the record of who allowed it, and the progress card shows the run it
+ * authorised (docs/tool-inventory.md — ApprovalCard → DeploymentProgressCard).
+ */
+function isRunningDeployment(part: { type?: string; state?: string }): boolean {
+  return part.type === 'tool-run_deployment' && part.state === 'output-available'
+}
 </script>
 
 <template>
@@ -58,8 +67,21 @@ function isApprovalPart(part: { approval?: unknown }): boolean {
         :key="`${index}-${'state' in part ? part.state : part.type}`"
       >
         <span v-if="part.type === 'text'" class="whitespace-pre-wrap">{{ part.text }}</span>
-        <ApprovalCard v-else-if="isToolUIPart(part) && isApprovalPart(part)" :part="part" />
-        <ToolResultCard v-else-if="isToolUIPart(part)" :part="part" :live="isLive(message.id)" />
+        <!--
+          One chain, deliberately. A second top-level `v-if` here would start a
+          chain of its own and detach the catch-all below from the ApprovalCard,
+          so every gated write would render its approval card *and* a result
+          card. The two conditions inside are independent on purpose: a gated
+          deployment is the one part that wants both.
+        -->
+        <template v-else-if="isToolUIPart(part)">
+          <ApprovalCard v-if="isApprovalPart(part)" :part="part" />
+          <ToolResultCard
+            v-if="!isApprovalPart(part) || isRunningDeployment(part)"
+            :part="part"
+            :live="isLive(message.id)"
+          />
+        </template>
       </template>
     </div>
     <div

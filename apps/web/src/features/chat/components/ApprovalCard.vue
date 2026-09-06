@@ -80,14 +80,38 @@ const result = computed((): string | undefined => {
   if (props.part.state !== 'output-available') return undefined
   const output: unknown = props.part.output
   if (typeof output !== 'object' || output === null || !('ok' in output)) return 'done'
-  const envelope = output as { ok: boolean; error?: { code: string } }
-  return envelope.ok ? 'applied' : (envelope.error?.code ?? 'failed')
+  const envelope = output as { ok: boolean; error?: { code: string }; data?: unknown }
+  if (!envelope.ok) return envelope.error?.code ?? 'failed'
+
+  // A deployment reaches `output-available` on its first frame and stays there
+  // for the whole run, so "applied" would be premature while it is going and
+  // wrong afterwards for a run that was cancelled. Its own status is the truth.
+  const status = deploymentStatus(envelope.data)
+  if (status !== undefined) return status === 'running' ? 'running' : status
+
+  return 'applied'
 })
+
+/** The deployment inside a run_deployment result, if this is one. */
+function deploymentStatus(data: unknown): string | undefined {
+  if (typeof data !== 'object' || data === null || !('deployment' in data)) return undefined
+  const deployment = data.deployment
+  if (typeof deployment !== 'object' || deployment === null || !('status' in deployment)) {
+    return undefined
+  }
+  return typeof deployment.status === 'string' ? deployment.status : undefined
+}
+
+/**
+ * Outcomes that are not failures. A cancelled deployment is in here on purpose:
+ * the user asked for it, so styling it as an error would blame them for it.
+ */
+const SETTLED_WELL = new Set(['applied', 'done', 'running', 'queued', 'succeeded', 'cancelled'])
 
 const failed = computed(
   () =>
     props.part.state === 'output-error' ||
-    (result.value !== undefined && result.value !== 'applied' && result.value !== 'done'),
+    (result.value !== undefined && !SETTLED_WELL.has(result.value)),
 )
 
 function respond(approved: boolean) {

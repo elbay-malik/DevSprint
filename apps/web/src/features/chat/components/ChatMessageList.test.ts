@@ -1,7 +1,21 @@
 import { mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import { reactive } from 'vue'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DevSprintUIMessage } from '../types'
+
+const DEPLOYMENT = {
+  id: 'dep-99',
+  projectId: 'proj-1',
+  version: 'v1.5.0',
+  environment: 'staging',
+  status: 'running',
+  commitSha: 'abc1234',
+  triggeredById: 'agent',
+  startedAt: '2026-07-01T09:00:00Z',
+  finishedAt: null,
+  stages: [{ name: 'build', status: 'running', startedAt: null, finishedAt: null, logTail: [] }],
+}
 
 const chat = reactive({ messages: [] as DevSprintUIMessage[], status: 'ready' })
 
@@ -28,6 +42,11 @@ function abandonedTurn(id: string): DevSprintUIMessage {
 }
 
 describe('ChatMessageList', () => {
+  // Cards below this list read the workspace store, so every mount needs one.
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
   it('only lets the streaming message claim to be running', () => {
     // Turn 1 was stopped mid-call; turn 2 is streaming now.
     chat.messages = [abandonedTurn('m1'), abandonedTurn('m2')]
@@ -84,6 +103,61 @@ describe('ChatMessageList', () => {
 
     expect(wrapper.find('[data-testid="burndown-chart"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="tool-call-chip"]').exists()).toBe(false)
+  })
+
+  it('gives a gated write its approval card and nothing else', () => {
+    // The approval card owns a gated call for its whole life, so the decision
+    // stays on screen as the audit record. Rendering a result card beside it
+    // says the same call twice, and says it without the decision attached.
+    chat.messages = [
+      {
+        id: 'm1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-update_issue_status',
+            toolCallId: 'c1',
+            state: 'output-available',
+            input: { issueKey: 'DS-7', status: 'done' },
+            approval: { id: 'a1', approved: true },
+            output: { ok: true, data: { issue: { key: 'DS-7' } } },
+          },
+        ],
+      } as unknown as DevSprintUIMessage,
+    ]
+    chat.status = 'ready'
+
+    const wrapper = mount(ChatMessageList)
+
+    expect(wrapper.findAll('[data-testid="approval-card"]')).toHaveLength(1)
+    expect(wrapper.find('[data-testid="tool-call-chip"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="issue-table"]').exists()).toBe(false)
+  })
+
+  it('gives a gated deployment both cards, because it is gated and long-running', () => {
+    chat.messages = [
+      {
+        id: 'm1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-run_deployment',
+            toolCallId: 'c1',
+            state: 'output-available',
+            input: { environment: 'staging', version: 'v1.5.0' },
+            approval: { id: 'a1', approved: true },
+            output: { ok: true, data: { deployment: DEPLOYMENT } },
+          },
+        ],
+      } as unknown as DevSprintUIMessage,
+    ]
+    chat.status = 'ready'
+
+    const wrapper = mount(ChatMessageList)
+
+    // The approval says who allowed it; the progress card shows the run itself.
+    expect(wrapper.findAll('[data-testid="approval-card"]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-testid="deployment-progress"]')).toHaveLength(1)
   })
 
   it('renders text parts and tool chips in transcript order', () => {

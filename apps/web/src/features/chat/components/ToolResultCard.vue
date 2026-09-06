@@ -7,9 +7,11 @@ import type {
   DevSprintUITools,
   ListIssuesData,
   ReleaseNotesDiffData,
+  RunDeploymentData,
   SearchIssuesData,
 } from '@devsprint/shared/tools'
 import BurndownChart from './BurndownChart.vue'
+import DeploymentProgressCard from './DeploymentProgressCard.vue'
 import ErrorCard from './ErrorCard.vue'
 import IssueTable from './IssueTable.vue'
 import ReleaseNotesDiff from './ReleaseNotesDiff.vue'
@@ -53,6 +55,7 @@ const listData = computed(() => data.value as ListIssuesData | undefined)
 const searchData = computed(() => data.value as SearchIssuesData | undefined)
 const burndownData = computed(() => data.value as BurndownData | undefined)
 const diffData = computed(() => data.value as ReleaseNotesDiffData | undefined)
+const deploymentData = computed(() => data.value as RunDeploymentData | undefined)
 
 const card = computed(() => {
   if (data.value === undefined) return 'chip'
@@ -65,6 +68,8 @@ const card = computed(() => {
       return 'burndown'
     case 'diff_release_notes':
       return 'diff'
+    case 'run_deployment':
+      return 'deployment'
     default:
       return 'chip'
   }
@@ -77,5 +82,10 @@ const card = computed(() => {
   <IssueTable v-else-if="card === 'matches' && searchData" :matches="searchData.matches" />
   <BurndownChart v-else-if="card === 'burndown' && burndownData" :data="burndownData" />
   <ReleaseNotesDiff v-else-if="card === 'diff' && diffData" :data="diffData" />
+  <DeploymentProgressCard
+    v-else-if="card === 'deployment' && deploymentData"
+    :deployment="deploymentData.deployment"
+    :live="live"
+  />
   <ToolCallChip v-else :part="part" :live="live" />
 </template>

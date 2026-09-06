@@ -205,3 +205,80 @@ test('a search renders the compact table and a failure renders an error', async 
   // The compact variant carries the match score instead of points.
   await expect(table).toContainText('Score')
 })
+
+test('a deployment is approved, then streams its stages to done (S-C)', async ({ page }) => {
+  await page.goto('/')
+
+  await page.getByTestId('chat-input').fill('Deploy v1.5.0-rc.1 to staging.')
+  await page.getByTestId('chat-input').press('Enter')
+
+  // Nothing runs before the gate is answered.
+  const approval = page.getByTestId('approval-card')
+  await expect(approval).toBeVisible()
+  await expect(approval).toContainText('run_deployment')
+  await expect(page.getByTestId('deployment-progress')).toHaveCount(0)
+
+  await approval.getByTestId('approval-approve').click()
+
+  const card = page.getByTestId('deployment-progress')
+  await expect(card).toBeVisible()
+  // Every stage is named, so the reader sees the shape of the run, not a bar.
+  for (const stage of ['build', 'test', 'migrate', 'release']) {
+    await expect(card.locator(`[data-stage="${stage}"]`)).toBeVisible()
+  }
+
+  // Asserted while the run is still going, because the card is re-read from the
+  // board once the turn settles. Without this, a card that never moved and only
+  // rendered the final state would pass every other assertion here.
+  await expect(card.locator('[data-stage="build"]')).toHaveAttribute('data-stage-status', 'running')
+  await expect(card).toHaveAttribute('data-status', 'running')
+  await expect(card.locator('[data-stage="release"]')).toHaveAttribute(
+    'data-stage-status',
+    'pending',
+  )
+  // Then it advances on its own, without a reload or a new message.
+  await expect(card.locator('[data-stage="build"]')).toHaveAttribute(
+    'data-stage-status',
+    'succeeded',
+    { timeout: 15_000 },
+  )
+
+  await expect(card).toHaveAttribute('data-status', 'succeeded', { timeout: 30_000 })
+  await expect(card.locator('[data-stage="release"]')).toHaveAttribute(
+    'data-stage-status',
+    'succeeded',
+  )
+})
+
+test('cancelling mid-run leaves a cancelled deployment (S-C variant C2)', async ({
+  page,
+  request,
+}) => {
+  await page.goto('/')
+
+  await page.getByTestId('chat-input').fill('Deploy v1.6.0 to staging.')
+  await page.getByTestId('chat-input').press('Enter')
+  await page.getByTestId('approval-card').getByTestId('approval-approve').click()
+
+  const card = page.getByTestId('deployment-progress')
+  await expect(card).toBeVisible()
+  await card.getByTestId('deployment-cancel').click()
+
+  // Cancelled, not failed, and not left mid-flight.
+  await expect(card).toHaveAttribute('data-status', 'cancelled', { timeout: 30_000 })
+  await expect(card.locator('[data-stage-status="running"]')).toHaveCount(0)
+
+  // And the workspace agrees with what the card claims. This is the half that
+  // is easy to get wrong: the run carries on server-side while the card says it
+  // stopped, so assert against the stored deployment rather than the pixels.
+  const stored = await (await request.get('http://localhost:8787/api/workspace')).json()
+  const deployed = stored.deployments.find((entry: { version: string }) => {
+    return entry.version === 'v1.6.0'
+  })
+  expect(deployed.status).toBe('cancelled')
+  expect(deployed.stages.every((stage: { status: string }) => stage.status !== 'running')).toBe(
+    true,
+  )
+  // The run stopped where it got to instead of quietly finishing.
+  expect(deployed.stages.at(-1).status).toBe('skipped')
+})
