@@ -14,6 +14,7 @@ import type {
   DeploymentHistoryData,
   ListIssuesData,
   ReleaseNotesDiffData,
+  RunDeploymentData,
   SearchIssuesData,
   SprintStatusData,
   UpdateIssueStatusData,
@@ -59,6 +60,11 @@ function statusFrom(text: string): IssueStatus | undefined {
   return STATUS_WORDS.find(([pattern]) => pattern.test(text))?.[1]
 }
 
+/** `v1.5.0`, `v1.5.0-rc.1` — the version the user named, if they named one. */
+function versionFrom(text: string): string | undefined {
+  return /\bv\d+\.\d+\.\d+(?:-[\w.]+)?/i.exec(text)?.[0]
+}
+
 function environmentFrom(text: string): 'staging' | 'production' | undefined {
   if (/\bprod(uction)?\b/i.test(text)) return 'production'
   if (/\bstaging\b/i.test(text)) return 'staging'
@@ -97,7 +103,25 @@ export function planUserText(text: string, availableTools: ReadonlySet<string>):
   }
 
   const candidates: MockDecision[] = []
-  if (/deploy|shipped|rolled out/i.test(text)) {
+  // "Deploy v1.5.0-rc.1 to staging" asks for the write; "has v1.4.2 shipped?"
+  // asks for the history. A named version plus an instruction rather than a
+  // question is what separates them.
+  const version = versionFrom(text)
+  const asksAboutThePast = /\b(has|have|had|did|was|were|what|when|which|already)\b/i.test(text)
+  // "release notes" borrows the verb without meaning a deployment.
+  const meansReleaseNotes = /release note|changelog/i.test(text)
+  if (
+    /\b(deploy|ship|release|roll ?out)\b/i.test(text) &&
+    version !== undefined &&
+    !asksAboutThePast &&
+    !meansReleaseNotes
+  ) {
+    candidates.push({
+      kind: 'tool-call',
+      toolName: 'run_deployment',
+      input: { environment: environmentFrom(text) ?? 'staging', version },
+    })
+  } else if (/deploy|shipped|rolled out/i.test(text)) {
     const environment = environmentFrom(text)
     candidates.push({
       kind: 'tool-call',
@@ -281,6 +305,15 @@ function summarizeCreatedReleaseNotes(data: CreateReleaseNotesData): string {
   return `Saved ${data.releaseNote.version} release notes as a ${data.releaseNote.status}.`
 }
 
+function summarizeDeployment(data: RunDeploymentData): string {
+  const { deployment } = data
+  const reached = deployment.stages
+    .filter((stage) => stage.status === 'succeeded')
+    .map((stage) => stage.name)
+  const stages = reached.length > 0 ? ` Completed: ${reached.join(', ')}.` : ''
+  return `${deployment.version} → ${deployment.environment}: ${deployment.status}.${stages}`
+}
+
 /** One grounded sentence per tool; the `ok: false` envelope is surfaced by code. */
 export function summarizeToolOutput(toolName: string, output: unknown): string {
   if (!isEnvelope(output)) return `${toolName} returned an unexpected result.`
@@ -305,6 +338,8 @@ export function summarizeToolOutput(toolName: string, output: unknown): string {
       return summarizeCreatedIssue(output.data as CreateIssueData)
     case 'create_release_notes':
       return summarizeCreatedReleaseNotes(output.data as CreateReleaseNotesData)
+    case 'run_deployment':
+      return summarizeDeployment(output.data as RunDeploymentData)
     default:
       return `${toolName} returned ${JSON.stringify(output.data)}.`
   }

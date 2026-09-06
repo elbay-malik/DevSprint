@@ -64,10 +64,9 @@ describe('createReadTools', () => {
 describe('createWriteTools', () => {
   const writeTools = createWriteTools(createLocalWorkspaceApi(createWorkspaceStore()))
 
-  it('registers the three gated writes and not the long-running one', () => {
+  it('registers every write, including the long-running one', () => {
     expect(Object.keys(writeTools).sort()).toEqual([...WRITE_TOOL_NAMES].sort())
-    // run_deployment arrives with its simulation in Phase 8.
-    expect(Object.keys(writeTools)).not.toContain('run_deployment')
+    expect(Object.keys(writeTools)).toContain('run_deployment')
   })
 
   it('gates every write', () => {

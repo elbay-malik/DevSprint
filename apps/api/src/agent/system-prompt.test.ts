@@ -34,9 +34,16 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toMatch(/denied/i)
   })
 
-  it('still says deployment is unavailable until Phase 8', () => {
-    expect(prompt).toMatch(/deploy/i)
-    expect(prompt).toMatch(/not available yet/i)
+  it('offers the deploy tool rather than still calling it unavailable', () => {
+    // Same trap as the writes above, one phase later: the Phase 4 prompt said
+    // deploying was not available yet. Left in place, a real model would refuse
+    // every deploy while the scripted mock kept Phase 8 green.
+    expect(prompt).not.toMatch(/not available yet/i)
+    expect(prompt).toContain('run_deployment')
+    // The parts a model gets wrong without being told: re-calling a run it can
+    // see was cancelled, and skipping tests nobody asked to skip.
+    expect(prompt).toMatch(/cancelled/i)
+    expect(prompt).toMatch(/skipTests/)
   })
 
   it('is deterministic', () => {

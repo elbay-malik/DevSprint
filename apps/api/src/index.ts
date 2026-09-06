@@ -48,8 +48,9 @@ let warnedLocalTools = false
 async function buildTools(
   env: AppEnv,
   workspace: WorkspaceApi,
+  waitUntil: (promise: Promise<unknown>) => void,
 ): Promise<{ tools: DevSprintTools; source: 'mcp' | 'local' }> {
-  const local = createTools(workspace)
+  const local = createTools(workspace, { waitUntil })
   if (!env.MCP_ISSUES) return { tools: local, source: 'local' }
 
   try {
@@ -96,6 +97,31 @@ app.get(API_ROUTES.workspace, async (c) => c.json(await workspaceOf(c.env).snaps
  */
 app.post(API_ROUTES.workspaceReset, async (c) => c.json(await workspaceOf(c.env).reset()))
 
+/**
+ * Cancels a running deployment (scenario S-C, variant C2).
+ *
+ * The obvious design is to hang cancellation off the request's abort signal —
+ * the user hits Stop, the fetch aborts, `run_deployment` sees it. That does not
+ * work here: a client that stops reading a streamed response does not reliably
+ * abort the Worker's request, so the tool's signal never fires and the run
+ * finishes as if nobody had asked. Rather than pretend, the Cancel button says
+ * so out of band, and the deploy loop reads the workspace between stages.
+ *
+ * It stays an http route rather than becoming a `cancel_deployment` tool: the
+ * cancel comes from a button, so routing it through the model would make the
+ * outcome depend on the model choosing to call it (docs/tool-inventory.md §4).
+ */
+app.post(API_ROUTES.deploymentCancel, async (c) => {
+  const result = await workspaceOf(c.env).finishDeployment({
+    deploymentId: c.req.param('id'),
+    status: 'cancelled',
+  })
+  if (result.ok) return c.json(result)
+  // A run that already finished is a conflict, not a missing one — saying 200
+  // here would tell the user their cancel landed when the release had shipped.
+  return c.json(result, result.error.code === 'DEPLOY_ALREADY_SETTLED' ? 409 : 404)
+})
+
 function invalidInput(c: Context<{ Bindings: AppEnv }>, message: string) {
   return c.json({ error: { code: 'INVALID_INPUT', message } }, 400)
 }
@@ -114,7 +140,24 @@ app.post(API_ROUTES.chat, async (c) => {
   }
 
   const workspace = workspaceOf(c.env)
-  const { tools, source: toolSource } = await buildTools(c.env, workspace)
+  /**
+   * Keeps a write alive that the response is no longer waiting on — a
+   * deployment settling itself after the client has gone.
+   *
+   * Read lazily and guarded, because `c.executionCtx` throws rather than
+   * returning undefined when there is no Worker request behind the call, which
+   * is exactly the case in the unit suite that drives the app directly.
+   */
+  const waitUntil = (promise: Promise<unknown>) => {
+    try {
+      c.executionCtx.waitUntil(promise)
+    } catch {
+      // Nothing is going to cut the promise short here, so letting it run is
+      // the whole job.
+      void promise
+    }
+  }
+  const { tools, source: toolSource } = await buildTools(c.env, workspace, waitUntil)
 
   let uiMessages: ChatUIMessage[]
   try {

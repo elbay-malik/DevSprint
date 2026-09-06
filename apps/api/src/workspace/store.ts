@@ -8,7 +8,14 @@ import {
   listIssues,
   searchIssues,
 } from './queries'
-import { createIssue, createReleaseNotes, updateIssueStatus } from './mutations'
+import {
+  createIssue,
+  createReleaseNotes,
+  finishDeployment,
+  setDeploymentStage,
+  startDeployment,
+  updateIssueStatus,
+} from './mutations'
 
 export interface WorkspaceStore {
   /** The live workspace snapshot. */
@@ -56,6 +63,9 @@ export function createLocalWorkspaceApi(store: WorkspaceStore): WorkspaceApi {
     createIssue: (input) => Promise.resolve(createIssue(store.get(), input)),
     updateIssueStatus: (input) => Promise.resolve(updateIssueStatus(store.get(), input)),
     createReleaseNotes: (input) => Promise.resolve(createReleaseNotes(store.get(), input)),
+    startDeployment: (input) => Promise.resolve(startDeployment(store.get(), input)),
+    setDeploymentStage: (input) => Promise.resolve(setDeploymentStage(store.get(), input)),
+    finishDeployment: (input) => Promise.resolve(finishDeployment(store.get(), input)),
   }
 }
 

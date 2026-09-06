@@ -11,6 +11,9 @@ import type {
   ListIssuesInput,
   SearchIssuesInput,
   UpdateIssueStatusInput,
+  RunDeploymentInput,
+  SetDeploymentStageInput,
+  FinishDeploymentInput,
 } from '@devsprint/shared/tools'
 import {
   diffReleaseNotes,
@@ -20,7 +23,14 @@ import {
   listIssues,
   searchIssues,
 } from './queries'
-import { createIssue, createReleaseNotes, updateIssueStatus } from './mutations'
+import {
+  createIssue,
+  createReleaseNotes,
+  finishDeployment,
+  setDeploymentStage,
+  startDeployment,
+  updateIssueStatus,
+} from './mutations'
 
 const STORAGE_KEY = 'workspace'
 
@@ -113,6 +123,30 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
   async createReleaseNotes(input: CreateReleaseNotesInput) {
     const workspace = await this.load()
     const result = createReleaseNotes(workspace, input)
+    if (result.ok) await this.save(workspace)
+    return result
+  }
+
+  // A deployment is persisted a stage at a time, so a run that is cancelled or
+  // interrupted leaves the board showing exactly how far it got.
+
+  async startDeployment(input: RunDeploymentInput) {
+    const workspace = await this.load()
+    const result = startDeployment(workspace, input)
+    if (result.ok) await this.save(workspace)
+    return result
+  }
+
+  async setDeploymentStage(input: SetDeploymentStageInput) {
+    const workspace = await this.load()
+    const result = setDeploymentStage(workspace, input)
+    if (result.ok) await this.save(workspace)
+    return result
+  }
+
+  async finishDeployment(input: FinishDeploymentInput) {
+    const workspace = await this.load()
+    const result = finishDeployment(workspace, input)
     if (result.ok) await this.save(workspace)
     return result
   }

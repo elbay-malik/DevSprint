@@ -21,6 +21,7 @@ import {
   type WriteToolName,
 } from '@devsprint/shared/tools'
 import type { WorkspaceApi } from '@devsprint/shared/tools'
+import { runDeployment } from './deployment'
 
 export function createReadTools(workspace: WorkspaceApi) {
   return {
@@ -57,7 +58,12 @@ export function createReadTools(workspace: WorkspaceApi) {
   } satisfies Record<ReadToolName, Tool>
 }
 
-export function createWriteTools(workspace: WorkspaceApi) {
+export interface WriteToolOptions {
+  /** Lets a cancelled deployment finish recording itself after the client leaves. */
+  waitUntil?: (promise: Promise<unknown>) => void
+}
+
+export function createWriteTools(workspace: WorkspaceApi, options: WriteToolOptions = {}) {
   return {
     create_issue: tool({
       description: TOOL_DESCRIPTIONS.create_issue,
@@ -77,11 +83,29 @@ export function createWriteTools(workspace: WorkspaceApi) {
       needsApproval: true,
       execute: (input) => workspace.createReleaseNotes(input),
     }),
+    run_deployment: tool({
+      description: TOOL_DESCRIPTIONS.run_deployment,
+      inputSchema: WRITE_TOOL_INPUT_SCHEMAS.run_deployment,
+      needsApproval: true,
+      // An async generator: every yield reaches the client as a preliminary
+      // result, which is what makes the progress card move.
+      //
+      // The abort signal is a backstop, not the Cancel button. Cancel is an api
+      // route, because a client that stops reading the stream does not reliably
+      // abort this request — see ADR-0013.
+      execute: (input, { abortSignal }) =>
+        runDeployment({
+          workspace,
+          input,
+          ...(abortSignal ? { abortSignal } : {}),
+          ...(options.waitUntil ? { waitUntil: options.waitUntil } : {}),
+        }),
+    }),
   } satisfies Record<WriteToolName, Tool>
 }
 
-export function createTools(workspace: WorkspaceApi) {
-  return { ...createReadTools(workspace), ...createWriteTools(workspace) }
+export function createTools(workspace: WorkspaceApi, options: WriteToolOptions = {}) {
+  return { ...createReadTools(workspace), ...createWriteTools(workspace, options) }
 }
 
 /**

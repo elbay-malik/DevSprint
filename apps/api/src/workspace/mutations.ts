@@ -8,12 +8,25 @@
  * write lands on the fixed demo clock and the scripted scenarios stay
  * replayable.
  */
-import type { Issue, ReleaseNote, ToolErrorCode, ToolResult, Workspace } from '@devsprint/shared'
+import type {
+  Deployment,
+  DeploymentStage,
+  Issue,
+  ReleaseNote,
+  StageName,
+  ToolErrorCode,
+  ToolResult,
+  Workspace,
+} from '@devsprint/shared'
 import type {
   CreateIssueData,
   CreateIssueInput,
   CreateReleaseNotesData,
   CreateReleaseNotesInput,
+  FinishDeploymentInput,
+  RunDeploymentData,
+  RunDeploymentInput,
+  SetDeploymentStageInput,
   UpdateIssueStatusData,
   UpdateIssueStatusInput,
 } from '@devsprint/shared/tools'
@@ -163,4 +176,145 @@ export function createReleaseNotes(
   }
   workspace.releaseNotes.push(releaseNote)
   return ok({ releaseNote })
+}
+
+// --- 10. run_deployment -------------------------------------------------------
+
+/** Always in this order; a failure skips whatever is left. */
+export const DEPLOYMENT_STAGES: readonly StageName[] = ['build', 'test', 'migrate', 'release']
+
+function pendingStages(): DeploymentStage[] {
+  return DEPLOYMENT_STAGES.map((name) => ({
+    name,
+    status: 'pending',
+    startedAt: null,
+    finishedAt: null,
+    logTail: [],
+  }))
+}
+
+/** Deterministic stand-in for a commit sha, so the demo stays replayable. */
+function shaFor(version: string): string {
+  let hash = 0
+  for (const character of version) hash = (hash * 31 + character.charCodeAt(0)) >>> 0
+  return hash.toString(16).padStart(7, '0').slice(0, 7)
+}
+
+function findDeployment(workspace: Workspace, id: string): Deployment | undefined {
+  return workspace.deployments.find((deployment) => deployment.id === id)
+}
+
+/**
+ * Books the deployment and validates it, without running anything yet. The
+ * simulation is driven from the Worker a stage at a time, so the workspace
+ * always reflects how far the run actually got.
+ */
+export function startDeployment(
+  workspace: Workspace,
+  input: RunDeploymentInput,
+): ToolResult<RunDeploymentData> {
+  const running = workspace.deployments.find(
+    (deployment) =>
+      deployment.environment === input.environment &&
+      (deployment.status === 'running' || deployment.status === 'queued'),
+  )
+  if (running) {
+    return fail(
+      'DEPLOY_IN_PROGRESS',
+      `${running.version} is already deploying to ${input.environment}. Wait for it to finish.`,
+    )
+  }
+
+  const live = workspace.deployments.find(
+    (deployment) =>
+      deployment.environment === input.environment &&
+      deployment.version === input.version &&
+      deployment.status === 'succeeded',
+  )
+  if (live) {
+    return fail('VERSION_EXISTS', `${input.version} is already live in ${input.environment}.`)
+  }
+
+  const deployment: Deployment = {
+    id: `dep-${workspace.deployments.length + 1}`,
+    projectId: workspace.project.id,
+    environment: input.environment,
+    version: input.version,
+    status: 'running',
+    stages: input.skipTests
+      ? pendingStages().map((stage) =>
+          stage.name === 'test'
+            ? { ...stage, status: 'skipped', logTail: ['skipped on request'] }
+            : stage,
+        )
+      : pendingStages(),
+    triggeredById: AGENT_ACTOR,
+    commitSha: shaFor(input.version),
+    startedAt: workspace.now,
+    finishedAt: null,
+  }
+  workspace.deployments.push(deployment)
+  return ok({ deployment })
+}
+
+export function setDeploymentStage(
+  workspace: Workspace,
+  input: SetDeploymentStageInput,
+): ToolResult<RunDeploymentData> {
+  const deployment = findDeployment(workspace, input.deploymentId)
+  if (!deployment) {
+    return fail('INVALID_INPUT', `No deployment with id '${input.deploymentId}'.`)
+  }
+  // A settled deployment is immutable. Cancelling is a race by nature — the
+  // request lands while a stage is mid-flight — and without this the deploy
+  // loop's next write would reopen a stage on a run that is already cancelled,
+  // leaving a finished deployment with a stage still reading `running`.
+  if (deployment.status !== 'running' && deployment.status !== 'queued') {
+    return ok({ deployment })
+  }
+
+  const stage = deployment.stages.find((candidate) => candidate.name === input.stage)
+  if (!stage) return fail('INVALID_INPUT', `No stage '${input.stage}' on ${deployment.id}.`)
+
+  stage.status = input.status
+  if (input.status === 'running') stage.startedAt = workspace.now
+  if (input.status === 'succeeded' || input.status === 'failed') stage.finishedAt = workspace.now
+  if (input.logLine !== undefined) stage.logTail.push(input.logLine)
+
+  return ok({ deployment })
+}
+
+/**
+ * Settles the run. A cancelled or failed deployment leaves its unreached stages
+ * `skipped` rather than pending, so the board shows a finished run instead of
+ * one that looks like it is still going.
+ */
+export function finishDeployment(
+  workspace: Workspace,
+  input: FinishDeploymentInput,
+): ToolResult<RunDeploymentData> {
+  const deployment = findDeployment(workspace, input.deploymentId)
+  if (!deployment) {
+    return fail('INVALID_INPUT', `No deployment with id '${input.deploymentId}'.`)
+  }
+
+  // The same invariant setDeploymentStage enforces, from the other side. A
+  // deployment settles exactly once: without this, a cancel arriving as the run
+  // finishes could rewrite a shipped release as cancelled, and the run's own
+  // closing write could bury a cancel the user had already been told landed.
+  if (deployment.status !== 'running' && deployment.status !== 'queued') {
+    return fail(
+      'DEPLOY_ALREADY_SETTLED',
+      `Deployment ${deployment.id} already finished as '${deployment.status}'.`,
+    )
+  }
+
+  deployment.status = input.status
+  deployment.finishedAt = workspace.now
+  if (input.status !== 'succeeded') {
+    for (const stage of deployment.stages) {
+      if (stage.status === 'pending' || stage.status === 'running') stage.status = 'skipped'
+    }
+  }
+  return ok({ deployment })
 }

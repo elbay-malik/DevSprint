@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import type { Workspace } from '@devsprint/shared'
 import app from './index'
 import { fakeWorkspaceBinding } from '../test/workspace-binding'
@@ -59,6 +59,55 @@ describe('POST /api/workspace/reset', () => {
 
     expect(res.status).toBe(200)
     expect(workspace.store.get().issues.find((i) => i.key === 'DS-7')?.status).toBe('in_review')
+  })
+})
+
+describe('POST /api/deployments/:id/cancel', () => {
+  // These add a deployment the seed does not have, and the store is shared
+  // across the file, so put it back rather than leaving it for later tests.
+  afterEach(async () => {
+    await app.request('/api/workspace/reset', { method: 'POST' }, env)
+  })
+
+  it('settles a running deployment as cancelled', async () => {
+    const { startDeployment } = await import('./workspace/mutations')
+    const started = startDeployment(workspace.store.get(), {
+      environment: 'staging',
+      version: 'v9.9.9',
+      skipTests: false,
+    })
+    expect(started.ok).toBe(true)
+    const id = started.ok ? started.data.deployment.id : ''
+
+    const res = await app.request(`/api/deployments/${id}/cancel`, { method: 'POST' }, env)
+
+    expect(res.status).toBe(200)
+    const stored = workspace.store.get().deployments.find((d) => d.id === id)
+    expect(stored?.status).toBe('cancelled')
+    // Nothing is left mid-flight for the board to render as still going.
+    expect(stored?.stages.some((stage) => stage.status === 'running')).toBe(false)
+  })
+
+  it('refuses to cancel a run that already finished', async () => {
+    // dep-5 in the seed shipped v1.4.2 to production. Answering 200 here would
+    // tell the user their cancel landed on a release that is already live.
+    const res = await app.request('/api/deployments/dep-5/cancel', { method: 'POST' }, env)
+
+    expect(res.status).toBe(409)
+    const body: { ok: boolean; error: { code: string } } = await res.json()
+    expect(body.error.code).toBe('DEPLOY_ALREADY_SETTLED')
+    expect(workspace.store.get().deployments.find((d) => d.id === 'dep-5')?.status).toBe(
+      'succeeded',
+    )
+  })
+
+  it('says so rather than inventing a deployment to cancel', async () => {
+    const res = await app.request('/api/deployments/dep-nope/cancel', { method: 'POST' }, env)
+
+    expect(res.status).toBe(404)
+    const body: { ok: boolean; error: { code: string } } = await res.json()
+    expect(body.ok).toBe(false)
+    expect(body.error.code).toBe('INVALID_INPUT')
   })
 })
 
