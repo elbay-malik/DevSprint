@@ -48,10 +48,18 @@ function path(pick: (day: BurndownData['days'][number]) => number): string {
 const remainingPath = computed(() => path((day) => day.remaining))
 const idealPath = computed(() => path((day) => day.ideal))
 
-/** Four ticks is enough to read the scale without crowding a 180px plot. */
+/**
+ * Four ticks is enough to read the scale without crowding the plot. Labels are
+ * rounded, so a small maximum can repeat one — hence the index as the key, or a
+ * one-point sprint silently loses gridlines.
+ */
 const yTicks = computed(() => {
   const step = maxY.value / 3
-  return [0, step, step * 2, maxY.value].map((value) => ({ value: Math.round(value), y: y(value) }))
+  return [0, step, step * 2, maxY.value].map((value, index) => ({
+    key: index,
+    label: Math.round(value),
+    y: y(value),
+  }))
 })
 
 const asOfDate = computed(() => props.data.asOf.slice(0, 10))
@@ -134,7 +142,7 @@ function shortDate(date: string): string {
       <g class="text-border" stroke="currentColor" stroke-width="1">
         <line
           v-for="tick in yTicks"
-          :key="tick.value"
+          :key="tick.key"
           :x1="PAD.left"
           :y1="tick.y"
           :x2="WIDTH - PAD.right"
@@ -144,12 +152,12 @@ function shortDate(date: string): string {
       <g class="fill-muted-foreground text-[10px] tabular-nums">
         <text
           v-for="tick in yTicks"
-          :key="tick.value"
+          :key="tick.key"
           :x="PAD.left - 6"
           :y="tick.y + 3"
           text-anchor="end"
         >
-          {{ tick.value }}
+          {{ tick.label }}
         </text>
         <text :x="PAD.left" :y="HEIGHT - 6">{{ shortDate(days[0]?.date ?? '') }}</text>
         <text :x="WIDTH - PAD.right" :y="HEIGHT - 6" text-anchor="end">
