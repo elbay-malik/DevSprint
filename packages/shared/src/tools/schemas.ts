@@ -6,8 +6,8 @@
  * Tools 1–6 are read/query and rich-data: they always auto-execute. Tools 7–9
  * are gated writes — they only run after explicit human approval, with no
  * exceptions and no batching (docs/tool-inventory.md §3, ADR-0003). Tool 10,
- * `run_deployment`, is the long-running write and lands with its simulation in
- * Phase 8.
+ * `run_deployment`, is gated the same way and additionally streams progress
+ * while it runs.
  */
 import { z } from 'zod'
 import { ISSUE_STATUSES } from '../workspace/types'
@@ -21,6 +21,7 @@ export const WRITE_TOOL_NAMES = [
   'create_issue',
   'update_issue_status',
   'create_release_notes',
+  'run_deployment',
 ] as const
 export type WriteToolName = (typeof WRITE_TOOL_NAMES)[number]
 
@@ -54,6 +55,8 @@ export const TOOL_DESCRIPTIONS: Record<ReadToolName | WriteToolName, string> = {
     'Use when the user asks to move, close, block, unblock, or reopen an existing issue (any status change).',
   create_release_notes:
     'Use when the user asks to draft or save release notes for a version. The agent composes the markdown itself (from done issues) and passes it in.',
+  run_deployment:
+    'Use when the user asks to deploy, ship, release, or roll out a version to an environment.',
 }
 
 export const listIssuesInputSchema = z.object({
@@ -117,6 +120,13 @@ export const createReleaseNotesInputSchema = z.object({
   sprintId: z.string().optional(),
 })
 
+export const runDeploymentInputSchema = z.object({
+  environment: environmentSchema,
+  version: z.string(),
+  /** Only ever on an explicit request from the user. */
+  skipTests: z.boolean().default(false),
+})
+
 export const READ_TOOL_INPUT_SCHEMAS = {
   list_issues: listIssuesInputSchema,
   search_issues: searchIssuesInputSchema,
@@ -130,6 +140,7 @@ export const WRITE_TOOL_INPUT_SCHEMAS = {
   create_issue: createIssueInputSchema,
   update_issue_status: updateIssueStatusInputSchema,
   create_release_notes: createReleaseNotesInputSchema,
+  run_deployment: runDeploymentInputSchema,
 } satisfies Record<WriteToolName, z.ZodType>
 
 export type ListIssuesInput = z.infer<typeof listIssuesInputSchema>
@@ -141,3 +152,4 @@ export type DiffReleaseNotesInput = z.infer<typeof diffReleaseNotesInputSchema>
 export type CreateIssueInput = z.infer<typeof createIssueInputSchema>
 export type UpdateIssueStatusInput = z.infer<typeof updateIssueStatusInputSchema>
 export type CreateReleaseNotesInput = z.infer<typeof createReleaseNotesInputSchema>
+export type RunDeploymentInput = z.infer<typeof runDeploymentInputSchema>

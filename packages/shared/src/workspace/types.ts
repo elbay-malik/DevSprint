@@ -111,6 +111,7 @@ export type ToolErrorCode =
   | 'USER_NOT_FOUND'
   | 'VERSION_EXISTS'
   | 'DEPLOY_IN_PROGRESS'
+  | 'DEPLOY_ALREADY_SETTLED'
   | 'STAGE_FAILED'
   | 'INVALID_INPUT'
 

@@ -24,11 +24,12 @@ describe('tool contracts', () => {
     expect(Object.keys(READ_TOOL_INPUT_SCHEMAS).sort()).toEqual([...READ_TOOL_NAMES].sort())
   })
 
-  it('covers the three gated write tools, leaving run_deployment to Phase 8', () => {
+  it('gates every tool that changes the workspace, deploys included', () => {
     expect([...WRITE_TOOL_NAMES]).toEqual([
       'create_issue',
       'update_issue_status',
       'create_release_notes',
+      'run_deployment',
     ])
     expect(Object.keys(WRITE_TOOL_INPUT_SCHEMAS).sort()).toEqual([...WRITE_TOOL_NAMES].sort())
     expect(Object.keys(TOOL_DESCRIPTIONS).sort()).toEqual(

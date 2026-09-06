@@ -7,7 +7,13 @@
  * calls it through a cross-script binding. Neither package has to import the
  * other's source to agree on the contract.
  */
-import type { ToolResult, Workspace } from '../workspace/types'
+import type {
+  DeploymentStatus,
+  StageName,
+  StageStatus,
+  ToolResult,
+  Workspace,
+} from '../workspace/types'
 import type {
   CreateIssueInput,
   CreateReleaseNotesInput,
@@ -16,6 +22,7 @@ import type {
   GetDeploymentHistoryInput,
   GetSprintStatusInput,
   ListIssuesInput,
+  RunDeploymentInput,
   SearchIssuesInput,
   UpdateIssueStatusInput,
 } from './schemas'
@@ -26,6 +33,7 @@ import type {
   DeploymentHistoryData,
   ListIssuesData,
   ReleaseNotesDiffData,
+  RunDeploymentData,
   SearchIssuesData,
   SprintStatusData,
   UpdateIssueStatusData,
@@ -47,4 +55,26 @@ export interface WorkspaceApi {
   createIssue(input: CreateIssueInput): Promise<ToolResult<CreateIssueData>>
   updateIssueStatus(input: UpdateIssueStatusInput): Promise<ToolResult<UpdateIssueStatusData>>
   createReleaseNotes(input: CreateReleaseNotesInput): Promise<ToolResult<CreateReleaseNotesData>>
+
+  /**
+   * A deployment runs over several seconds, so it is persisted in steps rather
+   * than as one call: start it, move it through the stages, then settle it. The
+   * simulation lives in the Worker; the workspace only records where it got to,
+   * which is what lets the board show a cancelled run rather than losing it.
+   */
+  startDeployment(input: RunDeploymentInput): Promise<ToolResult<RunDeploymentData>>
+  setDeploymentStage(input: SetDeploymentStageInput): Promise<ToolResult<RunDeploymentData>>
+  finishDeployment(input: FinishDeploymentInput): Promise<ToolResult<RunDeploymentData>>
+}
+
+export interface SetDeploymentStageInput {
+  deploymentId: string
+  stage: StageName
+  status: StageStatus
+  logLine?: string
+}
+
+export interface FinishDeploymentInput {
+  deploymentId: string
+  status: Extract<DeploymentStatus, 'succeeded' | 'failed' | 'cancelled'>
 }

@@ -31,3 +31,6 @@ playwright/.cache/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# vue-tsc --build leaves these; the typecheck script is --noEmit
+*.tsbuildinfo

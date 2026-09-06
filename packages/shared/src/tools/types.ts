@@ -18,6 +18,7 @@ import type {
   GetDeploymentHistoryInput,
   GetSprintStatusInput,
   ListIssuesInput,
+  RunDeploymentInput,
   SearchIssuesInput,
   UpdateIssueStatusInput,
 } from './schemas'
@@ -111,6 +112,15 @@ export interface CreateReleaseNotesData {
 }
 
 /**
+ * `run_deployment` yields this repeatedly while the job runs and once more when
+ * it settles, so every snapshot has the same shape — the stages carry their own
+ * status and log tail, which is all the progress card needs to draw itself.
+ */
+export interface RunDeploymentData {
+  deployment: Deployment
+}
+
+/**
  * Tool name → { input, output } map, shaped for the AI SDK's `UITools`
  * constraint so the SPA can type its `UIMessage` parts (`tool-list_issues`, …)
  * without depending on the api package. Must be a type alias, not an
@@ -135,4 +145,5 @@ export type DevSprintUITools = {
     input: CreateReleaseNotesInput
     output: ToolResult<CreateReleaseNotesData>
   }
+  run_deployment: { input: RunDeploymentInput; output: ToolResult<RunDeploymentData> }
 }
