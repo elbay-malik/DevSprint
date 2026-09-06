@@ -50,6 +50,42 @@ describe('ChatMessageList', () => {
     expect(wrapper.get('[data-testid="tool-call-state"]').text()).toBe('stopped')
   })
 
+  it('gives a successful burndown result its chart, not the fallback chip', () => {
+    chat.messages = [
+      {
+        id: 'm1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-get_burndown',
+            toolCallId: 'c1',
+            state: 'output-available',
+            input: {},
+            output: {
+              ok: true,
+              data: {
+                sprintId: 'sprint-12',
+                unit: 'points',
+                committedPoints: 31,
+                asOf: '2026-07-01T09:00:00Z',
+                days: [
+                  { date: '2026-06-22', remaining: 31, ideal: 31 },
+                  { date: '2026-07-05', remaining: 23, ideal: 0 },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    ]
+    chat.status = 'ready'
+
+    const wrapper = mount(ChatMessageList)
+
+    expect(wrapper.find('[data-testid="burndown-chart"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="tool-call-chip"]').exists()).toBe(false)
+  })
+
   it('renders text parts and tool chips in transcript order', () => {
     chat.messages = [
       {

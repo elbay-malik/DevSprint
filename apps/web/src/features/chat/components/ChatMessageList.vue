@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { isToolUIPart } from 'ai'
 import { useDevSprintChat } from '../composables/useDevSprintChat'
 import ApprovalCard from './ApprovalCard.vue'
-import ToolCallChip from './ToolCallChip.vue'
+import ToolResultCard from './ToolResultCard.vue'
 
 const chat = useDevSprintChat()
 
@@ -45,11 +45,21 @@ function isApprovalPart(part: { approval?: unknown }): boolean {
           : 'bg-muted self-start'
       "
     >
-      <!-- 'step-start' and any other part types are intentionally not rendered -->
-      <template v-for="(part, index) in message.parts" :key="index">
+      <!--
+        'step-start' and any other part types are intentionally not rendered.
+
+        The key carries the part's state because the SDK mutates part objects in
+        place as a call progresses. Keying on the index alone leaves the child's
+        props pointing at the same object, so a card derived from `output` would
+        keep showing what it computed while the call was still running.
+      -->
+      <template
+        v-for="(part, index) in message.parts"
+        :key="`${index}-${'state' in part ? part.state : part.type}`"
+      >
         <span v-if="part.type === 'text'" class="whitespace-pre-wrap">{{ part.text }}</span>
         <ApprovalCard v-else-if="isToolUIPart(part) && isApprovalPart(part)" :part="part" />
-        <ToolCallChip v-else-if="isToolUIPart(part)" :part="part" :live="isLive(message.id)" />
+        <ToolResultCard v-else-if="isToolUIPart(part)" :part="part" :live="isLive(message.id)" />
       </template>
     </div>
     <div

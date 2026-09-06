@@ -155,8 +155,9 @@ scenario specs).
 - **Current scope**: this wireframe is the TARGET layout. The repo currently ships the two panes,
   the 5-column board with seed data, and a composer backed by the real agent loop, which chains
   several tools in one turn (Phase 4); ToolCallChip renders every tool call — name, state,
-  collapsed args/result JSON — as the Phase 3 fallback rendering, one chip per call in transcript
-  order. The Stop button aborts the loop mid-turn, and a call it interrupts is labelled `stopped`
+  collapsed args/result JSON — as the fallback rendering and the permanent one for
+  get_sprint_status and get_deployment_history. The other read tools now render as cards:
+  IssueTable, BurndownChart and ReleaseNotesDiff, with ErrorCard for any `ok: false` result. The Stop button aborts the loop mid-turn, and a call it interrupts is labelled `stopped`
   rather than left claiming to run. Every write the agent can make is gated: an ApprovalCard renders per gated call and
   stays in the transcript afterwards as the record of what was decided, while the composer is locked
   until the outstanding cards are answered. Tabs, sprint selector, and scenario buttons are still

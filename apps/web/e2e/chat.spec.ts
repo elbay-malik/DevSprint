@@ -65,10 +65,10 @@ test('a compound question chains several tools in one turn', async ({ page }) =>
     .fill('Summarize Sprint 12 and draft release notes for v1.5.0.')
   await page.getByTestId('chat-input').press('Enter')
 
-  const chips = page.getByTestId('tool-call-chip')
-  await expect(chips).toHaveCount(2)
-  await expect(chips.nth(0)).toContainText('get_sprint_status')
-  await expect(chips.nth(1)).toContainText('list_issues')
+  // Two steps, rendered as the registry says: sprint status keeps the chip,
+  // the issue list gets its table.
+  await expect(page.getByTestId('tool-call-chip')).toContainText('get_sprint_status')
+  await expect(page.getByTestId('issue-table')).toBeVisible()
 
   // The answer draws on both steps: sprint health, then the work that shipped.
   const chat = page.getByTestId('chat-pane')
@@ -167,4 +167,41 @@ test('every write is gated, one card per issue, and a denial is respected', asyn
   // to Done, while the denied DS-11 has not.
   await expect(doneColumn).toContainText('DS-7')
   await expect(doneColumn).not.toContainText('DS-11')
+})
+
+test('tool results render as cards, not raw JSON', async ({ page }) => {
+  await page.goto('/')
+
+  await page
+    .getByTestId('chat-input')
+    .fill('Is Sprint 12 on track? Show me the burndown and the blocked issues.')
+  await page.getByTestId('chat-input').press('Enter')
+
+  // The burndown reads at the demo clock, not at the last day of the sprint.
+  const chart = page.getByTestId('burndown-chart')
+  await expect(chart).toBeVisible()
+  await expect(chart).toContainText('23 of 31 points left')
+  await expect(chart).toContainText('Remaining')
+  await expect(chart).toContainText('Ideal')
+
+  const table = page.getByTestId('issue-table')
+  await expect(table).toBeVisible()
+  await expect(table).toContainText('DS-11')
+  await expect(table).toContainText('Blocked')
+
+  // Those two tools no longer fall back to the chip.
+  await expect(page.getByTestId('tool-call-chip')).toHaveCount(0)
+})
+
+test('a search renders the compact table and a failure renders an error', async ({ page }) => {
+  await page.goto('/')
+
+  await page.getByTestId('chat-input').fill('Find the billing export issue')
+  await page.getByTestId('chat-input').press('Enter')
+
+  const table = page.getByTestId('issue-table')
+  await expect(table).toBeVisible()
+  await expect(table).toContainText('DS-7')
+  // The compact variant carries the match score instead of points.
+  await expect(table).toContainText('Score')
 })
