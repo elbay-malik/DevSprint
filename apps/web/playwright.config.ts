@@ -9,6 +9,14 @@ export default defineConfig({
   // from the Worker and the composer streams through it.
   webServer: [
     {
+      // The agent sources its issue tools from here, so the browser tests
+      // exercise the MCP path rather than the local fallback.
+      command: 'pnpm --filter @devsprint/mcp-issues exec wrangler dev',
+      url: 'http://localhost:8788/health',
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
+    {
       // `--var MODEL_PROVIDER:mock` pins the scripted model regardless of any
       // local apps/api/.dev.vars, so e2e stays deterministic, offline and free.
       command: 'pnpm --filter @devsprint/api exec wrangler dev --var MODEL_PROVIDER:mock',

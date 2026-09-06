@@ -71,6 +71,26 @@ The request's abort signal is passed into the loop, so the composer's Stop butto
 the turn server-side rather than just hiding the output — no further steps run, and no further
 tokens are spent.
 
+## Where the tools come from
+
+The four issue tools — `list_issues`, `search_issues`, `create_issue`,
+`update_issue_status` — are sourced from `apps/mcp-issues` over MCP through a service binding, so
+the in-app agent and an external host call one implementation rather than two that drift. The other
+five are still defined locally, until the deploys and analytics servers exist.
+
+Their definitions are vendored rather than fetched: they are built from the schemas in
+`@devsprint/shared/tools`, so there is no `tools/list` at startup and a server that is briefly down
+cannot change what the agent can do.
+
+Two things had to survive the hop, and both are tested. The write tools keep `needsApproval`, so the
+Phase 5 gates work unchanged — an MCP-sourced tool is an ordinary tool to the SDK. And MCP returns
+its own result wrapper, so an adapter unwraps the shared `{ ok, data | error }` envelope; without it
+every `result.ok` check in the SPA would read undefined while the model kept answering plausibly.
+
+If the MCP server cannot be reached the agent falls back to the local copies, and says so: every
+response carries `X-DevSprint-Tools: mcp | local`. A silent fallback would let a demo look like it
+was proving the MCP path while quietly not using it.
+
 ## Model routing
 
 Per [ADR-0005](../../docs/adr/0005-model-routing-groq-primary-gemini-fallback.md), selected from

@@ -111,9 +111,18 @@ describe('POST /api/chat', () => {
     expect(chunks.filter((chunk) => chunk.type === 'text-delta').length).toBeGreaterThan(1)
   })
 
-  it('exposes the model route header to the browser', async () => {
+  it('exposes the model and tool-source headers to the browser', async () => {
     const res = await ask('How is the sprint going?')
-    expect(res.headers.get('access-control-expose-headers')).toContain('X-DevSprint-Model')
+    const exposed = res.headers.get('access-control-expose-headers')
+    expect(exposed).toContain('X-DevSprint-Model')
+    expect(exposed).toContain('X-DevSprint-Tools')
+  })
+
+  it('says which tool source it used rather than leaving it to be guessed', async () => {
+    // No MCP binding in the unit env, so the agent falls back to local tools.
+    // Reporting that is what stops a demo looking like it proved the MCP path.
+    const res = await ask('How is the sprint going?')
+    expect(res.headers.get('x-devsprint-tools')).toBe('local')
   })
 
   it('chains several tools in one turn and answers from all of them', async () => {

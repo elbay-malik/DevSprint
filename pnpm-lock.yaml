@@ -12,6 +12,9 @@ catalogs:
     '@ai-sdk/groq':
       specifier: 3.0.64
       version: 3.0.64
+    '@ai-sdk/mcp':
+      specifier: 1.0.78
+      version: 1.0.78
     '@ai-sdk/vue':
       specifier: 3.0.277
       version: 3.0.277
@@ -113,6 +116,9 @@ importers:
       '@ai-sdk/groq':
         specifier: 'catalog:'
         version: 3.0.64(zod@4.4.3)
+      '@ai-sdk/mcp':
+        specifier: 'catalog:'
+        version: 1.0.78(zod@4.4.3)
       '@devsprint/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -278,6 +284,12 @@ packages:
 
   '@ai-sdk/groq@3.0.64':
     resolution: {integrity: sha512-o1zPz+oVP8o8S3THgG/JmFW7ZbeICT2QCyaZMtiaeJd2XnibG4nFVaRIw1nxI5U9VQdfbn37aRUO4JAyVooOJQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/mcp@1.0.78':
+    resolution: {integrity: sha512-k1j5cC39HCV1K3XHtljEA1F/V/X7dzBHkm4dYpQGf6hj3mq4BcNrLqo37nTDQqNFVZu81MsSjFjaoDHK65UG0g==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -3661,6 +3673,14 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 3.0.15
       '@ai-sdk/provider-utils': 4.0.50(zod@4.4.3)
+      zod: 4.4.3
+
+  '@ai-sdk/mcp@1.0.78(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.15
+      '@ai-sdk/provider-utils': 4.0.50(zod@4.4.3)
+      cross-spawn: 7.0.6
+      pkce-challenge: 5.0.1
       zod: 4.4.3
 
   '@ai-sdk/provider-utils@4.0.50(zod@4.4.3)':

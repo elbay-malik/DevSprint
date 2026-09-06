@@ -16,6 +16,20 @@ test('the board hydrates from the api', async ({ page }) => {
   await expect(page.getByTestId('workspace-source')).toHaveText(/live/i)
 })
 
+test('the agent sources its issue tools over MCP, not the local fallback', async ({ page }) => {
+  await page.goto('/')
+
+  // The whole point of the refactor: the in-app agent and an external host call
+  // one implementation. A silent fallback would make this suite pass while
+  // proving nothing, so the answer says which source served the turn.
+  const response = page.waitForResponse((res) => res.url().includes('/api/chat'))
+  await page.getByTestId('chat-input').fill('Show me the blocked issues')
+  await page.getByTestId('chat-input').press('Enter')
+
+  expect((await response).headers()['x-devsprint-tools']).toBe('mcp')
+  await expect(page.getByTestId('chat-pane')).toContainText('DS-11')
+})
+
 test('a sprint question is answered by a grounded tool call', async ({ page }) => {
   await page.goto('/')
 

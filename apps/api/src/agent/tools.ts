@@ -84,5 +84,16 @@ export function createTools(workspace: WorkspaceApi) {
   return { ...createReadTools(workspace), ...createWriteTools(workspace) }
 }
 
+/**
+ * The tools the issues MCP server owns, so callers can drop the local copies
+ * when the agent sources them over MCP instead (ADR-0002).
+ */
+export const MCP_OWNED_TOOL_NAMES = [
+  'list_issues',
+  'search_issues',
+  'create_issue',
+  'update_issue_status',
+] as const
+
 export type ReadTools = ReturnType<typeof createReadTools>
 export type DevSprintTools = ReturnType<typeof createTools>

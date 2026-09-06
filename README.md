@@ -6,13 +6,13 @@ A project/DevOps copilot over a mock sprint workspace — Vue 3 SPA (Vite 8) + H
 
 ## Status
 
-Early development. Implemented so far: repo bootstrap + Phase 0 (design docs) + Phase 1 (SPA shell) + Phase 2 (streaming chat) + Phase 3 (first real tools) + Phase 4 (multi-step agent loop) + Phase 5 (approval gates on writes) of the [16-phase roadmap](docs/roadmap.md). **Local-only but deploy-ready**: wrangler configs and deploy scripts are committed; nothing is deployed yet.
+Early development. Implemented so far: Phases 0–6 of the [16-phase roadmap](docs/roadmap.md) — design docs, SPA shell, streaming chat, real tools, a multi-step agent loop, approval gates on every write, and the MCP refactor with a public issues server. **Local-only but deploy-ready**: wrangler configs and deploy scripts are committed; nothing is deployed yet.
 
 ## Architecture at a glance
 
 - **Frontend**: plain Vue 3 SPA (3.6-track) on Vite 8 (Rolldown), TypeScript strict, Pinia, Vue Router, shadcn-vue (Reka UI + Tailwind v4).
 - **Backend**: Hono on Cloudflare Workers running the AI SDK v6 `ToolLoopAgent` server-side (holds all model keys) — it chains the six read/rich-data tools over the seed workspace until it can answer, bounded by a step budget, and the composer's Stop button aborts the loop mid-turn. Groq primary, Gemini Flash fallback (see [Model providers](#model-providers)).
-- **MCP**: `apps/mcp-issues` serves the four issue tools over Streamable HTTP for external hosts like Claude Desktop. It owns no state — both it and the api Worker reach one workspace Durable Object, so a write made in an external host shows up on the SPA's board ([ADR-0011](docs/adr/0011-workspace-state-in-a-durable-object.md)). Routing the in-app agent's own tools through an MCP client is the remaining half of Phase 6.
+- **MCP**: `apps/mcp-issues` serves the four issue tools over Streamable HTTP, and the in-app agent sources those same four from it through an MCP client — one implementation, two clients. It owns no state: both Workers reach one workspace Durable Object, so a write made in an external host shows up on the SPA's board ([ADR-0011](docs/adr/0011-workspace-state-in-a-durable-object.md)).
 - **Safety**: every write the agent can make is human-approved in-stream before it runs. Approval requests are signed so a forged one cannot execute, and each is single-use so a captured one is downgraded to a denial rather than applied twice. The single-use ledger is still in memory, so it bounds replay within a Worker isolate rather than globally. The workspace itself is durable now; persisting the ledger alongside it is the remaining step ([ADR-0010](docs/adr/0010-tool-approval-mechanism-and-replay-protection.md)).
 
 See [docs/](docs/README.md) for the product brief, domain model, tool inventory, demo scenarios, wireframes, and ADRs.
