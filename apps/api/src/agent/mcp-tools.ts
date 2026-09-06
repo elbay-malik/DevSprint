@@ -52,6 +52,23 @@ function schemaMap() {
   return Object.fromEntries(ISSUE_TOOLS.map((tool) => [tool.name, { inputSchema: tool.schema }]))
 }
 
+function malformed(message: string): ToolResult<never> {
+  return { ok: false, error: { code: 'INVALID_INPUT', message } }
+}
+
+/** Valid JSON is not enough — it has to be our envelope, or `.ok` reads undefined. */
+function isEnvelope(value: unknown): value is ToolResult<unknown> {
+  if (typeof value !== 'object' || value === null || !('ok' in value)) return false
+  const candidate = value as { ok: unknown; data?: unknown; error?: unknown }
+  if (candidate.ok === true) return 'data' in candidate
+  if (candidate.ok === false) {
+    return (
+      typeof candidate.error === 'object' && candidate.error !== null && 'code' in candidate.error
+    )
+  }
+  return false
+}
+
 /**
  * MCP hands back a `CallToolResult`, with our envelope as JSON inside a text
  * block. Left alone, "behaves identically behind MCP" would be false: every
@@ -66,17 +83,18 @@ export function unwrapEnvelope(output: unknown): ToolResult<unknown> {
       : undefined
   const first = Array.isArray(content) ? (content[0] as { text?: unknown } | undefined) : undefined
 
-  if (typeof first?.text !== 'string') {
-    return { ok: false, error: { code: 'INVALID_INPUT', message: 'Malformed MCP tool result.' } }
-  }
+  if (typeof first?.text !== 'string') return malformed('Malformed MCP tool result.')
+
+  let parsed: unknown
   try {
-    return JSON.parse(first.text) as ToolResult<unknown>
+    parsed = JSON.parse(first.text)
   } catch {
-    return {
-      ok: false,
-      error: { code: 'INVALID_INPUT', message: 'MCP tool result was not valid JSON.' },
-    }
+    return malformed('MCP tool result was not valid JSON.')
   }
+  // A shape check, not just a parse: JSON that is valid but not our envelope
+  // would sail through and reintroduce the silent failure this exists to stop.
+  if (!isEnvelope(parsed)) return malformed('MCP tool result was not a DevSprint tool envelope.')
+  return parsed
 }
 
 export interface McpIssueToolsOptions {
@@ -94,18 +112,22 @@ export interface McpIssueToolsOptions {
  * depends on: the write tools stay gated, and every tool still returns the
  * shared result envelope.
  */
-export async function createMcpIssueTools({
-  fetch,
-  url = 'https://devsprint-mcp-issues/mcp',
-}: McpIssueToolsOptions): Promise<Record<string, Tool>> {
-  const client = await createMCPClient({ transport: { type: 'http', url, fetch } })
-  const remote = client.toolsFromDefinitions(vendoredDefinitions(), { schemas: schemaMap() })
-
+/**
+ * Wraps the SDK's tools so the pair of guarantees Phase 5 and the SPA rely on
+ * survive the hop: writes stay gated, and results stay in the shared envelope.
+ */
+export function adaptRemoteTools(remote: Record<string, unknown>): Record<string, Tool> {
   return Object.fromEntries(
     ISSUE_TOOLS.map((tool) => {
-      const source = remote[tool.name] as Tool & {
-        execute: (input: unknown, options: unknown) => Promise<unknown>
+      const source = remote[tool.name] as
+        (Tool & { execute?: (input: unknown, options: unknown) => Promise<unknown> }) | undefined
+      // Fail while building rather than mid-turn: a definition mismatch or an
+      // SDK change should reach the caller's fallback, not surface as a broken
+      // tool call once the model has already reached for it.
+      if (typeof source?.execute !== 'function') {
+        throw new Error(`MCP server did not provide a usable '${tool.name}' tool.`)
       }
+      const execute = source.execute
       return [
         tool.name,
         {
@@ -115,9 +137,24 @@ export async function createMcpIssueTools({
           // (ADR-0003).
           ...(tool.gated ? { needsApproval: true as const } : {}),
           execute: async (input: unknown, options: unknown) =>
-            unwrapEnvelope(await source.execute(input, options)),
+            unwrapEnvelope(await execute(input, options)),
         },
       ]
     }),
+  )
+}
+
+/**
+ * Builds the issue tools from the MCP server, preserving the two things Phase 5
+ * depends on: the write tools stay gated, and every tool still returns the
+ * shared result envelope.
+ */
+export async function createMcpIssueTools({
+  fetch,
+  url = 'https://devsprint-mcp-issues/mcp',
+}: McpIssueToolsOptions): Promise<Record<string, Tool>> {
+  const client = await createMCPClient({ transport: { type: 'http', url, fetch } })
+  return adaptRemoteTools(
+    client.toolsFromDefinitions(vendoredDefinitions(), { schemas: schemaMap() }),
   )
 }

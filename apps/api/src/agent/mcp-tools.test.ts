@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { TOOL_DESCRIPTIONS } from '@devsprint/shared/tools'
-import { createMcpIssueTools, MCP_ISSUE_TOOL_NAMES, unwrapEnvelope } from './mcp-tools'
+import {
+  adaptRemoteTools,
+  createMcpIssueTools,
+  MCP_ISSUE_TOOL_NAMES,
+  unwrapEnvelope,
+} from './mcp-tools'
 
 /** A minimal MCP server over fetch: enough for initialize and tools/call. */
 function fakeMcpServer(onCall: (name: string, args: unknown) => unknown) {
@@ -44,6 +49,14 @@ describe('unwrapEnvelope', () => {
       content: [{ type: 'text', text: '{"ok":false,"error":{"code":"ISSUE_NOT_FOUND"}}' }],
     }
     expect(unwrapEnvelope(wrapped)).toMatchObject({ ok: false, error: { code: 'ISSUE_NOT_FOUND' } })
+  })
+
+  it('rejects valid JSON that is not our envelope', () => {
+    // The failure this guards is quiet: `.ok` would read undefined, the cards
+    // would render nothing, and the model would still answer plausibly.
+    for (const text of ['{"issues":[]}', '{"ok":"yes"}', '{"ok":false}', 'null', '[]']) {
+      expect(unwrapEnvelope({ content: [{ type: 'text', text }] })).toMatchObject({ ok: false })
+    }
   })
 
   it('reports a malformed result rather than passing it on', () => {
@@ -123,5 +136,22 @@ describe('createMcpIssueTools', () => {
       .map((body) => (JSON.parse(body) as { method: string }).method)
     // A server that is slow or briefly down cannot change what the agent can do.
     expect(sent).not.toContain('tools/list')
+  })
+})
+
+describe('adaptRemoteTools', () => {
+  const usable = { execute: () => Promise.resolve({ content: [{ type: 'text', text: '{}' }] }) }
+
+  it('fails while building when the server omits a tool', () => {
+    // A definition mismatch or an SDK change should reach the caller's fallback
+    // here, rather than surfacing mid-turn as a broken tool call.
+    expect(() => adaptRemoteTools({ list_issues: usable })).toThrow(/usable 'search_issues'/)
+  })
+
+  it('fails while building when a tool cannot be executed', () => {
+    const remote = Object.fromEntries(MCP_ISSUE_TOOL_NAMES.map((name) => [name, usable]))
+    expect(() =>
+      adaptRemoteTools({ ...remote, create_issue: { description: 'no execute' } }),
+    ).toThrow(/usable 'create_issue'/)
   })
 })
