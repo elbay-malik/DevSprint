@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { createWorkspaceSeed, WORKSPACE_NOW, type Workspace } from '@devsprint/shared'
-import { createIssue, createReleaseNotes, updateIssueStatus } from './mutations'
+import {
+  createIssue,
+  createReleaseNotes,
+  finishDeployment,
+  setDeploymentStage,
+  startDeployment,
+  updateIssueStatus,
+} from './mutations'
 import { getBurndown, getSprintStatus } from './queries'
 
 function expectOk<T>(result: { ok: true; data: T } | { ok: false; error: { code: string } }): T {
@@ -201,5 +208,71 @@ describe('createReleaseNotes', () => {
         }),
       ).code,
     ).toBe('INVALID_INPUT')
+  })
+})
+
+describe('setDeploymentStage', () => {
+  function running(workspace: Workspace) {
+    return expectOk(
+      startDeployment(workspace, {
+        environment: 'staging',
+        version: 'v9.9.9',
+        skipTests: false,
+      }),
+    ).deployment
+  }
+
+  it('stamps a stage start once, not on every log line', () => {
+    const workspace = seed()
+    const { id } = running(workspace)
+
+    setDeploymentStage(workspace, { deploymentId: id, stage: 'build', status: 'running' })
+    // The demo clock is frozen, so a test written against it would pass either
+    // way. Moving it is what makes the assertion mean anything: every log line
+    // arrives as another `running` write, and each one used to reset the start.
+    workspace.now = '2026-07-01T09:00:30Z'
+    setDeploymentStage(workspace, {
+      deploymentId: id,
+      stage: 'build',
+      status: 'running',
+      logLine: 'checked out abc1234',
+    })
+    workspace.now = '2026-07-01T09:01:00Z'
+    const result = expectOk(
+      setDeploymentStage(workspace, { deploymentId: id, stage: 'build', status: 'succeeded' }),
+    )
+
+    const build = result.deployment.stages.find((stage) => stage.name === 'build')
+    expect(build?.startedAt).toBe(WORKSPACE_NOW)
+    expect(build?.finishedAt).toBe('2026-07-01T09:01:00Z')
+  })
+
+  it('leaves a settled deployment alone', () => {
+    const workspace = seed()
+    const { id } = running(workspace)
+    setDeploymentStage(workspace, { deploymentId: id, stage: 'build', status: 'running' })
+    finishDeployment(workspace, { deploymentId: id, status: 'cancelled' })
+
+    // The run's next write races the cancel. Reopening the stage here would
+    // leave a cancelled deployment with a stage still reading `running`.
+    const result = expectOk(
+      setDeploymentStage(workspace, { deploymentId: id, stage: 'test', status: 'running' }),
+    )
+
+    expect(result.deployment.status).toBe('cancelled')
+    expect(result.deployment.stages.every((stage) => stage.status !== 'running')).toBe(true)
+  })
+})
+
+describe('finishDeployment', () => {
+  it('refuses to settle a run twice', () => {
+    const workspace = seed()
+    // dep-5 in the seed shipped v1.4.2 to production.
+    const error = expectError(
+      finishDeployment(workspace, { deploymentId: 'dep-5', status: 'cancelled' }),
+    )
+
+    expect(error.code).toBe('DEPLOY_ALREADY_SETTLED')
+    expect(workspace.deployments.find((d) => d.id === 'dep-5')?.status).toBe('succeeded')
   })
 })

@@ -277,7 +277,11 @@ export function setDeploymentStage(
   if (!stage) return fail('INVALID_INPUT', `No stage '${input.stage}' on ${deployment.id}.`)
 
   stage.status = input.status
-  if (input.status === 'running') stage.startedAt = workspace.now
+  // Set once, on the write that opens the stage. Every log line arrives as
+  // another `running` write, so assigning unconditionally would make this the
+  // last heartbeat rather than the start — and any duration computed from it
+  // would shrink towards zero as the stage produced more output.
+  if (input.status === 'running') stage.startedAt ??= workspace.now
   if (input.status === 'succeeded' || input.status === 'failed') stage.finishedAt = workspace.now
   if (input.logLine !== undefined) stage.logTail.push(input.logLine)
 
