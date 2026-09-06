@@ -53,7 +53,10 @@ Annotations:
   MCP host) fill the composer with the verbatim scenario prompt as a spend control.
 - **Header.** Sprint selector, demo reset, theme toggle. Reset restores the seed workspace.
 - **Stop button** is visible only while the agent is streaming; it aborts the agent loop
-  mid-turn (scenario S-C variant C2 uses the card-level Cancel instead).
+  mid-turn. Scenario S-C variant C2 uses the card-level Cancel instead, which is a different
+  mechanism as well as a different control: Stop aborts the request, Cancel posts to the api. It has
+  to, because aborting does not reliably reach a deploy already in flight
+  ([ADR-0013](adr/0013-deployment-cancel-as-an-api-route.md)).
 
 ## 2. In-stream part anatomy
 
@@ -72,8 +75,9 @@ assistant turn (top to bottom)
                               until the user approves or denies
  5. DeploymentProgressCard    stage list build / test / migrate / release,
                               each stage with a pending / running / succeeded
-                              / failed icon, a progress bar, and the last log
-                              line; Cancel button while running
+                              / failed / skipped glyph, a progress bar counting
+                              whole stages, and the last log line; Cancel
+                              button while the run is live
  6. ErrorCard                 error code + message, subdued styling
 ```
 
@@ -137,16 +141,16 @@ trusted, so the Worker re-checks the tool input and the approval policy before e
 Canonical component names for Phase 7 — spell them exactly like this everywhere (docs, code,
 scenario specs).
 
-| Component                                 | Fed by                                                                                                     | First built in phase |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------- |
-| ChatMessage                               | every message part (user and assistant text; wraps all parts below)                                        | 2                    |
-| ToolCallChip                              | fallback for every tool call; permanent rendering for get_sprint_status and get_deployment_history results | 3                    |
-| IssueTable                                | list_issues; search_issues (compact variant)                                                               | 7                    |
-| BurndownChart (shadcn-vue Chart / Unovis) | get_burndown                                                                                               | 7                    |
-| ReleaseNotesDiff                          | diff_release_notes                                                                                         | 7                    |
-| DeploymentProgressCard                    | run_deployment progress parts                                                                              | 8                    |
-| ApprovalCard                              | approval requests from create_issue, update_issue_status, create_release_notes, run_deployment             | 5                    |
-| ErrorCard                                 | any tool result with ok: false                                                                             | 5                    |
+| Component                                | Fed by                                                                                                     | First built in phase |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------- |
+| ChatMessage                              | every message part (user and assistant text; wraps all parts below)                                        | 2                    |
+| ToolCallChip                             | fallback for every tool call; permanent rendering for get_sprint_status and get_deployment_history results | 3                    |
+| IssueTable                               | list_issues; search_issues (compact variant)                                                               | 7                    |
+| BurndownChart (inline SVG, see ADR-0012) | get_burndown                                                                                               | 7                    |
+| ReleaseNotesDiff                         | diff_release_notes                                                                                         | 7                    |
+| DeploymentProgressCard                   | run_deployment, redrawn from each preliminary tool result                                                  | 8                    |
+| ApprovalCard                             | approval requests from create_issue, update_issue_status, create_release_notes, run_deployment             | 5                    |
+| ErrorCard                                | any tool result with ok: false                                                                             | 5                    |
 
 ## 6. Notes
 

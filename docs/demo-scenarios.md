@@ -120,27 +120,33 @@ Conventions used in the step tables:
 - **Preconditions:** fresh seed; no deployment currently running; v1.5.0-rc.1 not previously
   deployed. Latest staging deploy in history is dep-4 (v1.4.2, succeeded).
 
-| Step | Actor  | Action or prompt (verbatim)                                             | Expected tool call                                                   | Expected stream parts                              | Expected UI (workspace / chat)                                                                 |
-| ---- | ------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| 1    | User   | "Deploy v1.5.0-rc.1 to staging."                                        | —                                                                    | —                                                  | Chat: user message                                                                             |
-| 2    | Agent  | Optional pre-check of last staging deploy                               | `get_deployment_history({ environment: 'staging', limit: 1 })`       | tool call + result                                 | Chat: tool chip with dep-4 (v1.4.2, succeeded)                                                 |
-| 3    | Agent  | Requests the deployment                                                 | `run_deployment({ environment: 'staging', version: 'v1.5.0-rc.1' })` | approval request part                              | Chat: ApprovalCard                                                                             |
-| 4    | User   | Clicks Approve                                                          | (job starts)                                                         | progress data parts                                | Chat: DeploymentProgressCard appears                                                           |
-| 5    | System | Stages stream: build (~3s) → test (~4s) → migrate (~2s) → release (~2s) | (same call, streaming)                                               | progress data parts with `progressPct` + log lines | Chat: stage rows flip pending → running → succeeded, progress bar advances, log lines tail     |
-| 6    | System | Deployment finishes                                                     | (final tool result)                                                  | tool result + final text                           | Workspace: Deploys tab gains a new succeeded row for v1.5.0-rc.1; chat: card shows "succeeded" |
+| Step | Actor  | Action or prompt (verbatim)                                             | Expected tool call                                                   | Expected stream parts                                            | Expected UI (workspace / chat)                                                                 |
+| ---- | ------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| 1    | User   | "Deploy v1.5.0-rc.1 to staging."                                        | —                                                                    | —                                                                | Chat: user message                                                                             |
+| 2    | Agent  | Optional pre-check of last staging deploy                               | `get_deployment_history({ environment: 'staging', limit: 1 })`       | tool call + result                                               | Chat: tool chip with dep-4 (v1.4.2, succeeded)                                                 |
+| 3    | Agent  | Requests the deployment                                                 | `run_deployment({ environment: 'staging', version: 'v1.5.0-rc.1' })` | approval request part                                            | Chat: ApprovalCard                                                                             |
+| 4    | User   | Clicks Approve                                                          | (job starts)                                                         | preliminary tool results                                         | Chat: DeploymentProgressCard appears                                                           |
+| 5    | System | Stages stream: build (~3s) → test (~4s) → migrate (~2s) → release (~2s) | (same call, streaming)                                               | one preliminary result per stage step, each a whole `Deployment` | Chat: stage rows flip pending → running → succeeded, progress bar advances, log lines tail     |
+| 6    | System | Deployment finishes                                                     | (final tool result)                                                  | tool result + final text                                         | Workspace: Deploys tab gains a new succeeded row for v1.5.0-rc.1; chat: card shows "succeeded" |
 
 **Variant C2 — cancellation**
 
-| Step | Actor                                                                           | Action or prompt (verbatim) | Expected tool call | Expected stream parts | Expected UI (workspace / chat)                        |
-| ---- | ------------------------------------------------------------------------------- | --------------------------- | ------------------ | --------------------- | ----------------------------------------------------- |
-| C2-1 | Steps 1-4 as above, then user clicks Cancel on the card during the 'test' stage | —                           | —                  | stream aborts         | Chat: DeploymentProgressCard shows 'test' interrupted |
-| C2-2 | System                                                                          | Job aborts via abort signal | (tool run ends)    | (stream closed)       | Workspace + card: deployment status `cancelled`       |
+| Step | Actor                                                                           | Action or prompt (verbatim)                                          | Expected tool call      | Expected stream parts                          | Expected UI (workspace / chat)                                              |
+| ---- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------- | ---------------------------------------------- | --------------------------------------------------------------------------- |
+| C2-1 | Steps 1-4 as above, then user clicks Cancel on the card during the 'test' stage | `POST /api/deployments/:id/cancel`                                   | —                       | (turn keeps streaming)                         | Chat: DeploymentProgressCard shows 'test' interrupted                       |
+| C2-2 | System                                                                          | The deploy loop reads the cancel from its next stage write and stops | (same call, ends early) | final preliminary result, then the tool result | Workspace + card: deployment status `cancelled`, unreached stages `skipped` |
 
 **Success criteria**
 
 - No progress is streamed before the approval is granted.
 - Cancel mid-run leaves a consistent `cancelled` deployment visible in both the card and the
   Deploys tab.
+
+> Cancel is an api route rather than the request's abort signal, and the turn is deliberately left
+> running so the model can report what happened. A browser that stops reading a streamed response
+> does not reliably abort the Worker's request, so the abort-signal design this scenario originally
+> assumed would let the deploy run to completion while the card claimed it had stopped — see
+> [ADR-0013](adr/0013-deployment-cancel-as-an-api-route.md).
 
 **Eval assertions**
 

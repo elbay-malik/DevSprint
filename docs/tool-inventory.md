@@ -5,8 +5,8 @@ The DevSprint Copilot agent exposes exactly **10 tools**. Types (`Issue`, `Sprin
 [domain-model.md](./domain-model.md). Every scripted demo in
 [demo-scenarios.md](./demo-scenarios.md) exercises tools from this list and nothing else. Phase 3
 registers tools 1–6 (read/query and rich-data) as plain AI SDK function-calling tools in
-`apps/api`; Phase 5 adds the three gated writes, tools 7–9. Tool 10, `run_deployment`, stays
-unregistered until its simulation lands in Phase 8. The approval policy below is the contract
+`apps/api`; Phase 5 adds the three gated writes, tools 7–9. Tool 10, `run_deployment`, lands with
+its simulation in Phase 8 and is gated like the other writes. The approval policy below is the contract
 implemented in Phase 5, recorded in
 [ADR-0003](./adr/0003-hitl-approval-gates-on-write-tools.md) (policy) and
 [ADR-0010](./adr/0010-tool-approval-mechanism-and-replay-protection.md) (mechanism).
@@ -173,7 +173,8 @@ z.object({
 } }
 ```
 
-The `days` series is shaped for direct consumption by the BurndownChart (Unovis) component;
+The `days` series is shaped for direct consumption by the BurndownChart component, which Phase 7
+draws as inline SVG rather than with Unovis ([ADR-0012](./adr/0012-burndown-chart-as-inline-svg.md));
 derivation rules for `remaining` and `ideal` live in domain-model.md. `asOf` is an additive Phase 3
 field: the Phase 7 chart uses it to draw the "today" marker without touching `Date.now()`.
 
@@ -302,20 +303,17 @@ z.object({
 })
 ```
 
-**Behavior:** long-running simulated job. After approval, it streams progress events
+**Behavior:** long-running simulated job, about eleven seconds over stages
+`build → test → migrate → release`. After approval it reports progress by being an async generator:
+each yield is a complete `ToolResult<{ deployment: Deployment }>`, which the SDK streams to the
+client as a preliminary tool result. DeploymentProgressCard therefore redraws from the same shape it
+will eventually settle on, rather than from a separate event type — which is why this tool has no
+progress-event payload of its own. Every stage is persisted as it happens, so a run that ends early
+is still recorded where it got to.
 
-```ts
-{
-  stage: StageName
-  status: StageStatus
-  progressPct: number
-  logLine: string
-}
-```
-
-as AI SDK data parts consumed by the DeploymentProgressCard (stages `build → test → migrate →
-release`). Supports cancellation via `abortSignal`; a cancelled run finishes with deployment status
-`'cancelled'`. There is no separate cancel tool — see section 4.
+Cancellation is a `POST /api/deployments/:id/cancel` route, not the request's abort signal, and not
+a tool — see section 4 and [ADR-0013](./adr/0013-deployment-cancel-as-an-api-route.md). A cancelled
+run finishes with deployment status `'cancelled'` and its unreached stages marked `'skipped'`.
 
 **Final output**
 
@@ -324,7 +322,8 @@ release`). Supports cancellation via `abortSignal`; a cancelled run finishes wit
 ```
 
 **Errors:** `DEPLOY_IN_PROGRESS`, `VERSION_EXISTS` (version already live in that environment),
-`STAGE_FAILED`
+`INVALID_INPUT`. The simulation has no failure path, so `STAGE_FAILED` is reserved rather than
+raised; `DEPLOY_ALREADY_SETTLED` belongs to the cancel route rather than the tool.
 
 ## 3. Approval policy
 
@@ -364,12 +363,12 @@ always auto-execute; ALL writes are gated — no exceptions.**
 
 Kept within the 6–10 tool budget. Each of these was considered and deliberately left out:
 
-| Deferred tool           | Why deferred                                                                                                      |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `assign_issue`          | Fold into a future general `update_issue` tool rather than adding a single-field write now.                       |
-| `list_users`            | The 4-user roster is small and static; it is embedded in the Phase 3 system prompt instead (see domain-model.md). |
-| `publish_release_notes` | Drafting covers the demo scenarios; publishing adds a second gated write with little new signal.                  |
-| `cancel_deployment`     | Cancellation is handled via stream abort (`abortSignal` on `run_deployment`), not a tool call.                    |
+| Deferred tool           | Why deferred                                                                                                                                                                                                                                                                                                                       |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `assign_issue`          | Fold into a future general `update_issue` tool rather than adding a single-field write now.                                                                                                                                                                                                                                        |
+| `list_users`            | The 4-user roster is small and static; it is embedded in the Phase 3 system prompt instead (see domain-model.md).                                                                                                                                                                                                                  |
+| `publish_release_notes` | Drafting covers the demo scenarios; publishing adds a second gated write with little new signal.                                                                                                                                                                                                                                   |
+| `cancel_deployment`     | Cancel comes from a button, so it is an api route (`POST /api/deployments/:id/cancel`), not a tool call. Routing it through the model would make whether the deploy stops depend on the model choosing to call it, and it could not be reached mid-tool-call at all — [ADR-0013](./adr/0013-deployment-cancel-as-an-api-route.md). |
 
 If a later phase needs one of these, promote it here first and update
 [demo-scenarios.md](./demo-scenarios.md), [wireframes.md](./wireframes.md), and the affected ADRs
