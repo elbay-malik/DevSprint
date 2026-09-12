@@ -20,8 +20,10 @@ import {
 export interface WorkspaceStore {
   /** The live workspace snapshot. */
   get(): Workspace
-  /** Restores the seed. */
+  /** Restores the seed — the board and the approval ledger both. */
   reset(): void
+  /** Approval ids already spent, mirroring the DO's persisted ledger (ADR-0014). */
+  spentApprovals(): Set<string>
 }
 
 /**
@@ -34,11 +36,14 @@ export interface WorkspaceStore {
  */
 export function createWorkspaceStore(): WorkspaceStore {
   let workspace = createWorkspaceSeed()
+  let ledger = new Set<string>()
   return {
     get: () => workspace,
     reset: () => {
       workspace = createWorkspaceSeed()
+      ledger = new Set()
     },
+    spentApprovals: () => ledger,
   }
 }
 
@@ -66,6 +71,22 @@ export function createLocalWorkspaceApi(store: WorkspaceStore): WorkspaceApi {
     startDeployment: (input) => Promise.resolve(startDeployment(store.get(), input)),
     setDeploymentStage: (input) => Promise.resolve(setDeploymentStage(store.get(), input)),
     finishDeployment: (input) => Promise.resolve(finishDeployment(store.get(), input)),
+    // One at a time rather than filter-then-bulk-add, so an in-call duplicate
+    // is caught too — mirrors the DO's real implementation. No eviction cap
+    // here: that guards a Durable Object storage limit this in-memory Set does
+    // not have.
+    spendApprovals: (ids) => {
+      const ledger = store.spentApprovals()
+      const alreadySpent: string[] = []
+      for (const id of ids) {
+        if (ledger.has(id)) {
+          alreadySpent.push(id)
+        } else {
+          ledger.add(id)
+        }
+      }
+      return Promise.resolve(alreadySpent)
+    },
   }
 }
 
