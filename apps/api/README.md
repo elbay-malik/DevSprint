@@ -5,12 +5,13 @@ model key) and exposes the mock workspace over HTTP.
 
 ## Endpoints
 
-| Route                  | Method | Purpose                                                                 |
-| ---------------------- | ------ | ----------------------------------------------------------------------- |
-| `/api/health`          | GET    | Liveness probe — `{ "ok": true }`                                       |
-| `/api/workspace`       | GET    | The current workspace snapshot; the SPA hydrates its board from it      |
-| `/api/workspace/reset` | POST   | Restores the seed board — the demo's reset control                      |
-| `/api/chat`            | POST   | AI SDK v6 UI message stream — tool calls, tool results, streamed answer |
+| Route                         | Method | Purpose                                                                 |
+| ----------------------------- | ------ | ----------------------------------------------------------------------- |
+| `/api/health`                 | GET    | Liveness probe — `{ "ok": true }`                                       |
+| `/api/workspace`              | GET    | The current workspace snapshot; the SPA hydrates its board from it      |
+| `/api/workspace/reset`        | POST   | Restores the seed board — the demo's manual reset control               |
+| `/api/deployments/:id/cancel` | POST   | Ends a running deployment — the progress card's Cancel button           |
+| `/api/chat`                   | POST   | AI SDK v6 UI message stream — tool calls, tool results, streamed answer |
 
 ## Tools
 
@@ -18,10 +19,11 @@ model key) and exposes the mock workspace over HTTP.
 [docs/tool-inventory.md](../../docs/tool-inventory.md): `list_issues`, `search_issues`,
 `get_sprint_status`, `get_deployment_history`, `get_burndown`, and `diff_release_notes`.
 
-Three write tools are registered and gated: `create_issue`, `update_issue_status` and
-`create_release_notes`. `run_deployment` waits for its simulation in Phase 8.
+Four write tools are registered and gated: `create_issue`, `update_issue_status`,
+`create_release_notes`, and `run_deployment`, a long-running async generator whose stages stream
+to the client as preliminary tool results.
 
-### The reset endpoint is deliberately not gated
+### The reset and cancel endpoints are deliberately not gated
 
 `POST /api/workspace/reset` restores the seed without an approval card, so "every write is gated"
 would be an overclaim — every write **the agent can make** is gated. Reset is a demo control, not
@@ -31,7 +33,13 @@ call it, and the worst it can do is put the mock workspace back to a known board
 It is deliberately left open rather than restricted to dev, because
 [wireframes.md](../../docs/wireframes.md) §1 puts a Reset demo button in the live demo's header and
 a dev-only guard would remove it exactly where it is useful. Protecting it from abuse belongs with
-the per-IP rate limits in Phase 11, and Phase 9's daily reset supersedes it.
+the per-IP rate limits in Phase 11; the board also resets itself once a day regardless
+([ADR-0014](../../docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
+
+`POST /api/deployments/:id/cancel` is the same story for a different reason: it comes from a
+button, not the agent, so routing it through a tool would make whether a deploy stops depend on the
+model choosing to call one — see
+[ADR-0013](../../docs/adr/0013-deployment-cancel-as-an-api-route.md).
 
 ## Approvals
 
@@ -42,13 +50,14 @@ nonce, a captured approval would otherwise replay forever, so each approval id i
 repeat is downgraded to a denial rather than applied again
 ([ADR-0010](../../docs/adr/0010-tool-approval-mechanism-and-replay-protection.md)). Downgrading
 rather than rejecting the request matters — answered approvals stay in the client's transcript, so
-refusing outright would strand the conversation the first time a resume failed.
+refusing outright would strand the conversation the first time a resume failed. The ledger that
+tracks what has been spent lives in the workspace Durable Object rather than in the Worker's own
+memory, so the guarantee holds across isolates and restarts, not just within the one that happened
+to handle a given request ([ADR-0014](../../docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
 
-Two limits worth knowing. The single-use ledger is in memory, so on Workers it bounds replay within
-an isolate rather than globally; D1 (Phase 9) is where it belongs. And with no secret configured
-the Worker signs with a random per-isolate secret and warns, rather than running unsigned — that
-keeps keyless dev and CI working, but approvals stop verifying after a restart, so set the secret
-before deploying.
+One limit worth knowing: with no secret configured the Worker signs with a random per-isolate
+secret and warns, rather than running unsigned — that keeps keyless dev and CI working, but
+approvals stop verifying after a restart, so set the secret before deploying.
 
 Tool descriptions and input schemas come verbatim from `@devsprint/shared/tools`; the query
 implementations are pure functions over the workspace snapshot and return the shared
@@ -76,7 +85,7 @@ tokens are spent.
 The four issue tools — `list_issues`, `search_issues`, `create_issue`,
 `update_issue_status` — are sourced from `apps/mcp-issues` over MCP through a service binding, so
 the in-app agent and an external host call one implementation rather than two that drift. The other
-five are still defined locally, until the deploys and analytics servers exist.
+six are still defined locally, until the deploys and analytics servers exist.
 
 Their definitions are vendored rather than fetched: they are built from the schemas in
 `@devsprint/shared/tools`, so there is no `tools/list` at startup and a server that is briefly down
