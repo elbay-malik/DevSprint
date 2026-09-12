@@ -92,8 +92,9 @@ app.get(API_ROUTES.workspace, async (c) => c.json(await workspaceOf(c.env).snaps
 /**
  * Restores the seed. The demo is a mock workspace that approved writes mutate,
  * so both the "Reset demo" affordance in docs/wireframes.md §1 and the browser
- * tests need a way back to a known board. Phase 9 replaces this with the daily
- * reset once the workspace lives in D1.
+ * tests need a way back to a known board. Independent of the workspace
+ * Durable Object's own daily reset alarm (ADR-0014) — this is the manual
+ * trigger for the same effect, not something the alarm supersedes.
  */
 app.post(API_ROUTES.workspaceReset, async (c) => c.json(await workspaceOf(c.env).reset()))
 

@@ -55,9 +55,13 @@ tracks what has been spent lives in the workspace Durable Object rather than in 
 memory, so the guarantee holds across isolates and restarts, not just within the one that happened
 to handle a given request ([ADR-0014](../../docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
 
-One limit worth knowing: with no secret configured the Worker signs with a random per-isolate
+Two limits worth knowing. With no secret configured the Worker signs with a random per-isolate
 secret and warns, rather than running unsigned — that keeps keyless dev and CI working, but
-approvals stop verifying after a restart, so set the secret before deploying.
+approvals stop verifying after a restart, so set the secret before deploying. And the ledger is not
+an unconditional single-use guarantee: `reset()` clears it along with the board, and it caps at
+2,000 entries with the oldest evicted first, so either can in principle let a captured approval
+replay once more — both accepted trade-offs for a demo board, documented in
+[ADR-0014](../../docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md).
 
 Tool descriptions and input schemas come verbatim from `@devsprint/shared/tools`; the query
 implementations are pure functions over the workspace snapshot and return the shared
@@ -150,9 +154,9 @@ curl -sN -H 'content-type: application/json' \
   http://localhost:8787/api/chat
 ```
 
-The workspace lives in memory, one copy per Worker isolate: it is not shared between isolates and
-does not survive a restart. Phase 3 only reads, so that is invisible; D1 persistence and the daily
-reset arrive in Phase 9.
+The workspace lives in a Durable Object (ADR-0011), not per-isolate memory: it is shared across
+every Worker that binds it and survives a restart. It also resets itself once a day
+([ADR-0014](../../docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
 
 After changing `wrangler.jsonc` bindings, regenerate the committed Worker types:
 

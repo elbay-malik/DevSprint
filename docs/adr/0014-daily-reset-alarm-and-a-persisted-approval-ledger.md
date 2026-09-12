@@ -57,7 +57,11 @@ What Phase 9 actually builds:
 
 ## Consequences
 
-- Positive: replay protection is real now, not "real within whichever isolate handled the request."
+- Positive: replay protection is real now, not "real within whichever isolate handled the request" —
+  with two named exceptions rather than none: reset clears it, and it evicts the oldest entries past
+  2,000 to stay under Durable Object storage's 128 KiB per-value limit. Neither is "single-use" in
+  the unconditional sense the interface comment on `spendApprovals` might otherwise suggest; both are
+  bounded, documented trade-offs for a demo board, not gaps nobody noticed.
 - Positive: the demo resets itself. A recruiter opening the link after everyone else's exploring
   during the day sees a fresh board without anyone having to remember to hit Reset.
 - Positive: S-F's "same workspace, two clients" stays true, because nothing about who is asking

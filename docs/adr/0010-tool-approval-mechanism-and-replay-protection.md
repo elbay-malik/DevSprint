@@ -44,7 +44,11 @@ conversation.
   policy later says a call no longer needs approval, a claimed approval is converted to a denial
   rather than auto-executing.
 - Negative: the ledger is in-memory and therefore per-isolate. On Workers this bounds replay within
-  an isolate, not globally; D1 (Phase 9) is where it has to live for the guarantee to be real.
+  an isolate, not globally; D1 (Phase 9) is where it has to live for the guarantee to be real. (It
+  now lives in the workspace Durable Object instead — not D1, which
+  [ADR-0011](0011-workspace-state-in-a-durable-object.md) had already ruled out by the time Phase 9
+  landed — behind `WorkspaceApi.spendApprovals`; see
+  [ADR-0014](0014-daily-reset-alarm-and-a-persisted-approval-ledger.md).)
 - Negative: a resume that fails after its approvals are spent cannot be retried — those approvals
   now read as denials and the user must ask again. Deliberate: silently accepting the retry is
   exactly the replay we are refusing. Rejecting the whole request instead would be worse, because

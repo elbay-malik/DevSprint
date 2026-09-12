@@ -38,8 +38,11 @@ session state. Conflating the two is the trap this decision exists to avoid.
   calls, so two clients filing an issue at once cannot both claim DS-14. That stops being
   theoretical the moment a second client exists, which is exactly what this phase adds.
 - Positive: Phase 9 gets smaller rather than larger. Storage is built in — approved writes already
-  survive a Worker restart — `idFromName` is the session key, and `setAlarm` is the daily reset
-  without a separate cron trigger. This supersedes Phase 9's D1 line.
+  survive a Worker restart — and `setAlarm` is the daily reset without a separate cron trigger. This
+  supersedes Phase 9's D1 line. (`idFromName` becoming a per-visitor session key, floated in this
+  bullet, did not happen: [ADR-0014](0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)
+  found it conflicts with the product brief's multi-tenancy non-goal and with this ADR's own S-F
+  guarantee below. `WORKSPACE_DO_NAME` stays one fixed name.)
 - Positive: the query and mutation functions are untouched. They are still pure functions over a
   snapshot; they just run inside the object now.
 - Negative: local dev gains an ordering dependency. `apps/mcp-issues` resolves its binding only
