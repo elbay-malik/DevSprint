@@ -73,8 +73,11 @@ test('a compound question chains several tools in one turn', async ({ page }) =>
   await page.getByTestId('chat-input').press('Enter')
 
   // Two steps, rendered as the registry says: sprint status keeps the chip,
-  // the issue list gets its table.
-  await expect(page.getByTestId('tool-call-chip')).toContainText('get_sprint_status')
+  // the issue list gets its table. get_sprint_status runs first and always
+  // keeps its chip, but list_issues briefly has one too before it resolves
+  // into the table — `.first()` is what keeps this correct regardless of
+  // whether that second, transient chip is still on screen when this runs.
+  await expect(page.getByTestId('tool-call-chip').first()).toContainText('get_sprint_status')
   await expect(page.getByTestId('issue-table')).toBeVisible()
 
   // The answer draws on both steps: sprint health, then the work that shipped.
