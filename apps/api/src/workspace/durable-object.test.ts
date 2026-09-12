@@ -138,6 +138,22 @@ describe('WorkspaceDO — approval ledger', () => {
     await expect(stub.spendApprovals(['a1'])).resolves.toEqual(['a1'])
   })
 
+  it('leaves the cache untouched when the write fails, so a retry sees the truth', async () => {
+    // Building the next ledger as its own copy, and only committing it to
+    // `this.ledger` once storage confirms the write, is what this proves:
+    // mutating the cache first would leave this instance believing 'a1' is
+    // spent even though nothing durable ever recorded it.
+    const { fake, stub } = await freshDO()
+
+    fake.failNextPut('spent-approvals')
+    await expect(stub.spendApprovals(['a1'])).rejects.toThrow()
+
+    // The failed attempt did not spend it: neither this instance's cache...
+    await expect(stub.spendApprovals(['a1'])).resolves.toEqual([])
+    // ...nor storage.
+    expect(fake.raw.get('spent-approvals')).toEqual(['a1'])
+  })
+
   it('reports only the ids that were already spent, from a mixed batch', async () => {
     const { stub } = await freshDO()
     await stub.spendApprovals(['a1'])

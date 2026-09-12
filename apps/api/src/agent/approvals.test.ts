@@ -162,6 +162,21 @@ describe('settleApprovals', () => {
     await expect(settleApprovals([plain], workspace())).resolves.toEqual({ replayed: 0 })
   })
 
+  it('ignores an oversized id rather than persisting it', async () => {
+    // Signature verification — the actual defence against a forged id — runs
+    // later, inside the agent loop. settleApprovals runs first and touches the
+    // ledger before anything has checked the id is real, so an attacker who
+    // never had a valid signature could still use a huge id to make a
+    // storage write fail, denying the ledger to every later chat until the
+    // next reset. This id never reaches spendApprovals at all.
+    const spendApprovals = vi.fn().mockResolvedValue([])
+    const huge = pending('a'.repeat(10_000))
+
+    await settleApprovals([huge], { spendApprovals })
+
+    expect(spendApprovals).not.toHaveBeenCalled()
+  })
+
   it('does not call the workspace at all when there is nothing to spend', async () => {
     // Not just an optimisation: it is what keeps the previous test's assertion
     // true without a workspace fake that tolerates being asked to spend zero ids.

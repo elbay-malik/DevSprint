@@ -67,6 +67,19 @@ interface RespondedApproval {
 }
 
 /**
+ * A real id is a `crypto.randomUUID()` (36 characters), minted by the SDK
+ * before this code ever sees it. This is not that check — signature
+ * verification, which does reject a fabricated id, runs later, inside the
+ * agent loop. `pendingApprovals` runs first and touches the ledger before
+ * anything has verified the id is real, so a client-supplied id has to be
+ * bounded here regardless: without it, one oversized string (or many) could
+ * make `spendApprovals` try to persist more than a Durable Object storage
+ * value allows, failing every later chat that touches the ledger until the
+ * next reset — a denial of service that needs no valid signature at all.
+ */
+const MAX_APPROVAL_ID_LENGTH = 64
+
+/**
  * Approvals the client is asking us to act on *now*: answered, but whose tool
  * call has not produced a result yet.
  *
@@ -82,7 +95,9 @@ function pendingApprovals(messages: UIMessage[]): RespondedApproval[] {
       const approval: unknown = part.approval
       if (typeof approval === 'object' && approval !== null && 'id' in approval) {
         const { id } = approval
-        if (typeof id === 'string') approvals.push(approval as RespondedApproval)
+        if (typeof id === 'string' && id.length > 0 && id.length <= MAX_APPROVAL_ID_LENGTH) {
+          approvals.push(approval as RespondedApproval)
+        }
       }
     }
   }

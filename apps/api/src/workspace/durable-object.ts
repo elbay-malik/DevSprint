@@ -37,13 +37,21 @@ const STORAGE_KEY = 'workspace'
 /** Approval ids already spent (ADR-0010), persisted alongside the board (ADR-0014). */
 const LEDGER_KEY = 'spent-approvals'
 /**
- * Caps the ledger well under Durable Object storage's 128 KiB per-value limit
- * (a UUID-shaped id is ~40 bytes JSON-encoded, so the real ceiling is around
- * 3,000). The ledger clears daily anyway, so evicting the oldest entries once
- * it is this large costs nothing in the case that matters — a quiet day never
- * gets close — and avoids `saveLedger` throwing on a very busy one.
+ * Caps the ledger's *count*, which only bounds its serialized size because
+ * `approvals.ts`'s `MAX_APPROVAL_ID_LENGTH` bounds each entry's length first —
+ * a count cap alone does not protect a 128 KiB per-value limit against a
+ * caller that controls how long an id is. Worst case, every one of `LEDGER_MAX`
+ * ids is at that 64-character ceiling: `1500 * (64 + 4 bytes of JSON overhead)
+ * ≈ 102 KB`, comfortably under the 128 KiB Durable Object storage allows for
+ * one value. Real ids are `crypto.randomUUID()`s (36 characters), so this
+ * margin is never close in practice — it only matters against a client trying
+ * to make it close.
+ *
+ * The ledger clears daily anyway, so evicting the oldest entries once it is
+ * this large costs nothing in the case that matters (a quiet day never gets
+ * close) and avoids `saveLedger` throwing on a very busy one instead.
  */
-const LEDGER_MAX = 2000
+const LEDGER_MAX = 1500
 
 /**
  * The one copy of the workspace.
@@ -145,26 +153,35 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
    * repeats one id inside itself is caught here too — `settleApprovals`
    * already deduplicates before calling this, but the guarantee should not
    * depend on every future caller remembering to.
+   *
+   * Builds the next ledger as its own copy and only commits it to `this.ledger`
+   * once `saveLedger` has actually persisted it. Mutating the cached `Set`
+   * directly, before the write is known to succeed, would let a failed
+   * `ctx.storage.put` leave the in-memory cache and durable storage disagreeing
+   * — this request would see ids as spent that a fresh load of the object, or a
+   * retry after the object is evicted, would not.
    */
   async spendApprovals(ids: string[]): Promise<string[]> {
-    const ledger = await this.loadLedger()
+    const current = await this.loadLedger()
+    const next = new Set(current)
     const alreadySpent: string[] = []
     for (const id of ids) {
-      if (ledger.has(id)) {
+      if (next.has(id)) {
         alreadySpent.push(id)
       } else {
-        ledger.add(id)
+        next.add(id)
       }
     }
     // Oldest first: a `Set` iterates in insertion order, so this is the
     // longest-spent ids, which is also the closest thing to "least likely to
     // still be sitting in a client's transcript waiting to replay."
-    while (ledger.size > LEDGER_MAX) {
-      const oldest = ledger.values().next().value
+    while (next.size > LEDGER_MAX) {
+      const oldest = next.values().next().value
       if (oldest === undefined) break
-      ledger.delete(oldest)
+      next.delete(oldest)
     }
-    await this.saveLedger()
+    await this.ctx.storage.put(LEDGER_KEY, [...next])
+    this.ledger = next
     return alreadySpent
   }
 
