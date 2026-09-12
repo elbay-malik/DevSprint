@@ -42,8 +42,23 @@ import type {
 export interface WorkspaceApi {
   /** The whole board, for the SPA's workspace pane. */
   snapshot(): Promise<Workspace>
-  /** Restores the seed. */
+  /**
+   * Restores the seed — both the board and the approval ledger below. Called
+   * from the manual reset control and, once a day, from the Worker's own alarm
+   * (ADR-0014).
+   */
   reset(): Promise<Workspace>
+
+  /**
+   * Spends each id in `ids`, returning whichever were already spent — by an
+   * earlier call, or by an earlier occurrence of the same id within this one
+   * — the actual replay guard behind a gated write (ADR-0010). Callers should
+   * still deduplicate first where they can; this does not depend on it.
+   * Persisted here rather than kept as an in-memory Set in the Worker
+   * (ADR-0014): an isolate can restart, or a later request can land on a
+   * different one, and either would otherwise let a captured approval replay.
+   */
+  spendApprovals(ids: string[]): Promise<string[]>
 
   listIssues(input: ListIssuesInput): Promise<ToolResult<ListIssuesData>>
   searchIssues(input: SearchIssuesInput): Promise<ToolResult<SearchIssuesData>>
