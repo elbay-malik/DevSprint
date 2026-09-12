@@ -53,7 +53,14 @@ test('an issue key that names nothing gets an honest empty answer', async ({ pag
   await page.getByTestId('chat-input').fill('Search for DS-42')
   await page.getByTestId('chat-input').press('Enter')
 
-  await expect(page.getByTestId('tool-call-chip')).toContainText('search_issues')
+  // search_issues has had its own card since Phase 7 (ToolResultCard.test.ts
+  // covers the empty case directly) — the chip is only visible in the
+  // fleeting instant before the result arrives, so asserting on it here raced
+  // the render and failed whenever nothing slowed the page down enough to
+  // catch that instant.
+  const table = page.getByTestId('issue-table')
+  await expect(table).toBeVisible()
+  await expect(table).toContainText('No matching issues')
   await expect(page.getByTestId('chat-pane')).toContainText('No matching issues')
 })
 
