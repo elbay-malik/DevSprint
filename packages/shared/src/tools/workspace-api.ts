@@ -57,6 +57,10 @@ export interface WorkspaceApi {
    * Persisted here rather than kept as an in-memory Set in the Worker
    * (ADR-0014): an isolate can restart, or a later request can land on a
    * different one, and either would otherwise let a captured approval replay.
+   * Not an unconditional single-use guarantee, though — `reset` clears it, and
+   * an implementation may cap its size and evict the oldest entries rather
+   * than grow forever; both are documented, bounded trade-offs (ADR-0014), not
+   * something a caller can assume away.
    */
   spendApprovals(ids: string[]): Promise<string[]>
 
