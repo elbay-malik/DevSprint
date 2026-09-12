@@ -169,8 +169,10 @@ app.post(API_ROUTES.chat, async (c) => {
   // An approval that has already been acted on is downgraded to a denial rather
   // than executed again. The SDK's signature stops forgery but carries no nonce,
   // so a captured approval would otherwise replay indefinitely (ADR-0003 asks
-  // for both to be covered).
-  const { replayed } = settleApprovals(uiMessages)
+  // for both to be covered). The ledger this checks against lives in the
+  // workspace, not this isolate (ADR-0014), so the guarantee holds across
+  // restarts and across whichever isolate a later request lands on.
+  const { replayed } = await settleApprovals(uiMessages, workspace)
   if (replayed > 0) {
     console.warn(JSON.stringify({ event: 'approval-replay-blocked', count: replayed }))
   }

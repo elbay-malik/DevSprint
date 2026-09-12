@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import app from './index'
-import { resetApprovalLedger } from './agent/approvals'
+import { resetApprovalSigningState } from './agent/approvals'
 import { fakeWorkspaceBinding } from '../test/workspace-binding'
 
 const workspace = fakeWorkspaceBinding()
@@ -100,8 +100,10 @@ function answeredAssistantMessage(
 
 describe('approval gates (scenario S-B)', () => {
   beforeEach(() => {
+    // Clears the ledger along with the board (ADR-0014) — the same call the
+    // manual reset control and the daily alarm both make.
     workspace.store.reset()
-    resetApprovalLedger()
+    resetApprovalSigningState()
   })
 
   it('asks once per issue and executes nothing before an answer', async () => {

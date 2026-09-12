@@ -13,10 +13,12 @@
  * REPLAY — not handled by the SDK. The signed payload carries no nonce and no
  * expiry, so one captured approval verifies forever; replaying a single valid
  * approval was measured executing the same write three times. ADR-0003 requires
- * that a forged *or replayed* approval never suffice, so the ledger below burns
- * each approval id the first time it is acted on.
+ * that a forged *or replayed* approval never suffice, so every approval id is
+ * spent the first time it is acted on — via `workspace.spendApprovals`, the
+ * one piece of durable, serialising state this Worker has (ADR-0014).
  */
 import type { UIMessage } from 'ai'
+import type { WorkspaceApi } from '@devsprint/shared/tools'
 
 /** Env var name for the production signing secret. */
 export const APPROVAL_SECRET_VAR = 'TOOL_APPROVAL_SECRET'
@@ -47,22 +49,13 @@ export function resolveApprovalSecret(configured: string | undefined): string {
 }
 
 /**
- * Approval ids that have already been acted on.
- *
- * In-memory and therefore per-isolate: on Workers this bounds replay within an
- * isolate rather than globally. D1 (Phase 9) is where this should live to make
- * the guarantee real; the limitation is called out in apps/api/README.md rather
- * than left to be discovered.
+ * Test seam for the module state above — the warn-once latch and the
+ * ephemeral secret. Leaving either set makes a test that asserts on the
+ * warning, or on the secret's value, depend on which test ran first. The
+ * ledger itself has no module state left to reset: it lives in the workspace
+ * now (ADR-0014), and each test builds its own.
  */
-const spentApprovals = new Set<string>()
-
-/**
- * Test seam. Every piece of module state has to go back, the warn-once latch
- * included — leaving it set makes any test that asserts on the warning depend on
- * which test ran first.
- */
-export function resetApprovalLedger(): void {
-  spentApprovals.clear()
+export function resetApprovalSigningState(): void {
   ephemeralSecret = undefined
   warnedEphemeral = false
 }
@@ -98,6 +91,14 @@ function pendingApprovals(messages: UIMessage[]): RespondedApproval[] {
 
 const REPLAY_REASON = 'This approval was already used, so it was not applied again.'
 
+/** Turns an approval into a denial, unless it already was one. */
+function denyReplay(approval: RespondedApproval): void {
+  if (approval.approved !== false) {
+    approval.approved = false
+    approval.reason = REPLAY_REASON
+  }
+}
+
 /**
  * Spends each approval once, and turns anything already spent into a denial.
  *
@@ -109,24 +110,42 @@ const REPLAY_REASON = 'This approval was already used, so it was not applied aga
  * while letting the user carry on and ask again.
  *
  * Mutates the parsed request copy, which is the only thing downstream reads.
+ *
+ * Two passes, deliberately. A batch repeating one id is caught locally first —
+ * that is purely about this request, so it costs nothing to check before
+ * asking anyone else. What crosses the workspace boundary is only the ids that
+ * pass that check, once each: `spendApprovals` is where a *previous* request's
+ * approval is actually caught, and it is the one call that has to be durable.
  */
-export function settleApprovals(messages: UIMessage[]): { replayed: number } {
-  const seen = new Set<string>()
-  let replayed = 0
+export async function settleApprovals(
+  messages: UIMessage[],
+  workspace: Pick<WorkspaceApi, 'spendApprovals'>,
+): Promise<{ replayed: number }> {
+  const byId = new Map<string, RespondedApproval[]>()
+  const toSpend: string[] = []
 
   for (const approval of pendingApprovals(messages)) {
-    // A batch repeating one id would otherwise let a single human decision
-    // authorise two mutations, since neither copy is spent yet.
-    if (spentApprovals.has(approval.id) || seen.has(approval.id)) {
-      if (approval.approved !== false) {
-        approval.approved = false
-        approval.reason = REPLAY_REASON
-      }
-      replayed += 1
+    const duplicates = byId.get(approval.id)
+    if (duplicates) {
+      duplicates.push(approval)
       continue
     }
-    seen.add(approval.id)
-    spentApprovals.add(approval.id)
+    byId.set(approval.id, [approval])
+    toSpend.push(approval.id)
+  }
+
+  const alreadySpent = new Set(toSpend.length > 0 ? await workspace.spendApprovals(toSpend) : [])
+  let replayed = 0
+
+  for (const [id, [first, ...duplicates]] of byId) {
+    if (alreadySpent.has(id)) {
+      denyReplay(first!)
+      replayed += 1
+    }
+    for (const duplicate of duplicates) {
+      denyReplay(duplicate)
+      replayed += 1
+    }
   }
 
   return { replayed }
