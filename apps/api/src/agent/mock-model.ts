@@ -61,6 +61,11 @@ function statusFrom(text: string): IssueStatus | undefined {
 }
 
 /** `v1.5.0`, `v1.5.0-rc.1` — the version the user named, if they named one. */
+/** `DS-7` named anywhere in the sentence, normalised to upper case. */
+function issueKeyFrom(text: string): string | undefined {
+  return /\bds-\d+\b/i.exec(text)?.[0]?.toUpperCase()
+}
+
 function versionFrom(text: string): string | undefined {
   return /\bv\d+\.\d+\.\d+(?:-[\w.]+)?/i.exec(text)?.[0]
 }
@@ -103,6 +108,28 @@ export function planUserText(text: string, availableTools: ReadonlySet<string>):
   }
 
   const candidates: MockDecision[] = []
+
+  // "Mark DS-42 as done" is a status change, even when the sentence goes on to
+  // explain why ("— the billing export shipped this morning"). Checked before
+  // the deploy rules because that explanation is exactly the kind of clause
+  // whose "shipped" would otherwise route the whole turn to deployment
+  // history, which is what kept scenario S-E from ever running.
+  const namedKey = issueKeyFrom(text)
+  const namedStatus = statusFrom(text)
+  if (
+    namedKey !== undefined &&
+    namedStatus !== undefined &&
+    /\b(mark|set|move|close|reopen|flag|put)\b/i.test(text)
+  ) {
+    return [
+      {
+        kind: 'tool-call',
+        toolName: 'update_issue_status',
+        input: { issueKey: namedKey, status: namedStatus },
+      },
+    ]
+  }
+
   // "Deploy v1.5.0-rc.1 to staging" asks for the write; "has v1.4.2 shipped?"
   // asks for the history. A named version plus an instruction rather than a
   // question is what separates them.
@@ -511,7 +538,7 @@ function safeJson(text: string): unknown {
 }
 
 /** The `issues` array of a `list_issues` payload, defensively narrowed. */
-function readIssueSummaries(data: unknown): Array<{ key: string; status: string }> {
+function readIssueSummaries(data: unknown): Array<{ key: string; status: string; title: string }> {
   if (typeof data !== 'object' || data === null || !('issues' in data)) return []
   const { issues } = data
   if (!Array.isArray(issues)) return []
@@ -522,9 +549,109 @@ function readIssueSummaries(data: unknown): Array<{ key: string; status: string 
     typeof issue.key === 'string' &&
     'status' in issue &&
     typeof issue.status === 'string'
-      ? [{ key: issue.key, status: issue.status }]
+      ? [
+          {
+            key: issue.key,
+            status: issue.status,
+            title: 'title' in issue && typeof issue.title === 'string' ? issue.title : '',
+          },
+        ]
       : [],
   )
+}
+
+/** Every issue a `list_issues` result returned this turn, done or not. */
+function issuesFromResults(
+  messages: ToolMessage[],
+): Array<{ key: string; status: string; title: string }> {
+  const found: Array<{ key: string; status: string; title: string }> = []
+  for (const message of messages) {
+    for (const part of message.content) {
+      if (part.type !== 'tool-result' || part.toolName !== 'list_issues') continue
+      const output = unwrapOutput(part.output)
+      if (!isEnvelope(output) || !output.ok) continue
+      found.push(...readIssueSummaries(output.data))
+    }
+  }
+  return found
+}
+
+/**
+ * The draft the agent "writes" at step 4 of scenario S-A — composed from the
+ * work the `list_issues` call actually returned, so the markdown names real
+ * issues rather than hard-coded ones.
+ */
+function composeReleaseNotes(version: string, gathered: ToolMessage[]): string {
+  const shipped = issuesFromResults(gathered).filter((issue) => issue.status === 'done')
+  const lines = shipped.map((issue) => `- ${issue.title} (${issue.key})`)
+  return [`## ${version} — Sprint 12`, '', '### Shipped', '', ...lines].join('\n')
+}
+
+/** Was this tool already called during the current turn? */
+function alreadyCalled(gathered: ToolMessage[], toolName: string): boolean {
+  return gathered.some((message) =>
+    message.content.some((part) => part.type === 'tool-result' && part.toolName === toolName),
+  )
+}
+
+/**
+ * Scenario S-A, steps 4-5: once the reads are in, diff the composed draft
+ * against the last published notes. It cannot be a static plan entry, because
+ * the markdown is derived from the `list_issues` result rather than from the
+ * user's sentence.
+ *
+ * `baseVersion` is left off deliberately — the tool defaults to the latest
+ * published note, which is what the scenario means by "vs rn-1", and the mock
+ * has no view of the workspace to name it from.
+ */
+function releaseNotesDiffCalls(
+  text: string,
+  gathered: ToolMessage[],
+  availableTools: ReadonlySet<string>,
+): MockToolCall[] {
+  if (!availableTools.has('diff_release_notes')) return []
+  if (!/release note|changelog/i.test(text)) return []
+  const version = versionFrom(text)
+  if (version === undefined) return []
+  if (alreadyCalled(gathered, 'diff_release_notes')) return []
+  if (!alreadyCalled(gathered, 'list_issues')) return []
+  return [
+    {
+      toolName: 'diff_release_notes',
+      input: { draftMarkdown: composeReleaseNotes(version, gathered) },
+    },
+  ]
+}
+
+/**
+ * Scenario S-A, step 7: "Looks good, save it." The version and the markdown
+ * come from the diff the previous turn already produced, so the saved note is
+ * the draft the user actually approved rather than a fresh guess.
+ */
+function saveReleaseNotesCalls(
+  text: string,
+  prompt: LanguageModelV3Prompt,
+  availableTools: ReadonlySet<string>,
+): MockToolCall[] {
+  if (!availableTools.has('create_release_notes')) return []
+  if (!/\b(save|looks good|ship it|go ahead)\b/i.test(text)) return []
+
+  // The draft was the input to diff_release_notes on an earlier turn.
+  for (let index = prompt.length - 1; index >= 0; index -= 1) {
+    const message = prompt[index]
+    if (message?.role !== 'assistant') continue
+    for (const part of message.content) {
+      if (part.type !== 'tool-call' || part.toolName !== 'diff_release_notes') continue
+      const input: unknown = typeof part.input === 'string' ? safeJson(part.input) : part.input
+      if (typeof input !== 'object' || input === null || !('draftMarkdown' in input)) continue
+      const { draftMarkdown } = input
+      if (typeof draftMarkdown !== 'string') continue
+      const version = versionFrom(draftMarkdown) ?? versionFrom(text)
+      if (version === undefined) continue
+      return [{ toolName: 'create_release_notes', input: { version, markdown: draftMarkdown } }]
+    }
+  }
+  return []
 }
 
 /** Open issues named by a `list_issues` result already gathered this turn. */
@@ -544,12 +671,114 @@ function openIssueKeysFromResults(messages: ToolMessage[]): string[] {
   return keys
 }
 
+/** Did a write this turn come back `ISSUE_NOT_FOUND`? */
+function sawIssueNotFound(messages: ToolMessage[]): boolean {
+  for (const message of messages) {
+    for (const part of message.content) {
+      if (part.type !== 'tool-result') continue
+      const output = unwrapOutput(part.output)
+      if (isEnvelope(output) && !output.ok && output.error.code === 'ISSUE_NOT_FOUND') return true
+    }
+  }
+  return false
+}
+
+/** Keys a `search_issues` result offered this turn, best match first. */
+function searchMatchKeys(messages: ToolMessage[]): string[] {
+  const keys: string[] = []
+  for (const message of messages) {
+    for (const part of message.content) {
+      if (part.type !== 'tool-result' || part.toolName !== 'search_issues') continue
+      const output = unwrapOutput(part.output)
+      if (!isEnvelope(output) || !output.ok) continue
+      const data = output.data
+      if (typeof data !== 'object' || data === null || !('matches' in data)) continue
+      const { matches } = data
+      if (!Array.isArray(matches)) continue
+      for (const match of matches) {
+        if (typeof match === 'object' && match !== null && 'key' in match) {
+          const { key } = match
+          if (typeof key === 'string') keys.push(key)
+        }
+      }
+    }
+  }
+  return keys
+}
+
+/**
+ * The recovery half of scenario S-E. A status change against a key that does
+ * not exist comes back `ISSUE_NOT_FOUND`, and the honest next move — the one
+ * the system prompt asks for in so many words — is to search for what the user
+ * probably meant rather than retry or guess. Without this the scenario stops
+ * at the error.
+ */
+function recoveryCalls(
+  text: string,
+  gathered: ToolMessage[],
+  availableTools: ReadonlySet<string>,
+): MockToolCall[] {
+  if (!availableTools.has('search_issues')) return []
+  if (!sawIssueNotFound(gathered)) return []
+  // Only once: if a search already ran this turn, the answer is the next step.
+  if (searchMatchKeys(gathered).length > 0) return []
+  if (
+    gathered.some((m) =>
+      m.content.some((p) => p.type === 'tool-result' && p.toolName === 'search_issues'),
+    )
+  ) {
+    return []
+  }
+  return [{ toolName: 'search_issues', input: { query: searchSubjectFrom(text) } }]
+}
+
+/**
+ * The part of "Mark DS-42 as done — the billing export shipped this morning"
+ * that identifies the issue: the explanation, with the failed key and the
+ * instruction stripped out.
+ */
+function searchSubjectFrom(text: string): string {
+  const withoutKey = text.replace(/\bds-\d+\b/gi, ' ')
+  const afterDash = /[—–-]\s*(.+)$/.exec(withoutKey)?.[1]
+  const subject = (afterDash ?? withoutKey)
+    .replace(
+      /\b(mark|set|move|close|reopen|flag|put|as|done|todo|blocked|the|this|morning)\b/gi,
+      ' ',
+    )
+    .replace(/[?.!,]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return subject.length > 0 ? subject : searchQueryFrom(text)
+}
+
 /**
  * "Close out the sprint" becomes one gated write per open issue — never a batch
  * call, so each mutation gets its own approval (docs/tool-inventory.md §3).
  * Driven by the issues the `list_issues` result actually returned, so the mock
  * stays grounded rather than hard-coding keys.
  */
+/**
+ * "Yes, that one." — the user confirming the issue the search offered. The key
+ * comes from the conversation rather than the sentence, because the sentence
+ * does not contain one.
+ */
+function confirmationCalls(
+  text: string,
+  prompt: LanguageModelV3Prompt,
+  availableTools: ReadonlySet<string>,
+): MockToolCall[] {
+  if (!availableTools.has('update_issue_status')) return []
+  if (!/^\s*(yes|yep|yeah|correct|that one|right)\b/i.test(text)) return []
+
+  // The search that prompted the question ran in an earlier turn, so look back
+  // across the whole prompt rather than only this turn's tool messages.
+  const earlier = prompt.filter((message): message is ToolMessage => message.role === 'tool')
+  const key = searchMatchKeys(earlier).at(0)
+  if (key === undefined) return []
+  if (issueKeysAlreadyRequested(prompt).has(key)) return []
+  return [{ toolName: 'update_issue_status', input: { issueKey: key, status: 'done' } }]
+}
+
 function closeOutCalls(
   text: string,
   prompt: LanguageModelV3Prompt,
@@ -596,15 +825,33 @@ export function scriptChunks(options: LanguageModelV3CallOptions): LanguageModel
   const gathered = toolMessagesSinceUserTurn(options.prompt)
   const next = plan[gathered.length]
 
+  // Two turns answer an earlier one rather than standing alone: "Looks good,
+  // save it" (S-A step 6) and "Yes, that one" (S-E). Neither sentence says
+  // what to act on, so the plan built from its words is only the fallback —
+  // which would otherwise pre-empt the thing the user actually asked for.
+  const opening = gathered.length === 0
+  const save = opening ? saveReleaseNotesCalls(text, options.prompt, available) : []
+  const confirmed = opening ? confirmationCalls(text, options.prompt, available) : []
+
   let body: LanguageModelV3StreamPart[]
-  if (next !== undefined) {
+  if (save.length > 0) {
+    body = toolCallChunks(save)
+  } else if (confirmed.length > 0) {
+    body = toolCallChunks(confirmed)
+  } else if (next !== undefined) {
     body = next.kind === 'text' ? textChunks(next.text) : toolCallChunks([next])
   } else {
     // Reads are done. A close-out request now turns each open issue into its own
     // gated write; anything else goes straight to the answer.
     const writes = closeOutCalls(text, options.prompt, gathered, available)
+    const diff = releaseNotesDiffCalls(text, gathered, available)
+    const recovery = recoveryCalls(text, gathered, available)
     if (writes.length > 0) {
       body = toolCallChunks(writes)
+    } else if (diff.length > 0) {
+      body = toolCallChunks(diff)
+    } else if (recovery.length > 0) {
+      body = toolCallChunks(recovery)
     } else {
       const inputs = inputsByToolCallId(options.prompt)
       const summary = gathered.map((message) => summarizeToolMessage(message, inputs)).join(' ')

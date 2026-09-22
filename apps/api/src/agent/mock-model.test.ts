@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createWorkspaceSeed } from '@devsprint/shared'
 import { getBurndown, getSprintStatus } from '../workspace/queries'
-import { planUserText, routeUserText, summarizeToolOutput } from './mock-model'
+import { planUserText, routeUserText, scriptChunks, summarizeToolOutput } from './mock-model'
 
 const ALL_TOOLS = new Set([
   'list_issues',
@@ -166,5 +166,122 @@ describe('summarizeToolOutput', () => {
 
   it('does not crash on a non-envelope payload', () => {
     expect(summarizeToolOutput('list_issues', 'nonsense')).toContain('unexpected result')
+  })
+})
+
+describe('scenario S-E — a wrong key recovers by searching', () => {
+  const WRITE_TOOLS = new Set([...ALL_TOOLS, 'update_issue_status'])
+  const PROMPT = 'Mark DS-42 as done — the billing export shipped this morning.'
+
+  it('reads the verbatim prompt as a status change, not a deploy question', () => {
+    // "shipped" sits in the explanation, not the instruction. It used to drag
+    // the whole turn to get_deployment_history, which meant S-E never ran.
+    expect(planUserText(PROMPT, WRITE_TOOLS)).toEqual([
+      {
+        kind: 'tool-call',
+        toolName: 'update_issue_status',
+        input: { issueKey: 'DS-42', status: 'done' },
+      },
+    ])
+  })
+
+  it('searches for what the user meant once the key comes back not found', () => {
+    // The state the agent is in after the approved write failed.
+    const chunks = scriptChunks({
+      prompt: [
+        { role: 'user', content: [{ type: 'text', text: PROMPT }] },
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'c1',
+              toolName: 'update_issue_status',
+              input: { issueKey: 'DS-42', status: 'done' },
+            },
+          ],
+        },
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'c1',
+              toolName: 'update_issue_status',
+              output: {
+                type: 'json',
+                value: {
+                  ok: false,
+                  error: { code: 'ISSUE_NOT_FOUND', message: "No issue with key 'DS-42'." },
+                },
+              },
+            },
+          ],
+        },
+      ],
+      tools: [...WRITE_TOOLS].map((name) => ({
+        type: 'function',
+        name,
+        inputSchema: { type: 'object' },
+      })),
+    } as never)
+
+    const call = chunks.find((chunk) => chunk.type === 'tool-call')
+    expect(call).toMatchObject({ toolName: 'search_issues' })
+    // Grounded in the user's own words, minus the key that did not exist.
+    expect(String((call as { input: string }).input)).toContain('billing export')
+  })
+})
+
+describe('scenario S-A — draft, diff, then a gated save', () => {
+  const S_A_TOOLS = new Set([...ALL_TOOLS, 'create_release_notes'])
+
+  it('saves the draft the diff already showed, rather than composing a new one', () => {
+    // Step 7: "Looks good, save it." carries no version and no markdown, so
+    // the save has to come from the draft the previous turn produced — saving
+    // anything else would persist something the user never saw.
+    const draft = '## v1.5.0 — Sprint 12\n\n### Shipped\n\n- Billing export (DS-5)'
+    const chunks = scriptChunks({
+      prompt: [
+        { role: 'user', content: [{ type: 'text', text: 'draft release notes for v1.5.0' }] },
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'c1',
+              toolName: 'diff_release_notes',
+              input: { draftMarkdown: draft },
+            },
+          ],
+        },
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'c1',
+              toolName: 'diff_release_notes',
+              output: { type: 'json', value: { ok: true, data: { changedSections: [] } } },
+            },
+          ],
+        },
+        { role: 'user', content: [{ type: 'text', text: 'Looks good, save it.' }] },
+      ],
+      tools: [...S_A_TOOLS].map((name) => ({
+        type: 'function',
+        name,
+        inputSchema: { type: 'object' },
+      })),
+    } as never)
+
+    const call = chunks.find((chunk) => chunk.type === 'tool-call')
+    expect(call).toMatchObject({ toolName: 'create_release_notes' })
+    const input = JSON.parse(String((call as { input: string }).input)) as {
+      version: string
+      markdown: string
+    }
+    expect(input.version).toBe('v1.5.0')
+    expect(input.markdown).toBe(draft)
   })
 })

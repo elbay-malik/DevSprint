@@ -178,10 +178,22 @@ describe('POST /api/chat', () => {
     const res = await ask('Summarize Sprint 12 and draft release notes for v1.5.0.')
     const chunks = parseChunks(await res.text())
 
+    // Scenario S-A's documented chain: sprint health, the work that shipped,
+    // then the diff of the composed draft against the last published notes.
+    // The diff used to be missing entirely, which meant S-A stopped at step 3.
     const calls = chunks
       .filter((chunk) => chunk.type === 'tool-input-available')
       .map((chunk) => chunk.toolName)
-    expect(calls).toEqual(['get_sprint_status', 'list_issues'])
+    expect(calls).toEqual(['get_sprint_status', 'list_issues', 'diff_release_notes'])
+
+    // The draft is composed from the issues the previous step returned, not
+    // hard-coded — so it names the work that actually shipped.
+    const draft = chunks.find(
+      (chunk) => chunk.type === 'tool-input-available' && chunk.toolName === 'diff_release_notes',
+    )?.input as { draftMarkdown: string } | undefined
+    expect(draft?.draftMarkdown).toContain('v1.5.0')
+    expect(draft?.draftMarkdown).toContain('DS-5')
+    expect(draft?.draftMarkdown).toContain('DS-6')
 
     // The second call is scoped by the first step's context, not a blind repeat.
     const listInput = chunks.find(
