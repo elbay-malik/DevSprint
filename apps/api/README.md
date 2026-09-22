@@ -104,6 +104,46 @@ If the MCP server cannot be reached the agent falls back to the local copies, an
 response carries `X-DevSprint-Tools: mcp | local`. A silent fallback would let a demo look like it
 was proving the MCP path while quietly not using it.
 
+## Observability
+
+A turn's spans export to Langfuse as OTLP/HTTP JSON
+([ADR-0015](../../docs/adr/0015-otlp-tracing-without-the-opentelemetry-sdk.md)). There is no
+OpenTelemetry SDK: the AI SDK takes a `tracer` directly on the agent, so the only machinery
+actually needed is the `Tracer`/`Span` shape it calls, `AsyncLocalStorage` to parent spans, and a
+`fetch`.
+
+`AsyncLocalStorage` is not optional here. Tracking parentage with a stack — the obvious way to
+avoid OTel entirely — produces a completely flat trace: `ai.streamText` hands back the stream
+before its children exist, so the stack has popped by the time the tool call happens. That trace
+still exports, still returns 200, and cannot be read.
+
+Export rides `waitUntil` from the response's own `onFinish`, not the agent's. The response _is_ the
+stream, so the root span is still open when the agent finishes — flushing then ships every span
+pointing at a parent that never goes with them.
+
+Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` to turn it on; with neither, the tracer is
+never installed and the Worker runs with no network and no account. `LANGFUSE_HOST` selects a
+region or a self-hosted instance. Each traced response carries `X-DevSprint-Trace`, so a report can
+be joined to its trace. A failed export is logged and swallowed — the answer has already reached
+the user, and losing a trace is not a reason to fail a served request. The `onStepFinish` audit log
+is unchanged underneath it.
+
+## Evals
+
+`pnpm eval` runs the trajectory evals for all six demo scenarios. Every assertion is copied from
+that scenario's own "Eval assertions" block in
+[demo-scenarios.md](../../docs/demo-scenarios.md) — exact tool-call order, "the denied write never
+mutates state", "the next call after the error is `search_issues`".
+
+They run through the real `/api/chat` route, including the approval round-trip, because gating and
+ordering are what they are checking. Against the scripted mock they are deterministic and free, so
+they gate every PR as part of `pnpm test`.
+
+What that proves is that the **application** honours a trajectory — not that a live model elicits
+one. `EVAL_MODEL_PROVIDER=groq pnpm eval` runs the same assertions against a real provider, which
+is where that second question gets answered; it costs quota and is not deterministic, so it is not
+CI's job.
+
 ## Model routing
 
 Per [ADR-0005](../../docs/adr/0005-model-routing-groq-primary-gemini-fallback.md), selected from

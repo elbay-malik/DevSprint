@@ -6,7 +6,7 @@ A project/DevOps copilot over a mock sprint workspace — Vue 3 SPA (Vite 8) + H
 
 ## Status
 
-Early development. Implemented so far: Phases 0–9 of the [16-phase roadmap](docs/roadmap.md) — design docs, SPA shell, streaming chat, real tools, a multi-step agent loop, approval gates on every write, the MCP refactor with a public issues server, the in-stream result cards, the long-running deploy tool with mid-run cancel, and a daily reset alarm with a persisted approval ledger. **Local-only but deploy-ready**: wrangler configs and deploy scripts are committed; nothing is deployed yet.
+Early development. Implemented so far: Phases 0–10 of the [16-phase roadmap](docs/roadmap.md) — design docs, SPA shell, streaming chat, real tools, a multi-step agent loop, approval gates on every write, the MCP refactor with a public issues server, the in-stream result cards, the long-running deploy tool with mid-run cancel, a daily reset alarm with a persisted approval ledger, and OTLP tracing with trajectory evals for all six demo scenarios. **Local-only but deploy-ready**: wrangler configs and deploy scripts are committed; nothing is deployed yet.
 
 ## Architecture at a glance
 
@@ -15,6 +15,7 @@ Early development. Implemented so far: Phases 0–9 of the [16-phase roadmap](do
 - **MCP**: `apps/mcp-issues` serves the four issue tools over Streamable HTTP, and the in-app agent sources those same four from it through an MCP client — one implementation, two clients. It owns no state: both Workers reach one workspace Durable Object, so a write made in an external host shows up on the SPA's board ([ADR-0011](docs/adr/0011-workspace-state-in-a-durable-object.md)).
 - **Long-running work**: `run_deployment` is an async generator, so every stage of a simulated deploy reaches the browser as a preliminary tool result and the progress card redraws from the same shape it will settle on. Cancel is an api route rather than the request's abort signal, because a browser that stops reading a stream does not reliably abort the Worker's request — the deploy would otherwise run to completion while the card claimed it had stopped ([ADR-0013](docs/adr/0013-deployment-cancel-as-an-api-route.md)).
 - **Safety**: every write the agent can make is human-approved in-stream before it runs. Approval requests are signed so a forged one cannot execute, and each is single-use so a captured one is downgraded to a denial rather than applied twice. The single-use ledger lives in the same Durable Object as the workspace, so replay protection holds across isolates and restarts, not just within one — with two named exceptions, not a blanket guarantee: it clears on reset, and it caps at 1,500 entries with the oldest evicted first ([ADR-0010](docs/adr/0010-tool-approval-mechanism-and-replay-protection.md), [ADR-0014](docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
+- **Observability**: a turn's spans export to Langfuse as OTLP/HTTP JSON, written by hand rather than with the OpenTelemetry SDK — the AI SDK hands over a tracer, so all that is actually needed is `AsyncLocalStorage` for span parentage and a `fetch` ([ADR-0015](docs/adr/0015-otlp-tracing-without-the-opentelemetry-sdk.md)). Tracing is off unless configured, and a failed export never fails a turn. The six demo scenarios' own eval assertions run as trajectory evals in CI.
 - **Reset**: the board resets itself every day at UTC midnight, via the same Durable Object's own alarm — no external cron trigger. Multi-tenancy is a deliberate non-goal, so this is one shared demo board, not a private copy per visitor ([ADR-0014](docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
 
 See [docs/](docs/README.md) for the product brief, domain model, tool inventory, demo scenarios, wireframes, and ADRs.
@@ -61,6 +62,7 @@ Routing follows [ADR-0005](docs/adr/0005-model-routing-groq-primary-gemini-fallb
 | `pnpm format:check` | Prettier check                                      |
 | `pnpm typecheck`    | recursive per-package typecheck                     |
 | `pnpm test`         | recursive Vitest                                    |
+| `pnpm eval`         | trajectory evals for the 6 demo scenarios           |
 | `pnpm build`        | recursive builds (web: vite; api: wrangler dry-run) |
 
 Browser tests live in `apps/web`:
