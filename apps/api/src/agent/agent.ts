@@ -19,6 +19,13 @@ export interface CopilotAgentOptions {
    * supplied — see agent/approvals.ts for why running unsigned is not an option.
    */
   approvalSecret: string
+  /**
+   * Telemetry is a constructor setting on `ToolLoopAgent`, not a per-call one,
+   * which suits a repo that already builds a fresh agent per request: the
+   * tracer that belongs to this turn is handed over when the turn's agent is
+   * made (ADR-0015).
+   */
+  tracer?: unknown
 }
 
 /**
@@ -33,12 +40,24 @@ export function createCopilotAgent({
   instructions,
   tools,
   approvalSecret,
+  tracer,
 }: CopilotAgentOptions) {
   return new ToolLoopAgent({
     model,
     instructions,
     tools,
     experimental_toolApprovalSecret: approvalSecret,
+    // Without a tracer the SDK uses its own no-op, so this is genuinely off
+    // rather than merely quiet when tracing is not configured.
+    ...(tracer
+      ? {
+          experimental_telemetry: {
+            isEnabled: true,
+            tracer: tracer as never,
+            functionId: 'devsprint-turn',
+          },
+        }
+      : {}),
     stopWhen: stepCountIs(MAX_STEPS),
     // On the final permitted step take the tools away, so the budget is spent
     // writing an answer instead of asking for one more tool. Without this a

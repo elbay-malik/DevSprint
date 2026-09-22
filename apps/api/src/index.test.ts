@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Workspace } from '@devsprint/shared'
 import app from './index'
 import { fakeWorkspaceBinding } from '../test/workspace-binding'
@@ -127,6 +127,106 @@ describe('GET /api/workspace', () => {
       env,
     )
     expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:5173')
+  })
+})
+
+describe('POST /api/chat — tracing', () => {
+  const traced = {
+    ...env,
+    LANGFUSE_PUBLIC_KEY: 'pk-lf-test',
+    LANGFUSE_SECRET_KEY: 'sk-lf-test',
+    LANGFUSE_HOST: 'https://collector.test',
+  }
+
+  function askTraced(text: string, overrides: Record<string, unknown> = {}) {
+    return app.request(
+      '/api/chat',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ id: 'm1', role: 'user', parts: [{ type: 'text', text }] }],
+        }),
+      },
+      { ...traced, ...overrides },
+    )
+  }
+
+  /** The OTLP POST, once the flush that rides `waitUntil` has landed. */
+  async function exportedSpans(fetchMock: ReturnType<typeof vi.fn>) {
+    for (let attempt = 0; attempt < 50 && fetchMock.mock.calls.length === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    const call = fetchMock.mock.calls[0] as [string, { body: string }] | undefined
+    if (!call) return undefined
+    const body = JSON.parse(call[1].body) as {
+      resourceSpans: Array<{ scopeSpans: Array<{ spans: Array<Record<string, string>> }> }>
+    }
+    return { url: call[0], spans: body.resourceSpans[0]!.scopeSpans[0]!.spans }
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('exports a complete trace, with the root span and no orphans', async () => {
+    // The flush used to run from the agent's own `onFinish`, while the root
+    // `ai.streamText` span was still open — so every span went out pointing at
+    // a parent that was never sent with them. Only the ordering through the
+    // real route can catch that, which is why this is not a unit test.
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await askTraced('How many open issues are in the current sprint?')
+    await res.text()
+
+    const exported = await exportedSpans(fetchMock)
+    expect(exported?.url).toBe('https://collector.test/api/public/otel/v1/traces')
+
+    const spans = exported?.spans ?? []
+    expect(spans.length).toBeGreaterThan(1)
+
+    const ids = new Set(spans.map((span) => span.spanId))
+    const roots = spans.filter((span) => span.parentSpanId === undefined)
+    expect(roots).toHaveLength(1)
+    expect(roots[0]?.name).toBe('ai.streamText')
+    // Every non-root points at a span that went out in the same batch.
+    for (const span of spans) {
+      if (span.parentSpanId !== undefined) expect(ids.has(span.parentSpanId)).toBe(true)
+    }
+  })
+
+  it('reports the trace id back, so a log line can be joined to its trace', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}')))
+    const res = await askTraced('How is the sprint going?')
+    await res.text()
+
+    expect(res.headers.get('x-devsprint-trace')).toMatch(/^[0-9a-f]{32}$/)
+    expect(res.headers.get('access-control-expose-headers')).toContain('X-DevSprint-Trace')
+  })
+
+  it('stays entirely off without keys — no header, no export', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await ask('How is the sprint going?')
+    await res.text()
+    await new Promise((resolve) => setTimeout(resolve, 60))
+
+    expect(res.headers.get('x-devsprint-trace')).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('still answers when the collector is down', async () => {
+    // Losing a trace is not a reason to turn a served request into a failure.
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('collector down')))
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const res = await askTraced('How many open issues are in the current sprint?')
+
+    expect(res.status).toBe(200)
+    expect(textOf(parseChunks(await res.text()))).toContain('5 open')
   })
 })
 

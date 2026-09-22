@@ -18,3 +18,13 @@
 # Signs tool approvals so a forged one cannot execute a write. Unset falls back
 # to a random per-isolate secret (fine locally, set a real one before deploying).
 # TOOL_APPROVAL_SECRET=
+
+# Tracing (ADR-0015). Both keys must be set or tracing never installs — with
+# neither, the app runs with no network and no account, like the mock model.
+# Traces are exported as OTLP/HTTP JSON after the turn's response has streamed.
+# LANGFUSE_PUBLIC_KEY=
+# LANGFUSE_SECRET_KEY=
+# Region or self-hosted instance. Default: https://cloud.langfuse.com
+# LANGFUSE_HOST=https://us.cloud.langfuse.com
+# Tags traces with the environment they came from.
+# DEVSPRINT_ENV=local

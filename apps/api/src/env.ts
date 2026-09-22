@@ -21,4 +21,15 @@ export type AppEnv = Env & {
    * back to a random per-isolate secret — fine locally, not for a deploy.
    */
   TOOL_APPROVAL_SECRET?: string
+  /**
+   * Langfuse credentials. Both keys must be present for tracing to install at
+   * all — with neither, the Worker runs with no network and no account, the
+   * same way the model routing falls back to its scripted mock (ADR-0015).
+   */
+  LANGFUSE_PUBLIC_KEY?: string
+  LANGFUSE_SECRET_KEY?: string
+  /** Defaults to https://cloud.langfuse.com; set for the US/EU/self-hosted region. */
+  LANGFUSE_HOST?: string
+  /** Tags traces with the environment they came from, e.g. `production`. */
+  DEVSPRINT_ENV?: string
 }

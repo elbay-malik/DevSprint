@@ -18,6 +18,7 @@ import { buildSystemPrompt } from './agent/system-prompt'
 import { createTools, MCP_OWNED_TOOL_NAMES, type DevSprintTools } from './agent/tools'
 import { createMcpIssueTools } from './agent/mcp-tools'
 import { resolveApprovalSecret, settleApprovals } from './agent/approvals'
+import { createTurnTracer, resolveTracingConfig } from './agent/tracing'
 
 /** Mirrors the SPA's `DevSprintUIMessage` so tool parts validate against the real schemas. */
 type ChatUIMessage = UIMessage<unknown, UIDataTypes, InferUITools<DevSprintTools>>
@@ -80,7 +81,7 @@ app.use('/api/*', (c, next) =>
     origin: c.env.CORS_ORIGIN,
     allowMethods: ['GET', 'POST', 'OPTIONS'],
     allowHeaders: ['Content-Type'],
-    exposeHeaders: ['X-DevSprint-Model', 'X-DevSprint-Tools'],
+    exposeHeaders: ['X-DevSprint-Model', 'X-DevSprint-Tools', 'X-DevSprint-Trace'],
     maxAge: 86400,
   })(c, next),
 )
@@ -189,11 +190,17 @@ app.post(API_ROUTES.chat, async (c) => {
   }
   const { model, label } = resolved
 
+  // One trace per turn (ADR-0015). Undefined whenever Langfuse is not
+  // configured, which is the normal case locally and in CI.
+  const tracingConfig = resolveTracingConfig(c.env)
+  const turnTracer = tracingConfig ? createTurnTracer(tracingConfig) : undefined
+
   const agent = createCopilotAgent({
     model,
     instructions: buildSystemPrompt(await workspace.snapshot()),
     tools,
     approvalSecret: resolveApprovalSecret(c.env.TOOL_APPROVAL_SECRET),
+    ...(turnTracer ? { tracer: turnTracer.tracer } : {}),
   })
 
   // The request signal is what makes the composer's Stop button real: aborting
@@ -216,7 +223,17 @@ app.post(API_ROUTES.chat, async (c) => {
       'Content-Encoding': 'Identity',
       'X-DevSprint-Model': label,
       'X-DevSprint-Tools': toolSource,
+      ...(turnTracer ? { 'X-DevSprint-Trace': turnTracer.traceId } : {}),
     },
+    // Flushed here rather than from the agent's own `onFinish`, which fires
+    // while the root `ai.streamText` span is still open — exporting then sent
+    // seven spans all pointing at a parent that was never sent with them. This
+    // callback runs once the UI stream is genuinely finished.
+    //
+    // The response *is* the stream, so this cannot be awaited inside the
+    // handler; it rides the same `waitUntil` a cancelled deployment uses to
+    // record itself once the request is over (ADR-0013, ADR-0015).
+    ...(turnTracer ? { onFinish: () => waitUntil(turnTracer.flush()) } : {}),
     onError: (error) => {
       console.error(
         JSON.stringify({ event: 'model-error', model: label, error: describeError(error) }),
