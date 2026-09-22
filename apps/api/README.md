@@ -59,7 +59,7 @@ Two limits worth knowing. With no secret configured the Worker signs with a rand
 secret and warns, rather than running unsigned — that keeps keyless dev and CI working, but
 approvals stop verifying after a restart, so set the secret before deploying. And the ledger is not
 an unconditional single-use guarantee: `reset()` clears it along with the board, and it caps at
-2,000 entries with the oldest evicted first, so either can in principle let a captured approval
+1,500 entries with the oldest evicted first, so either can in principle let a captured approval
 replay once more — both accepted trade-offs for a demo board, documented in
 [ADR-0014](../../docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md).
 
@@ -169,13 +169,26 @@ the diff before committing — it must not bake local secret names into `worker-
 
 ## One-time deploy runbook (not executed yet)
 
+**The two Workers bind each other, so neither can go first cleanly.** `apps/api` declares a
+service binding to `devsprint-mcp-issues`, and `apps/mcp-issues` declares a Durable Object binding
+with `script_name: devsprint-api`. A first deploy therefore has to break the cycle — deploy the api
+once with the `services` block commented out, then the MCP Worker, then restore the block and
+redeploy. Resolving that properly is Phase 14's job; it is written down here because the runbook
+below reads as if a clean order existed, and it does not.
+
 1. `pnpm dlx wrangler login`
 2. `pnpm --filter @devsprint/api exec wrangler secret put GROQ_API_KEY` (and/or
    `GOOGLE_GENERATIVE_AI_API_KEY`)
-3. `pnpm --filter @devsprint/api deploy` — note the printed Worker URL
-4. Set `VITE_API_URL` in `apps/web/.env.production` to that URL
-5. `pnpm --filter @devsprint/web deploy` — note the printed web URL
-6. Update `CORS_ORIGIN` in `apps/api/wrangler.jsonc` (or via a dashboard env override) to the
+3. `pnpm --filter @devsprint/api exec wrangler secret put TOOL_APPROVAL_SECRET` — **not optional.**
+   Without it the Worker signs approvals with a random per-isolate secret, so every approval stops
+   verifying the moment the isolate recycles.
+4. `pnpm --filter @devsprint/api deploy` (first pass, `services` commented out) — note the URL
+5. `pnpm --filter @devsprint/mcp-issues deploy` — the public MCP endpoint, and the other half of
+   scenario S-F
+6. Restore the `services` block in `apps/api/wrangler.jsonc` and redeploy the api
+7. Set `VITE_API_URL` in `apps/web/.env.production` to the api URL
+8. `pnpm --filter @devsprint/web deploy` — note the printed web URL
+9. Update `CORS_ORIGIN` in `apps/api/wrangler.jsonc` (or via a dashboard env override) to the
    web URL and redeploy the api
 
 CI never deploys; `pnpm build` runs `wrangler deploy --dry-run` which needs no Cloudflare auth.

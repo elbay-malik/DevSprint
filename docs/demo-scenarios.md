@@ -10,16 +10,15 @@ in an external MCP host) will get a one-click scripted-scenario button in the ch
 reviewer can run a full demo without free-typing prompts — this also acts as spend control on the
 model budget.
 
-Current repo status: repo bootstrap + Phases 0–5 are implemented (local-only but deploy-ready).
-Read-only questions are already answerable end-to-end through the six read/rich-data tools — S-D's
-burndown series (shown via the fallback tool chip until the BurndownChart card lands in Phase 7),
-sprint status, deployment history, issue lists and searches — the agent chains several tools in one
-turn, and every write is gated behind an approval card, so S-B runs end to end today. S-F's tools,
-writes and shared workspace are verified locally against `apps/mcp-issues`; the scenario as written
-also needs the deploy its preconditions call for, which is Phase 14. S-E's
-recovery path works, but its ErrorCard is still the fallback tool chip until Phase 7. The
-remaining scenarios depend on Phases 6–8 (MCP, rich cards, the deployment simulation). The "first fully runnable phase" field on each scenario says when it
-lights up; see [roadmap.md](./roadmap.md).
+Current repo status: repo bootstrap + Phases 0–9 are implemented (local-only but deploy-ready).
+All six read/rich-data tools, all four gated writes, the MCP refactor and the rich in-stream cards
+are built, so S-A through S-E run end to end today against the scripted mock model — which is what
+CI and the Playwright suite use, so the scenarios are exercised rather than merely described.
+S-F's tools, writes and shared workspace are verified locally against `apps/mcp-issues`; the
+scenario as written also needs an external MCP host and the deploy its preconditions call for,
+which is Phase 14. Two expected-UI details below are still unbuilt and are marked where they
+appear: the Deploys tab and the release-notes badge in the workspace pane. The "first fully
+runnable phase" field on each scenario says when it lights up; see [roadmap.md](./roadmap.md).
 
 Conventions used in the step tables:
 
@@ -43,16 +42,16 @@ Conventions used in the step tables:
 - **Preconditions:** fresh seed; `rn-1` (v1.4.2, published) is the latest published release note;
   DS-5 and DS-6 are the only `done` issues in `sprint-12`.
 
-| Step | Actor | Action or prompt (verbatim)                               | Expected tool call                                             | Expected stream parts    | Expected UI (workspace / chat)                                                           |
-| ---- | ----- | --------------------------------------------------------- | -------------------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------- |
-| 1    | User  | "Summarize Sprint 12 and draft release notes for v1.5.0." | —                                                              | —                        | Chat: user message appears                                                               |
-| 2    | Agent | Reads sprint health                                       | `get_sprint_status({ sprintId: 'sprint-12' })`                 | tool call + result       | Chat: tool chip; streamed summary text (8/31 points done, DS-11 blocked)                 |
-| 3    | Agent | Lists completed work                                      | `list_issues({ sprintId: 'sprint-12', status: 'done' })`       | tool call + result       | Chat: IssueTable with DS-5, DS-6                                                         |
-| 4    | Agent | Composes v1.5.0 draft markdown from DS-5/DS-6 (no tool)   | —                                                              | text                     | Chat: draft streams as markdown                                                          |
-| 5    | Agent | Diffs draft vs last published                             | `diff_release_notes({ draftMarkdown, baseVersion: 'v1.4.2' })` | tool call + result       | Chat: ReleaseNotesDiff card, before/after vs rn-1                                        |
-| 6    | User  | "Looks good, save it."                                    | —                                                              | —                        | Chat: user message                                                                       |
-| 7    | Agent | Requests the gated save                                   | `create_release_notes({ version: 'v1.5.0', markdown })`        | approval request part    | Chat: ApprovalCard (pending)                                                             |
-| 8    | User  | Clicks Approve                                            | (tool now executes)                                            | tool result + final text | Workspace: "v1.5.0 draft" badge appears; chat: ApprovalCard resolved + confirmation text |
+| Step | Actor | Action or prompt (verbatim)                               | Expected tool call                                             | Expected stream parts    | Expected UI (workspace / chat)                                                                                                        |
+| ---- | ----- | --------------------------------------------------------- | -------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | User  | "Summarize Sprint 12 and draft release notes for v1.5.0." | —                                                              | —                        | Chat: user message appears                                                                                                            |
+| 2    | Agent | Reads sprint health                                       | `get_sprint_status({ sprintId: 'sprint-12' })`                 | tool call + result       | Chat: tool chip; streamed summary text (8/31 points done, DS-11 blocked)                                                              |
+| 3    | Agent | Lists completed work                                      | `list_issues({ sprintId: 'sprint-12', status: 'done' })`       | tool call + result       | Chat: IssueTable with DS-5, DS-6                                                                                                      |
+| 4    | Agent | Composes v1.5.0 draft markdown from DS-5/DS-6 (no tool)   | —                                                              | text                     | Chat: draft streams as markdown                                                                                                       |
+| 5    | Agent | Diffs draft vs last published                             | `diff_release_notes({ draftMarkdown, baseVersion: 'v1.4.2' })` | tool call + result       | Chat: ReleaseNotesDiff card, before/after vs rn-1                                                                                     |
+| 6    | User  | "Looks good, save it."                                    | —                                                              | —                        | Chat: user message                                                                                                                    |
+| 7    | Agent | Requests the gated save                                   | `create_release_notes({ version: 'v1.5.0', markdown })`        | approval request part    | Chat: ApprovalCard (pending)                                                                                                          |
+| 8    | User  | Clicks Approve                                            | (tool now executes)                                            | tool result + final text | Chat: ApprovalCard resolved + confirmation text. (The "v1.5.0 draft" badge in the workspace pane is **not built** — no phase owns it) |
 
 **Success criteria**
 
@@ -120,14 +119,14 @@ Conventions used in the step tables:
 - **Preconditions:** fresh seed; no deployment currently running; v1.5.0-rc.1 not previously
   deployed. Latest staging deploy in history is dep-4 (v1.4.2, succeeded).
 
-| Step | Actor  | Action or prompt (verbatim)                                             | Expected tool call                                                   | Expected stream parts                                            | Expected UI (workspace / chat)                                                                 |
-| ---- | ------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| 1    | User   | "Deploy v1.5.0-rc.1 to staging."                                        | —                                                                    | —                                                                | Chat: user message                                                                             |
-| 2    | Agent  | Optional pre-check of last staging deploy                               | `get_deployment_history({ environment: 'staging', limit: 1 })`       | tool call + result                                               | Chat: tool chip with dep-4 (v1.4.2, succeeded)                                                 |
-| 3    | Agent  | Requests the deployment                                                 | `run_deployment({ environment: 'staging', version: 'v1.5.0-rc.1' })` | approval request part                                            | Chat: ApprovalCard                                                                             |
-| 4    | User   | Clicks Approve                                                          | (job starts)                                                         | preliminary tool results                                         | Chat: DeploymentProgressCard appears                                                           |
-| 5    | System | Stages stream: build (~3s) → test (~4s) → migrate (~2s) → release (~2s) | (same call, streaming)                                               | one preliminary result per stage step, each a whole `Deployment` | Chat: stage rows flip pending → running → succeeded, progress bar advances, log lines tail     |
-| 6    | System | Deployment finishes                                                     | (final tool result)                                                  | tool result + final text                                         | Workspace: Deploys tab gains a new succeeded row for v1.5.0-rc.1; chat: card shows "succeeded" |
+| Step | Actor  | Action or prompt (verbatim)                                             | Expected tool call                                                   | Expected stream parts                                            | Expected UI (workspace / chat)                                                                                                                   |
+| ---- | ------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1    | User   | "Deploy v1.5.0-rc.1 to staging."                                        | —                                                                    | —                                                                | Chat: user message                                                                                                                               |
+| 2    | Agent  | Optional pre-check of last staging deploy                               | `get_deployment_history({ environment: 'staging', limit: 1 })`       | tool call + result                                               | Chat: tool chip with dep-4 (v1.4.2, succeeded)                                                                                                   |
+| 3    | Agent  | Requests the deployment                                                 | `run_deployment({ environment: 'staging', version: 'v1.5.0-rc.1' })` | approval request part                                            | Chat: ApprovalCard                                                                                                                               |
+| 4    | User   | Clicks Approve                                                          | (job starts)                                                         | preliminary tool results                                         | Chat: DeploymentProgressCard appears                                                                                                             |
+| 5    | System | Stages stream: build (~3s) → test (~4s) → migrate (~2s) → release (~2s) | (same call, streaming)                                               | one preliminary result per stage step, each a whole `Deployment` | Chat: stage rows flip pending → running → succeeded, progress bar advances, log lines tail                                                       |
+| 6    | System | Deployment finishes                                                     | (final tool result)                                                  | tool result + final text                                         | Chat: card shows "succeeded". (The Deploys tab is **not built** — no phase owns it; `get_deployment_history` is how a deploy is read back today) |
 
 **Variant C2 — cancellation**
 
@@ -140,7 +139,9 @@ Conventions used in the step tables:
 
 - No progress is streamed before the approval is granted.
 - Cancel mid-run leaves a consistent `cancelled` deployment visible in both the card and the
-  Deploys tab.
+  `get_deployment_history` result. (The success criterion originally named a Deploys tab in the
+  workspace pane; that tab does not exist and no phase owns building it, so the check is against
+  the stored deployment instead — which is what the e2e test asserts.)
 
 > Cancel is an api route rather than the request's abort signal, and the turn is deliberately left
 > running so the model can report what happened. A browser that stops reading a streamed response

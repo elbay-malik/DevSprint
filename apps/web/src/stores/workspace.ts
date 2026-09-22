@@ -9,9 +9,10 @@ export type WorkspaceSource = 'seed' | 'api'
 /**
  * Workspace state. Starts from the shared seed so the board renders instantly
  * (and keeps working while the api Worker is down), then `hydrate()` swaps in
- * the Worker's copy — the same in-memory workspace the agent's tools read.
- * From Phase 5 on, approved writes land in the Worker and show up here on the
- * next hydrate; Phase 9 moves the source of truth to D1.
+ * the Worker's copy — the same board the agent's tools read, which lives in a
+ * Durable Object rather than in any one isolate's memory (ADR-0011). Approved
+ * writes land there and show up here on the next hydrate, whether they came
+ * from this SPA or from an external MCP host.
  */
 export const useWorkspaceStore = defineStore('workspace', () => {
   const workspace = ref<Workspace>(createWorkspaceSeed())

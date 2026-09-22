@@ -23,8 +23,8 @@ type ToolResult<T> = { ok: true; data: T } | { ok: false; error: { code: string;
 | --- | ------------------------ | ------------------ | ----------------------------------------------------------- | ------------------------------------- | --------------------------- |
 | 1   | `list_issues`            | read/query         | auto (never gated)                                          | IssueTable                            | issues (public)             |
 | 2   | `search_issues`          | read/query         | auto                                                        | IssueTable (compact)                  | issues (public)             |
-| 3   | `get_sprint_status`      | read/query         | auto                                                        | text + stat chips                     | analytics (optional)        |
-| 4   | `get_deployment_history` | read/query         | auto                                                        | deployment list                       | deploys                     |
+| 3   | `get_sprint_status`      | read/query         | auto                                                        | ToolCallChip + text                   | analytics (optional)        |
+| 4   | `get_deployment_history` | read/query         | auto                                                        | ToolCallChip + text                   | deploys                     |
 | 5   | `get_burndown`           | rich-data          | auto                                                        | BurndownChart                         | analytics (optional)        |
 | 6   | `diff_release_notes`     | rich-data          | auto                                                        | ReleaseNotesDiff                      | deploys                     |
 | 7   | `create_issue`           | gated write        | always requires approval                                    | ApprovalCard → confirmation           | issues (public)             |
@@ -32,10 +32,14 @@ type ToolResult<T> = { ok: true; data: T } | { ok: false; error: { code: string;
 | 9   | `create_release_notes`   | gated write        | always requires approval                                    | ApprovalCard → confirmation           | deploys                     |
 | 10  | `run_deployment`         | long-running write | always requires approval before start; cancellable mid-run  | ApprovalCard → DeploymentProgressCard | deploys                     |
 
-The "Future MCP server" column maps to the Phase 6 packages `apps/mcp-issues`, `apps/mcp-deploys`,
-and `apps/mcp-analytics` (reserved — not scaffolded in this pass). Until Phase 6, all 10 tools are
-plain AI SDK function-calling tools inside `apps/api` (see
-[ADR-0002](./adr/0002-staged-mcp-adoption.md)).
+The "MCP server" column maps to the Phase 6 packages. `apps/mcp-issues` is built and public: the
+four issue tools are served from it over Streamable HTTP, and the in-app agent sources those same
+four through an MCP client, so both clients drive one implementation. `apps/mcp-deploys` and
+`apps/mcp-analytics` are still reserved names, so the other six tools remain plain AI SDK
+function-calling tools inside `apps/api` (see [ADR-0002](./adr/0002-staged-mcp-adoption.md)).
+
+Tools 3 and 4 keep the ToolCallChip rather than earning a card — that is the component registry's
+deliberate choice (docs/wireframes.md §5), not a gap.
 
 ## 2. Per-tool details
 
