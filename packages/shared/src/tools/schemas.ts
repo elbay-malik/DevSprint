@@ -59,70 +59,110 @@ export const TOOL_DESCRIPTIONS: Record<ReadToolName | WriteToolName, string> = {
     'Use when the user asks to deploy, ship, release, or roll out a version to an environment.',
 }
 
+/**
+ * Length bounds on everything a client supplies.
+ *
+ * Not cosmetic validation. The whole workspace is persisted as a single Durable
+ * Object value (ADR-0011), and `apps/mcp-issues` exposes `create_issue` and
+ * `update_issue_status` publicly with no approval gate — the MCP host owns that
+ * prompt, not us. So one well-formed request with a multi-megabyte string can
+ * push the stored workspace past the storage ceiling, after which *every* later
+ * write fails for *every* visitor until someone resets the board. A single
+ * request does it, so per-IP rate limiting (Phase 11) would not help.
+ *
+ * `approvals.ts` already bounds an approval id for exactly this reason, one
+ * level down and against a much smaller value. These are the same argument
+ * applied to the field that actually carries the bulk.
+ *
+ * The numbers are generous for real use and small against the ceiling: the seed
+ * board is ~12 KB, and the worst case a client can force here is a few hundred.
+ */
+const LIMITS = {
+  /** A one-line summary, not a body. */
+  title: 200,
+  /** Issue body. Long enough for a real write-up. */
+  description: 4_000,
+  /** A note attached to a status change. */
+  comment: 500,
+  /** Release notes are the one place a client legitimately sends prose. */
+  markdown: 20_000,
+  /** `v1.5.0-rc.1` and friends. */
+  version: 40,
+  /** `DS-7`. */
+  issueKey: 32,
+  /** `sprint-12`, `user-3` — ids we mint, not free text. */
+  id: 64,
+  /** Free-form, but neither long nor many. */
+  label: 40,
+  labelCount: 10,
+  /** A search phrase. */
+  query: 200,
+} as const
+
 export const listIssuesInputSchema = z.object({
-  sprintId: z.string().optional(),
+  sprintId: z.string().max(LIMITS.id).optional(),
   status: issueStatusSchema.optional(),
-  assigneeId: z.string().optional(),
+  assigneeId: z.string().max(LIMITS.id).optional(),
   type: issueTypeSchema.optional(),
-  label: z.string().optional(),
-  limit: z.number().int().positive().default(50),
+  label: z.string().max(LIMITS.label).optional(),
+  limit: z.number().int().positive().max(200).default(50),
 })
 
 export const searchIssuesInputSchema = z.object({
-  query: z.string().min(1),
-  limit: z.number().int().positive().default(10),
+  query: z.string().min(1).max(LIMITS.query),
+  limit: z.number().int().positive().max(200).default(10),
 })
 
 export const getSprintStatusInputSchema = z.object({
   /** Defaults to the active sprint. */
-  sprintId: z.string().optional(),
+  sprintId: z.string().max(LIMITS.id).optional(),
 })
 
 export const getDeploymentHistoryInputSchema = z.object({
   environment: environmentSchema.optional(),
-  limit: z.number().int().positive().default(5),
+  limit: z.number().int().positive().max(200).default(5),
 })
 
 export const getBurndownInputSchema = z.object({
   /** Defaults to the active sprint. */
-  sprintId: z.string().optional(),
+  sprintId: z.string().max(LIMITS.id).optional(),
 })
 
 export const diffReleaseNotesInputSchema = z.object({
-  draftMarkdown: z.string().min(1),
+  draftMarkdown: z.string().min(1).max(LIMITS.markdown),
   /** Defaults to the latest published release note. */
-  baseVersion: z.string().optional(),
+  baseVersion: z.string().max(LIMITS.version).optional(),
 })
 
 export const createIssueInputSchema = z.object({
-  title: z.string().min(1),
-  description: z.string().optional(),
+  title: z.string().min(1).max(LIMITS.title),
+  description: z.string().max(LIMITS.description).optional(),
   type: issueTypeSchema,
   priority: prioritySchema.default('medium'),
   /** null puts the issue in the backlog. */
-  sprintId: z.string().nullable().default(null),
-  assigneeId: z.string().optional(),
-  points: z.number().int().positive().optional(),
-  labels: z.array(z.string()).optional(),
+  sprintId: z.string().max(LIMITS.id).nullable().default(null),
+  assigneeId: z.string().max(LIMITS.id).optional(),
+  points: z.number().int().positive().max(100).optional(),
+  labels: z.array(z.string().max(LIMITS.label)).max(LIMITS.labelCount).optional(),
 })
 
 export const updateIssueStatusInputSchema = z.object({
   /** Human key, e.g. 'DS-7'. */
-  issueKey: z.string(),
+  issueKey: z.string().max(LIMITS.issueKey),
   status: issueStatusSchema,
-  comment: z.string().optional(),
+  comment: z.string().max(LIMITS.comment).optional(),
 })
 
 export const createReleaseNotesInputSchema = z.object({
   /** e.g. 'v1.5.0'. */
-  version: z.string(),
-  markdown: z.string().min(1),
-  sprintId: z.string().optional(),
+  version: z.string().max(LIMITS.version),
+  markdown: z.string().min(1).max(LIMITS.markdown),
+  sprintId: z.string().max(LIMITS.id).optional(),
 })
 
 export const runDeploymentInputSchema = z.object({
   environment: environmentSchema,
-  version: z.string(),
+  version: z.string().max(LIMITS.version),
   /** Only ever on an explicit request from the user. */
   skipTests: z.boolean().default(false),
 })

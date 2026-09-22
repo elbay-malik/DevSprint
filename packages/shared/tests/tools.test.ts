@@ -65,3 +65,71 @@ describe('tool contracts', () => {
     expect(getDeploymentHistoryInputSchema.safeParse({ environment: 'qa' }).success).toBe(false)
   })
 })
+
+describe('write-tool input bounds', () => {
+  // The public MCP server (apps/mcp-issues) runs create_issue and
+  // update_issue_status with no approval gate, and the whole board is one
+  // Durable Object value — so an unbounded string here is a way to break the
+  // shared demo for everyone with a single well-formed request.
+  it('refuses a title far larger than any real issue', () => {
+    const huge = 'x'.repeat(300_000)
+    const result = WRITE_TOOL_INPUT_SCHEMAS.create_issue.safeParse({
+      title: huge,
+      type: 'bug',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('bounds every free-text field a client controls', () => {
+    const tooLong = 'x'.repeat(100_000)
+
+    expect(
+      WRITE_TOOL_INPUT_SCHEMAS.create_issue.safeParse({
+        title: 'ok',
+        type: 'bug',
+        description: tooLong,
+      }).success,
+    ).toBe(false)
+    expect(
+      WRITE_TOOL_INPUT_SCHEMAS.update_issue_status.safeParse({
+        issueKey: 'DS-7',
+        status: 'done',
+        comment: tooLong,
+      }).success,
+    ).toBe(false)
+    expect(
+      WRITE_TOOL_INPUT_SCHEMAS.create_release_notes.safeParse({
+        version: 'v1.5.0',
+        markdown: tooLong,
+      }).success,
+    ).toBe(false)
+  })
+
+  it('caps the label array in both directions', () => {
+    const base = { title: 'ok', type: 'bug' as const }
+    // Too many...
+    expect(
+      WRITE_TOOL_INPUT_SCHEMAS.create_issue.safeParse({
+        ...base,
+        labels: Array.from({ length: 50 }, (_, i) => `l${i}`),
+      }).success,
+    ).toBe(false)
+    // ...and one that is too long.
+    expect(
+      WRITE_TOOL_INPUT_SCHEMAS.create_issue.safeParse({
+        ...base,
+        labels: ['x'.repeat(5_000)],
+      }).success,
+    ).toBe(false)
+  })
+
+  it('still accepts a realistic write', () => {
+    const result = WRITE_TOOL_INPUT_SCHEMAS.create_issue.safeParse({
+      title: 'Billing export times out for large workspaces',
+      description: 'Repro: 10k rows.\nExpected: streams.\n',
+      type: 'bug',
+      labels: ['billing', 'perf'],
+    })
+    expect(result.success).toBe(true)
+  })
+})

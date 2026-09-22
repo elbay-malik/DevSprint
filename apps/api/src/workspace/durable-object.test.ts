@@ -129,6 +129,59 @@ describe('WorkspaceDO — daily reset alarm', () => {
   })
 })
 
+describe('WorkspaceDO — write durability', () => {
+  it('does not keep a mutation the storage write rejected', async () => {
+    // The cache used to be updated before the write was known to have landed,
+    // so a rejected write left the object serving a board storage had never
+    // accepted — and since every later write persists that same cached object,
+    // one failure poisoned every write after it.
+    const { fake, stub } = await freshDO()
+
+    fake.failNextPut('workspace')
+    await expect(
+      stub.createIssue({ title: 'doomed', type: 'bug', priority: 'medium', sprintId: null }),
+    ).rejects.toThrow()
+
+    // Not in the cache...
+    const after = await stub.snapshot()
+    expect(after.issues.some((issue) => issue.title === 'doomed')).toBe(false)
+    // ...and the next write still works, rather than replaying the failure.
+    const next = await stub.createIssue({
+      title: 'after the failure',
+      type: 'bug',
+      priority: 'medium',
+      sprintId: null,
+    })
+    expect(next.ok).toBe(true)
+    expect((await stub.snapshot()).issues.some((i) => i.title === 'after the failure')).toBe(true)
+  })
+
+  it('refuses a write that would push the board past its ceiling', async () => {
+    // Field-level bounds stop one huge string; this is the other direction —
+    // many ordinary writes, which the public MCP server's ungated create_issue
+    // makes reachable. Reaching the storage backend's own cliff instead would
+    // take the board down for everyone until a reset.
+    const { stub } = await freshDO()
+
+    let full
+    for (let i = 0; i < 400; i += 1) {
+      full = await stub.createIssue({
+        title: `filler ${i}`,
+        description: 'x'.repeat(4_000),
+        type: 'chore',
+        priority: 'medium',
+        sprintId: null,
+      })
+      if (!full.ok) break
+    }
+
+    expect(full?.ok).toBe(false)
+    expect(full?.ok === false && full.error.code).toBe('WORKSPACE_FULL')
+    // Refused cleanly, not by throwing — and the board is still readable.
+    expect((await stub.snapshot()).issues.length).toBeGreaterThan(0)
+  })
+})
+
 describe('WorkspaceDO — approval ledger', () => {
   it('spends an id once, and reports it on every later attempt', async () => {
     const { stub } = await freshDO()

@@ -1,5 +1,10 @@
 import { DurableObject } from 'cloudflare:workers'
-import { createWorkspaceSeed, type Workspace } from '@devsprint/shared'
+import {
+  createWorkspaceSeed,
+  WORKSPACE_DO_NAME,
+  type ToolResult,
+  type Workspace,
+} from '@devsprint/shared'
 import type {
   WorkspaceApi,
   CreateIssueInput,
@@ -52,6 +57,14 @@ const LEDGER_KEY = 'spent-approvals'
  * close) and avoids `saveLedger` throwing on a very busy one instead.
  */
 const LEDGER_MAX = 1500
+/**
+ * A ceiling on the serialized board, well under what the storage backend takes.
+ * `WorkspaceDO` is registered under `new_sqlite_classes`, so the real limit is
+ * the SQLite-backed one (~2 MiB per value), not the 128 KiB of the older
+ * key-value backend. This sits far below either, because a demo board that has
+ * grown past half a megabyte is already broken as a demo.
+ */
+const MAX_WORKSPACE_BYTES = 512_000
 
 /**
  * The one copy of the workspace.
@@ -112,8 +125,48 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
 
   /** Persists after anything that mutates, so a restart keeps approved writes. */
   private async save(workspace: Workspace): Promise<void> {
-    this.workspace = workspace
     await this.ctx.storage.put(STORAGE_KEY, workspace)
+    // Adopted only once the write has landed — see `mutate` for why.
+    this.workspace = workspace
+  }
+
+  /**
+   * Applies a mutation to a copy of the board and adopts it only once the
+   * write has actually landed.
+   *
+   * The mutation functions edit the workspace in place, so running them
+   * straight against the cached object commits the change to memory before
+   * storage has agreed to it. When a write then fails, the cache keeps a
+   * version storage never accepted — and because every later write persists
+   * that same cached object, one rejected write poisons every write after it
+   * until the object is evicted or reset. That is what turns an oversized
+   * write from a single failed request into a board that stays broken.
+   *
+   * Working on a clone costs one copy of a ~12 KB object per write, against a
+   * Durable Object that already serialises the whole board on every write.
+   */
+  private async mutate<T>(apply: (draft: Workspace) => ToolResult<T>): Promise<ToolResult<T>> {
+    const draft = structuredClone(await this.load())
+    const result = apply(draft)
+    if (!result.ok) return result
+
+    // A bound on the whole board, not just each field. Field-level limits in
+    // `packages/shared/src/tools/schemas.ts` stop one huge string; this stops
+    // the same cliff being reached a few hundred ordinary writes at a time,
+    // which the public MCP server's ungated `create_issue` makes reachable.
+    if (JSON.stringify(draft).length > MAX_WORKSPACE_BYTES) {
+      return {
+        ok: false,
+        error: {
+          code: 'WORKSPACE_FULL',
+          message:
+            'The demo board is full. Reset it to carry on — this is a bounded demo workspace, not durable storage.',
+        },
+      }
+    }
+
+    await this.save(draft)
+    return result
   }
 
   private async loadLedger(): Promise<Set<string>> {
@@ -213,57 +266,44 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
 
   // --- writes -----------------------------------------------------------------
   //
-  // Each mutates the loaded workspace and persists it. Failures return the error
-  // envelope without touching storage, so a rejected write leaves no trace.
+  // Each runs its mutation through `mutate`, which works on a copy and adopts it
+  // only once storage has taken the write — so a rejected write leaves no trace
+  // in storage *or* in the cache.
 
   async createIssue(input: CreateIssueInput) {
-    const workspace = await this.load()
-    const result = createIssue(workspace, input)
-    if (result.ok) await this.save(workspace)
-    return result
+    return this.mutate((draft) => createIssue(draft, input))
   }
 
   async updateIssueStatus(input: UpdateIssueStatusInput) {
-    const workspace = await this.load()
-    const result = updateIssueStatus(workspace, input)
-    if (result.ok) await this.save(workspace)
-    return result
+    return this.mutate((draft) => updateIssueStatus(draft, input))
   }
 
   async createReleaseNotes(input: CreateReleaseNotesInput) {
-    const workspace = await this.load()
-    const result = createReleaseNotes(workspace, input)
-    if (result.ok) await this.save(workspace)
-    return result
+    return this.mutate((draft) => createReleaseNotes(draft, input))
   }
 
   // A deployment is persisted a stage at a time, so a run that is cancelled or
   // interrupted leaves the board showing exactly how far it got.
 
   async startDeployment(input: RunDeploymentInput) {
-    const workspace = await this.load()
-    const result = startDeployment(workspace, input)
-    if (result.ok) await this.save(workspace)
-    return result
+    return this.mutate((draft) => startDeployment(draft, input))
   }
 
   async setDeploymentStage(input: SetDeploymentStageInput) {
-    const workspace = await this.load()
-    const result = setDeploymentStage(workspace, input)
-    if (result.ok) await this.save(workspace)
-    return result
+    return this.mutate((draft) => setDeploymentStage(draft, input))
   }
 
   async finishDeployment(input: FinishDeploymentInput) {
-    const workspace = await this.load()
-    const result = finishDeployment(workspace, input)
-    if (result.ok) await this.save(workspace)
-    return result
+    return this.mutate((draft) => finishDeployment(draft, input))
   }
 }
 
-/** Every client talks to the same instance — there is one demo workspace. */
-export const WORKSPACE_DO_NAME = 'demo'
+/**
+ * Every client talks to the same instance — there is one demo workspace. The
+ * name is defined in `@devsprint/shared` because `apps/mcp-issues` resolves the
+ * same object with it; re-exported here so existing callers keep their import.
+ */
+export { WORKSPACE_DO_NAME }
 
 export interface WorkspaceBinding {
   idFromName(name: string): DurableObjectId

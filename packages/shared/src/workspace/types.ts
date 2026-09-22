@@ -87,6 +87,8 @@ export interface ReleaseNote {
   id: string
   projectId: string
   version: string
+  /** The sprint these notes cover, when the author named one. */
+  sprintId: string | null
   status: 'draft' | 'published'
   markdown: string
   authorId: string
@@ -113,6 +115,8 @@ export type ToolErrorCode =
   | 'DEPLOY_IN_PROGRESS'
   | 'DEPLOY_ALREADY_SETTLED'
   | 'STAGE_FAILED'
+  /** The demo board has grown past what one Durable Object value should hold. */
+  | 'WORKSPACE_FULL'
   | 'INVALID_INPUT'
 
 export interface ToolError {
