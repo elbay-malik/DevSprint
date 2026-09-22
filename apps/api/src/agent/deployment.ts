@@ -106,12 +106,24 @@ export async function* runDeployment({
    * what state the deployment is in, and carrying on would mean walking the
    * remaining stages blind and reporting an outcome we did not observe.
    */
+  /** Set when the run stops because a write failed, rather than because it ended. */
+  let writeFailed = false
+
   const stopped = (result: ToolResult<RunDeploymentData>) => {
     if (result.ok && result.data.deployment.status === 'running') return false
-    // Whatever this says is now the outcome: settling over it would either
-    // overwrite a cancel the user was already told about, or paper over the
-    // failure with a status we have no evidence for.
-    settling ??= Promise.resolve(result)
+    if (result.ok) {
+      // Someone else already wrote a terminal status — a cancel, most likely.
+      // Settling over it would overwrite an outcome the user was told about.
+      settling ??= Promise.resolve(result)
+      return true
+    }
+    // A failed write is different, and treating the two alike left a real
+    // hole: memoising the error envelope here made `settle` and the `finally`
+    // backstop both short-circuit, so `finishDeployment` never ran and the
+    // deployment stayed `running` forever — which then blocks every later
+    // deploy to that environment with DEPLOY_IN_PROGRESS. The run still stops,
+    // but it has to settle as `failed` on the way out.
+    writeFailed = true
     return true
   }
 
@@ -123,7 +135,7 @@ export async function* runDeployment({
    * its outcome. When that happens we report what the workspace actually holds
    * rather than the status we were about to claim.
    */
-  const settle = (status: 'succeeded' | 'cancelled') => {
+  const settle = (status: 'succeeded' | 'cancelled' | 'failed') => {
     settling ??= workspace.finishDeployment({ deploymentId, status }).then(async (result) => {
       if (result.ok) return result
       const current = (await workspace.snapshot()).deployments.find(
@@ -137,7 +149,7 @@ export async function* runDeployment({
   const cancel = () => {
     // Not `waitUntil?.(settle(...))`: an optional call skips its arguments, so
     // that form would silently perform no write at all when waitUntil is absent.
-    const pending = settle('cancelled')
+    const pending = settle(writeFailed ? 'failed' : 'cancelled')
     // The request may already be over, so the handler is not awaiting this.
     waitUntil?.(pending)
   }
@@ -191,7 +203,7 @@ export async function* runDeployment({
     // How the run ended, however it ended. A consumer still listening sees it;
     // one that has gone away does not, which is why settling never waits on the
     // yield itself.
-    yield await settle(cancelled() ? 'cancelled' : 'succeeded')
+    yield await settle(writeFailed ? 'failed' : cancelled() ? 'cancelled' : 'succeeded')
   } finally {
     abortSignal?.removeEventListener('abort', cancel)
     // The generator can be closed early — the SDK may simply stop consuming it,

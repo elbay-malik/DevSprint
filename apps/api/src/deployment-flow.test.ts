@@ -206,8 +206,23 @@ describe('runDeployment', () => {
     // It gave up on the first failure instead of sleeping through four stages
     // and reporting an outcome it never saw.
     expect(writes).toBe(1)
-    expect(snapshots.at(-1)?.ok).toBe(false)
-    expect(snapshots.filter((snapshot) => snapshot.ok)).toHaveLength(1)
+    // The failure reached the client rather than being swallowed.
+    expect(snapshots.some((snapshot) => !snapshot.ok)).toBe(true)
+
+    // And — the part this test used to leave unchecked — the run settled. It
+    // used to memoise the error envelope as the outcome, which made both
+    // `settle` and the `finally` backstop short-circuit, so the deployment sat
+    // at `running` forever and blocked every later deploy to that environment.
+    const stored = workspace.store.get().deployments.at(-1)
+    expect(stored?.status).toBe('failed')
+    expect(stored?.stages.every((stage) => stage.status !== 'running')).toBe(true)
+
+    const next = runDeployment({
+      workspace: workspace.api,
+      input: { environment: 'staging', version: 'v2.0.0', skipTests: false },
+      durations: FAST,
+    })
+    expect(((await next.next()).value as { ok: boolean }).ok).toBe(true)
   })
 
   it('honours skipTests without pretending the tests ran', async () => {

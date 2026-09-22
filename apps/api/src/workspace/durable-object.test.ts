@@ -201,9 +201,14 @@ describe('WorkspaceDO — approval ledger', () => {
     fake.failNextPut('spent-approvals')
     await expect(stub.spendApprovals(['a1'])).rejects.toThrow()
 
-    // The failed attempt did not spend it: neither this instance's cache...
+    // Storage never took it — checked before the retry, because after the
+    // retry succeeds storage holds the id either way and the assertion would
+    // prove nothing.
+    expect(fake.raw.get('spent-approvals')).toBeUndefined()
+
+    // Nor did the cache: a second attempt sees a fresh id, not a spent one.
     await expect(stub.spendApprovals(['a1'])).resolves.toEqual([])
-    // ...nor storage.
+    // And that retry is what actually persisted it.
     expect(fake.raw.get('spent-approvals')).toEqual(['a1'])
   })
 
