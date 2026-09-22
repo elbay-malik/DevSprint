@@ -169,6 +169,28 @@ describe('ApprovalCard', () => {
     expect(outcome.text()).not.toMatch(/failed/i)
   })
 
+  it('says why a write failed, not just which code it failed with', () => {
+    // Every envelope carries a message written to be read; showing only the
+    // code made the one card that reports a failed write the least
+    // informative thing on screen.
+    const wrapper = mountCard({
+      ...requested({ issueKey: 'DS-42', status: 'done' }),
+      state: 'output-available',
+      output: {
+        ok: false,
+        error: {
+          code: 'ISSUE_NOT_FOUND',
+          message: "No issue with key 'DS-42'. Use search_issues to find the issue you meant.",
+        },
+      },
+      approval: { id: 'approval-1', approved: true, signature: 'sig' },
+    })
+
+    const outcome = wrapper.get('[data-testid="approval-outcome"]').text()
+    expect(outcome).toContain('ISSUE_NOT_FOUND')
+    expect(outcome).toContain('search_issues to find the issue you meant')
+  })
+
   it('surfaces a failed write rather than implying it worked', () => {
     const wrapper = mountCard({
       ...requested({ issueKey: 'DS-42', status: 'done' }),

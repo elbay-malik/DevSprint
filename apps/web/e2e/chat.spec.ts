@@ -130,6 +130,40 @@ test('the chat still works after a turn is stopped', async ({ page }) => {
 const CLOSE_OUT =
   "We're closing Sprint 12 today — mark every remaining open issue in the sprint as done."
 
+test('the chat follows new tokens, and lets go when you scroll up', async ({ page }) => {
+  await page.goto('/')
+
+  // wireframes.md §6 documented this as shipped behaviour; it was never built,
+  // so a streamed answer arrived below the fold and the pane never moved. A
+  // compound question is used rather than a write, because the composer is
+  // deliberately locked while approval cards are outstanding.
+  const viewport = page.locator('[data-slot="scroll-area-viewport"]')
+  const ask = async (text: string) => {
+    await page.getByTestId('chat-input').fill(text)
+    await page.getByTestId('chat-input').press('Enter')
+  }
+
+  await ask('Summarize Sprint 12 and draft release notes for v1.5.0.')
+  await expect(page.getByTestId('release-notes-diff')).toBeVisible()
+
+  // Followed to the bottom on its own, and actually moved to get there.
+  await expect
+    .poll(async () =>
+      viewport.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight < 24),
+    )
+    .toBe(true)
+  expect(await viewport.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
+
+  // Scrolling up releases the anchor, so reading back through a transcript is
+  // not fought by every delta that arrives.
+  await viewport.evaluate((el) => {
+    el.scrollTop = 0
+  })
+  await ask('How is the sprint going?')
+  await page.waitForTimeout(1500)
+  expect(await viewport.evaluate((el) => el.scrollTop)).toBeLessThan(100)
+})
+
 test('the header resets the board and switches theme', async ({ page }) => {
   await page.goto('/')
 

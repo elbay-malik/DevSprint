@@ -80,8 +80,20 @@ const result = computed((): string | undefined => {
   if (props.part.state !== 'output-available') return undefined
   const output: unknown = props.part.output
   if (typeof output !== 'object' || output === null || !('ok' in output)) return 'done'
-  const envelope = output as { ok: boolean; error?: { code: string }; data?: unknown }
-  if (!envelope.ok) return envelope.error?.code ?? 'failed'
+  const envelope = output as {
+    ok: boolean
+    error?: { code: string; message?: string }
+    data?: unknown
+  }
+  if (!envelope.ok) {
+    // The code alone ("ISSUE_NOT_FOUND") says a write failed without saying
+    // why, and every envelope in this codebase carries a message written to be
+    // read. Dropping it left the one card that reports a failed write as the
+    // least informative thing on screen.
+    const { code, message } = envelope.error ?? {}
+    if (code === undefined) return 'failed'
+    return message === undefined || message.length === 0 ? code : `${code} — ${message}`
+  }
 
   // A deployment reaches `output-available` on its first frame and stays there
   // for the whole run, so "applied" would be premature while it is going and
