@@ -166,6 +166,10 @@ export function createReleaseNotes(
     id: `rn-${workspace.releaseNotes.length + 1}`,
     projectId: workspace.project.id,
     version: input.version,
+    // Stored, not just validated. The check above can fail an approved write
+    // over this field, so dropping it afterwards would mean refusing a write
+    // on the strength of something that then had no effect.
+    sprintId: input.sprintId ?? null,
     // This tool only ever drafts; publishing is deliberately not a tool
     // (docs/tool-inventory.md §4).
     status: 'draft',

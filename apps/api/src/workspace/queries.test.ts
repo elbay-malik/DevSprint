@@ -8,6 +8,7 @@ import {
   listIssues,
   searchIssues,
 } from './queries'
+import { finishDeployment, startDeployment } from './mutations'
 
 const workspace = createWorkspaceSeed()
 
@@ -318,5 +319,48 @@ describe('diffReleaseNotes', () => {
     )
     expect(error.code).toBe('INVALID_INPUT')
     expect(error.message).toContain('v9.9.9')
+  })
+})
+
+describe('query fixes found by the Phase 0-9 audit', () => {
+  it('returns the newest agent-created deployment first, despite the frozen clock', () => {
+    // Every agent-created run stamps the same `workspace.now`, so a plain
+    // date sort is a tie and a stable sort hands them back oldest-first —
+    // the opposite of what the docstring promises. S-C's pre-check asks for
+    // `limit: 1`, so this is on the demo path, not a corner.
+    const workspace = createWorkspaceSeed()
+    startDeployment(workspace, { environment: 'staging', version: 'v9.0.0', skipTests: false })
+    finishDeployment(workspace, {
+      deploymentId: workspace.deployments.at(-1)!.id,
+      status: 'cancelled',
+    })
+    startDeployment(workspace, { environment: 'staging', version: 'v9.0.1', skipTests: false })
+
+    const latest = expectOk(
+      getDeploymentHistory(workspace, { environment: 'staging', limit: 1 }),
+    ).deployments
+
+    expect(latest).toHaveLength(1)
+    expect(latest[0]?.version).toBe('v9.0.1')
+  })
+
+  it('matches a label whatever its casing', () => {
+    // Labels are free-form and `create_issue` can mint any casing, so an exact
+    // match answers a near-miss with a confident empty list.
+    const workspace = createWorkspaceSeed()
+    const exact = expectOk(listIssues(workspace, { label: 'billing', limit: 50 })).issues
+    expect(exact.length).toBeGreaterThan(0)
+
+    const shouted = expectOk(listIssues(workspace, { label: 'BILLING', limit: 50 })).issues
+    expect(shouted.map((issue) => issue.key)).toEqual(exact.map((issue) => issue.key))
+  })
+
+  it('honours limit when the query names keys directly', () => {
+    const workspace = createWorkspaceSeed()
+    const matches = expectOk(
+      searchIssues(workspace, { query: 'look at DS-7 and DS-8 and DS-9', limit: 2 }),
+    ).matches
+
+    expect(matches).toHaveLength(2)
   })
 })

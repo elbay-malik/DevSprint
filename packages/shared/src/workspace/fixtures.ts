@@ -432,6 +432,7 @@ export function createWorkspaceSeed(): Workspace {
         id: 'rn-1',
         projectId: 'proj-1',
         version: 'v1.4.2',
+        sprintId: 'sprint-11',
         status: 'published',
         // Verbatim from docs/domain-model.md — scenario S-A diffs a v1.5.0 draft against this
         markdown: [

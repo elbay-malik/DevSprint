@@ -105,6 +105,7 @@ interface ReleaseNote {
   id: string
   projectId: string
   version: string
+  sprintId: string | null
   status: 'draft' | 'published'
   markdown: string
   authorId: string

@@ -122,7 +122,11 @@ export function listIssues(
         (input.status === undefined || issue.status === input.status) &&
         (input.assigneeId === undefined || issue.assigneeId === input.assigneeId) &&
         (input.type === undefined || issue.type === input.type) &&
-        (input.label === undefined || issue.labels.includes(input.label)),
+        // Case-insensitively: labels are free-form, `create_issue` can mint
+        // any casing, and the model never sees the vocabulary spelled out —
+        // so an exact match turns a near-miss into a confident empty answer.
+        (input.label === undefined ||
+          issue.labels.some((label) => label.toLowerCase() === input.label?.toLowerCase())),
     )
     .sort(byKeyNumber)
     .slice(0, input.limit)
@@ -248,7 +252,12 @@ export function searchIssues(
   const keys = namedKeys(input.query)
   const named = workspace.issues.filter((issue) => keys.includes(compactKey(issue.key)))
   if (named.length > 0) {
-    return ok({ matches: named.toSorted(byKeyNumber).map((issue) => toMatch(issue, 1)) })
+    return ok({
+      matches: named
+        .toSorted(byKeyNumber)
+        .slice(0, input.limit)
+        .map((issue) => toMatch(issue, 1)),
+    })
   }
 
   // A key that names nothing real ('DS-42') must not drag in noise matches —
@@ -305,12 +314,23 @@ export function getDeploymentHistory(
   input: GetDeploymentHistoryInput,
 ): ToolResult<DeploymentHistoryData> {
   const deployments: DeploymentSummary[] = workspace.deployments
+    .map((deployment, order) => ({ deployment, order }))
     .filter(
-      (deployment) =>
+      ({ deployment }) =>
         input.environment === undefined || deployment.environment === input.environment,
     )
-    .toSorted((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
+    // Insertion order breaks the tie, because the clock cannot: every
+    // agent-created run stamps the frozen `workspace.now`, so they all share
+    // one `startedAt`. A stable sort then hands them back oldest-first —
+    // exactly backwards for a list that promises "most recent first", and the
+    // demo notices, because S-C's pre-check asks for `limit: 1`.
+    .toSorted(
+      (a, b) =>
+        Date.parse(b.deployment.startedAt) - Date.parse(a.deployment.startedAt) ||
+        b.order - a.order,
+    )
     .slice(0, input.limit)
+    .map(({ deployment }) => deployment)
     .map((deployment) => ({
       id: deployment.id,
       environment: deployment.environment,
