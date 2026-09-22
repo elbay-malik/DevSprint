@@ -130,6 +130,40 @@ test('the chat still works after a turn is stopped', async ({ page }) => {
 const CLOSE_OUT =
   "We're closing Sprint 12 today — mark every remaining open issue in the sprint as done."
 
+test('the header resets the board and switches theme', async ({ page }) => {
+  await page.goto('/')
+
+  // Both controls are documented in wireframes.md §1, and both were missing.
+  // Reset in particular is what apps/api/README.md and ADR-0014 point at when
+  // they justify leaving the reset route ungated.
+  await expect(page.getByTestId('app-header')).toBeVisible()
+
+  // Dark styles hang off a `.dark` class that nothing used to set, so the
+  // whole palette was unreachable. Toggling must actually put it on the root.
+  // A fresh context starts on `system`, and the cycle is light → dark → system,
+  // so two clicks lands on an explicit dark regardless of the OS preference.
+  await page.getByTestId('theme-toggle').click()
+  await page.getByTestId('theme-toggle').click()
+  await expect(page.locator('html')).toHaveClass(/dark/)
+
+  // A real write, then Reset, then the board is back to the seed. Every card
+  // has to be answered before the turn settles, and the board only re-reads
+  // the workspace once it does — so approving just one proves nothing.
+  await page.getByTestId('chat-input').fill(CLOSE_OUT)
+  await page.getByTestId('chat-input').press('Enter')
+  const cards = page.getByTestId('approval-card')
+  await expect(cards).toHaveCount(5)
+  for (let index = 0; index < 5; index += 1) {
+    await cards.nth(index).getByTestId('approval-approve').click()
+  }
+
+  const doneColumn = page.getByTestId('board-column-done')
+  await expect(doneColumn).toContainText('DS-7')
+
+  await page.getByTestId('reset-demo').click()
+  await expect(doneColumn).not.toContainText('DS-7')
+})
+
 test('every write is gated, one card per issue, and a denial is respected', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByTestId('workspace-source')).toHaveText(/live/i)

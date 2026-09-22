@@ -5,6 +5,7 @@ export const API_BASE_URL = import.meta.env.VITE_API_URL ?? ''
 
 export const CHAT_ENDPOINT = `${API_BASE_URL}${API_ROUTES.chat}`
 export const WORKSPACE_ENDPOINT = `${API_BASE_URL}${API_ROUTES.workspace}`
+export const WORKSPACE_RESET_ENDPOINT = `${API_BASE_URL}${API_ROUTES.workspaceReset}`
 
 /** `POST` here to cancel a running deployment; see the route's own note. */
 export const deploymentCancelEndpoint = (deploymentId: string) =>
