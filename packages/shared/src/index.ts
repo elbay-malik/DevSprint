@@ -1,3 +1,17 @@
+/**
+ * The one workspace Durable Object every client resolves to.
+ *
+ * Lives here for the same reason `API_ROUTES` does: `apps/api` and
+ * `apps/mcp-issues` both call `idFromName` with it, in different Workers, and
+ * scenario S-F ("same workspace, two clients") is only true while the two
+ * strings agree. Held apart in each package they could drift silently — a
+ * divergent name resolves to a *different* object, which seeds itself from
+ * `createWorkspaceSeed()` and therefore reads like a perfectly healthy board.
+ * Only a write made through one client and missing from the other would show
+ * it, and that is the one path with no automated coverage.
+ */
+export const WORKSPACE_DO_NAME = 'demo'
+
 export const API_ROUTES = {
   chat: '/api/chat',
   workspace: '/api/workspace',

@@ -1,3 +1,4 @@
+import { WORKSPACE_DO_NAME } from '@devsprint/shared'
 import type { WorkspaceApi } from '@devsprint/shared/tools'
 
 /**
@@ -6,7 +7,7 @@ import type { WorkspaceApi } from '@devsprint/shared/tools'
  * what makes scenario S-F's "same workspace, two clients" true: a write from an
  * external MCP host and a read from the SPA hit the same object.
  */
-export const WORKSPACE_DO_NAME = 'demo'
+export { WORKSPACE_DO_NAME }
 
 /**
  * The class lives in another Worker, so `wrangler types` cannot see its methods

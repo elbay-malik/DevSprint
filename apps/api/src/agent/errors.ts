@@ -1,4 +1,9 @@
-import { APICallError, RetryError } from 'ai'
+import {
+  APICallError,
+  InvalidToolApprovalError,
+  InvalidToolApprovalSignatureError,
+  RetryError,
+} from 'ai'
 
 /**
  * The provider failure inside the SDK's retry wrapper. `streamText` retries the
@@ -19,6 +24,15 @@ export function toClientErrorMessage(error: unknown): string {
   const cause = rootCause(error)
   if (APICallError.isInstance(cause) && cause.statusCode === 429) {
     return "The demo's model quota is exhausted right now — please try again in a minute."
+  }
+  // An approval the server would not accept is not a model failure, and
+  // "please try again" is advice that cannot work — the same request carries
+  // the same rejected approval. Say what actually happened instead.
+  if (
+    InvalidToolApprovalSignatureError.isInstance(cause) ||
+    InvalidToolApprovalError.isInstance(cause)
+  ) {
+    return 'That approval could not be verified, so nothing was run. Ask again to get a fresh one.'
   }
   return 'The copilot hit a model error. Please try again.'
 }

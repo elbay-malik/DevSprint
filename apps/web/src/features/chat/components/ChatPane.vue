@@ -9,9 +9,9 @@ import ChatMessageList from './ChatMessageList.vue'
   <section data-testid="chat-pane" class="flex min-h-0 flex-col border-t lg:border-t-0">
     <header class="px-4 py-3 lg:px-6">
       <h2 class="text-sm font-semibold">Copilot</h2>
-      <p class="text-muted-foreground text-xs">
-        Answers are grounded in the workspace via read-only tools. Writes arrive with approvals in
-        Phase 5.
+      <p data-testid="chat-subtitle" class="text-muted-foreground text-xs">
+        Answers are grounded in the workspace by real tool calls. Every write asks you to approve it
+        first.
       </p>
     </header>
     <Separator />
