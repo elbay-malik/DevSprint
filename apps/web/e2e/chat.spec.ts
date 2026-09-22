@@ -145,11 +145,14 @@ test('the chat follows new tokens, and lets go when you scroll up', async ({ pag
 
   await ask('Summarize Sprint 12 and draft release notes for v1.5.0.')
   await expect(page.getByTestId('release-notes-diff')).toBeVisible()
+  // Settled, so the next step is not racing the tail of this turn.
+  await expect(page.getByRole('button', { name: 'Send' })).toBeVisible()
 
   // Followed to the bottom on its own, and actually moved to get there.
   await expect
-    .poll(async () =>
-      viewport.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight < 24),
+    .poll(
+      async () => viewport.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight < 24),
+      { timeout: 10_000 },
     )
     .toBe(true)
   expect(await viewport.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
@@ -159,8 +162,12 @@ test('the chat follows new tokens, and lets go when you scroll up', async ({ pag
   await viewport.evaluate((el) => {
     el.scrollTop = 0
   })
-  await ask('How is the sprint going?')
-  await page.waitForTimeout(1500)
+
+  // A second turn with a distinctive answer, so this waits for the stream to
+  // have actually rendered rather than for a fixed number of milliseconds —
+  // under load a sleep either races the tokens or hides the bug.
+  await ask('Search for DS-42')
+  await expect(page.getByTestId('chat-pane')).toContainText('No matching issues')
   expect(await viewport.evaluate((el) => el.scrollTop)).toBeLessThan(100)
 })
 
