@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "cf-typegen": "wrangler types",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "eval": "vitest run src/evals"
   },
   "dependencies": {
     "@ai-sdk/google": "catalog:",
