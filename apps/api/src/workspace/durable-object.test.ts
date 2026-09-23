@@ -268,3 +268,63 @@ describe('WorkspaceDO — approval ledger', () => {
     await expect(stub.spendApprovals(['a2000'])).resolves.toEqual(['a2000'])
   })
 })
+
+describe('WorkspaceDO — daily model budget', () => {
+  it('accumulates spend and hands back the day it belongs to', async () => {
+    const { stub } = await freshDO()
+
+    expect((await stub.modelUsage()).tokens).toBe(0)
+    await stub.recordModelUsage(1_200)
+    const after = await stub.recordModelUsage(800)
+
+    expect(after.tokens).toBe(2_000)
+    expect(after.day).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('survives a reset, because a cap a visitor can clear is not a cap', async () => {
+    const { stub } = await freshDO()
+    await stub.recordModelUsage(5_000)
+
+    await stub.reset()
+
+    expect((await stub.modelUsage()).tokens).toBe(5_000)
+  })
+
+  it('rolls over on the real UTC date, not the frozen demo clock', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(Date.parse('2026-09-23T22:00:00Z'))
+    const { stub } = await freshDO()
+    await stub.recordModelUsage(9_000)
+    expect((await stub.modelUsage()).tokens).toBe(9_000)
+
+    // Past midnight UTC: a new day, and a fresh budget — without anything
+    // having had to fire, so a Worker asleep across midnight wakes up correct.
+    vi.setSystemTime(Date.parse('2026-09-24T00:30:00Z'))
+
+    const rolled = await stub.modelUsage()
+    expect(rolled.tokens).toBe(0)
+    expect(rolled.day).toBe('2026-09-24')
+  })
+
+  it('refuses to let nonsense usage buy back budget', async () => {
+    const { stub } = await freshDO()
+    await stub.recordModelUsage(1_000)
+
+    await stub.recordModelUsage(-900)
+    await stub.recordModelUsage(Number.NaN)
+
+    expect((await stub.modelUsage()).tokens).toBe(1_000)
+  })
+
+  it('persists across a fresh load of the object', async () => {
+    const fake = fakeDurableObjectState()
+    const first = new WorkspaceDO(fake.ctx, {} as Cloudflare.Env)
+    await fake.ready()
+    await first.recordModelUsage(4_200)
+
+    const second = new WorkspaceDO(fake.ctx, {} as Cloudflare.Env)
+    await fake.ready()
+
+    expect((await second.modelUsage()).tokens).toBe(4_200)
+  })
+})

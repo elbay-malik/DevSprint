@@ -19,9 +19,58 @@ const NO_USAGE: LanguageModelV3Usage = {
   outputTokens: { total: undefined, text: undefined, reasoning: undefined },
 }
 
+/** A model that answers in one step and reports what the turn cost. */
+function answeringModel(inputTokens: number, outputTokens: number) {
+  const model: LanguageModelV3 = {
+    specificationVersion: 'v3',
+    provider: 'test',
+    modelId: 'answers-once',
+    supportedUrls: {},
+    doGenerate: () => Promise.reject(new Error('streaming only')),
+    doStream: () =>
+      Promise.resolve({
+        stream: simulateReadableStream({
+          chunks: [
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 't1' },
+            { type: 'text-delta', id: 't1', delta: 'done' },
+            { type: 'text-end', id: 't1' },
+            {
+              type: 'finish',
+              finishReason: { unified: 'stop', raw: undefined },
+              usage: {
+                inputTokens: {
+                  total: inputTokens,
+                  noCache: inputTokens,
+                  cacheRead: undefined,
+                  cacheWrite: undefined,
+                },
+                outputTokens: { total: outputTokens, text: outputTokens, reasoning: undefined },
+              },
+            },
+          ],
+          chunkDelayInMs: 0,
+        }),
+      }),
+  }
+  return model
+}
+
 /** A model that never stops asking for another tool — only the budget ends it. */
-function loopingModel() {
+function loopingModel(inputTokens?: number, outputTokens?: number) {
   const seen: LanguageModelV3CallOptions[] = []
+  const usage: LanguageModelV3Usage =
+    inputTokens === undefined
+      ? NO_USAGE
+      : {
+          inputTokens: {
+            total: inputTokens,
+            noCache: inputTokens,
+            cacheRead: undefined,
+            cacheWrite: undefined,
+          },
+          outputTokens: { total: outputTokens, text: outputTokens, reasoning: undefined },
+        }
   const model: LanguageModelV3 = {
     specificationVersion: 'v3',
     provider: 'test',
@@ -43,7 +92,7 @@ function loopingModel() {
             {
               type: 'finish',
               finishReason: { unified: 'tool-calls', raw: undefined },
-              usage: NO_USAGE,
+              usage,
             },
           ],
           chunkDelayInMs: 0,
@@ -112,6 +161,45 @@ describe('createCopilotAgent', () => {
     await result.consumeStream()
 
     expect(seen[0]?.prompt[0]).toMatchObject({ role: 'system', content: 'YOU ARE THE COPILOT' })
+  })
+
+  it('reports what a turn cost, so the daily cap has something to count', async () => {
+    // The cap lives or dies on this number. The provider reports usage nested
+    // (`inputTokens.total`) and the SDK flattens it for `onFinish`; read the
+    // wrong shape and every turn records 0, which is a cap that never fires and
+    // never says so.
+    const spent: number[] = []
+    const agent = createCopilotAgent({
+      model: answeringModel(1200, 300),
+      instructions: 'test',
+      tools,
+      approvalSecret: 'test-secret',
+      onUsage: (tokens) => spent.push(tokens),
+    })
+
+    const result = await agent.stream({ messages: [{ role: 'user', content: 'go' }] })
+    await result.consumeStream()
+
+    expect(spent).toEqual([1500])
+  })
+
+  it('counts every step of a multi-step turn, not just the last', async () => {
+    // A tool chain is several model calls; charging only the final one would
+    // undercount the expensive turns by exactly the amount that matters.
+    const spent: number[] = []
+    const { model } = loopingModel(80, 20)
+    const agent = createCopilotAgent({
+      model,
+      instructions: 'test',
+      tools,
+      approvalSecret: 'test-secret',
+      onUsage: (tokens) => spent.push(tokens),
+    })
+
+    const result = await agent.stream({ messages: [{ role: 'user', content: 'go' }] })
+    await result.consumeStream()
+
+    expect(spent).toEqual([MAX_STEPS * 100])
   })
 
   it('exposes every read tool to the model', async () => {

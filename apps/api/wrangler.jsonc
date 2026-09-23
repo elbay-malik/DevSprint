@@ -14,6 +14,15 @@
     // origin before a real deploy — see README.md runbook.
     "CORS_ORIGIN": "http://localhost:5173",
   },
+  // Per-IP throttle on the chat route (ADR-0016). 60/minute is far above any
+  // human session and far below what a crawler does, and the binding's own
+  // looseness — permissive, eventually consistent, per Cloudflare location —
+  // is fine for that job. It is deliberately *not* the spend control: that is
+  // the daily token cap in the workspace Durable Object, which has to be
+  // global and accurate in a way this binding does not claim to be.
+  "ratelimits": [
+    { "name": "CHAT_RATE_LIMIT", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } },
+  ],
   "observability": {
     "enabled": true,
   },

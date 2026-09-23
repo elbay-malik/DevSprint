@@ -130,6 +130,172 @@ describe('GET /api/workspace', () => {
   })
 })
 
+describe('POST /api/chat — spend controls', () => {
+  /**
+   * A paid route. The budget is checked *before* the model is called, so a
+   * bogus key never reaches the network — which is what lets the blocking path
+   * be tested at all without spending quota.
+   */
+  const paid = { MODEL_PROVIDER: 'groq', GROQ_API_KEY: 'gsk-not-real' }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function askWith(overrides: Record<string, unknown>, text = 'How is the sprint going?') {
+    return app.request(
+      '/api/chat',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.9' },
+        body: JSON.stringify({
+          messages: [{ id: 'm1', role: 'user', parts: [{ type: 'text', text }] }],
+        }),
+      },
+      { ...env, ...overrides },
+    )
+  }
+
+  it('turns a rate-limited request into a readable turn, not a 429', async () => {
+    const res = await askWith({
+      CHAT_RATE_LIMIT: { limit: () => Promise.resolve({ success: false }) },
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('x-devsprint-limit')).toBe('rate')
+    const answer = textOf(parseChunks(await res.text()))
+    expect(answer).toContain('lot of requests')
+    // The model was never reached, which is the point of checking first.
+    expect(answer).not.toContain('23 of 31 points remaining')
+  })
+
+  it('lets a request through when the limiter allows it', async () => {
+    const res = await askWith({
+      CHAT_RATE_LIMIT: { limit: () => Promise.resolve({ success: true }) },
+    })
+
+    expect(res.headers.get('x-devsprint-limit')).toBeNull()
+    expect(textOf(parseChunks(await res.text()))).toContain('23 of 31 points remaining')
+  })
+
+  it('runs unlimited when no limiter is bound, so dev and CI are unaffected', async () => {
+    const res = await askWith({})
+    expect(res.status).toBe(200)
+    expect(res.headers.get('x-devsprint-limit')).toBeNull()
+  })
+
+  it('exempts the scripted mock from the budget, because it spends nothing', async () => {
+    // The whole board's budget would otherwise be rationed by tests and local
+    // dev, which consume no provider quota at all.
+    workspace.store.recordModelUsage(999_999)
+
+    const res = await askWith({ DAILY_TOKEN_CAP: '100' })
+
+    expect(res.headers.get('x-devsprint-limit')).toBeNull()
+    expect(textOf(parseChunks(await res.text()))).toContain('23 of 31 points remaining')
+    workspace.store.reset()
+  })
+
+  it("degrades to a designed turn once the day's budget is gone", async () => {
+    workspace.store.recordModelUsage(120_000)
+
+    const res = await askWith({ ...paid, DAILY_TOKEN_CAP: '100000' })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('x-devsprint-limit')).toBe('budget')
+    const answer = textOf(parseChunks(await res.text()))
+    expect(answer).toContain('model budget for today')
+    // ADR-0005 asks for a designed state rather than a provider error.
+    expect(answer).not.toMatch(/error|failed|unauthorized/i)
+  })
+
+  it('still answers while the budget has room', async () => {
+    // A fresh store, because the tests above deliberately leave spend behind.
+    const fresh = fakeWorkspaceBinding()
+    fresh.store.recordModelUsage(10)
+
+    const res = await app.request(
+      '/api/chat',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'How is the sprint going?' }] },
+          ],
+        }),
+      },
+      { ...env, ...paid, WORKSPACE: fresh.binding, DAILY_TOKEN_CAP: '100000' },
+    )
+
+    expect(res.headers.get('x-devsprint-limit')).toBeNull()
+  })
+
+  it("records a paid turn's spend against the day's budget", async () => {
+    // The blocking path above only proves the cap is *read*. Nothing in CI uses
+    // a paid provider, so without this the recording side could silently never
+    // fire — every turn charging nothing, the cap never reached, and no test
+    // any the wiser. A stubbed SSE response stands in for Groq.
+    const chunk = (extra: Record<string, unknown>) =>
+      `data: ${JSON.stringify({
+        id: '1',
+        object: 'chat.completion.chunk',
+        created: 1,
+        model: 'llama-3.3-70b-versatile',
+        ...extra,
+      })}\n\n`
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          chunk({ choices: [{ index: 0, delta: { role: 'assistant', content: 'hi' } }] }) +
+            chunk({
+              choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+              x_groq: { usage: { prompt_tokens: 1200, completion_tokens: 300 } },
+            }) +
+            'data: [DONE]\n\n',
+          { headers: { 'content-type': 'text/event-stream' } },
+        ),
+      ),
+    )
+    const fresh = fakeWorkspaceBinding()
+    expect(fresh.store.modelUsage().tokens).toBe(0)
+
+    const res = await app.request(
+      '/api/chat',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hello' }] }],
+        }),
+      },
+      { ...env, ...paid, WORKSPACE: fresh.binding, DAILY_TOKEN_CAP: '100000' },
+    )
+    await res.text()
+
+    // Recording rides `waitUntil`, so it lands after the body has streamed.
+    for (let attempt = 0; attempt < 50 && fresh.store.modelUsage().tokens === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    expect(fresh.store.modelUsage().tokens).toBe(1500)
+  })
+
+  it('does not let Reset buy back budget', async () => {
+    // The board and the ledger both mean "start the demo over"; the budget does
+    // not, or a visitor could clear the spend cap by pressing a button. Asserted
+    // as "unchanged across the reset" rather than against a fixed number,
+    // because `store.reset()` deliberately leaves usage alone — which is the
+    // property under test, and which makes usage carry between tests.
+    const before = workspace.store.recordModelUsage(50_000).tokens
+    expect(before).toBeGreaterThan(0)
+
+    await app.request('/api/workspace/reset', { method: 'POST' }, env)
+
+    expect(workspace.store.modelUsage().tokens).toBe(before)
+  })
+})
+
 describe('POST /api/chat — tracing', () => {
   const traced = {
     ...env,
@@ -204,6 +370,78 @@ describe('POST /api/chat — tracing', () => {
 
     expect(res.headers.get('x-devsprint-trace')).toMatch(/^[0-9a-f]{32}$/)
     expect(res.headers.get('access-control-expose-headers')).toContain('X-DevSprint-Trace')
+  })
+
+  it('survives an approval resume, which continues an existing message', async () => {
+    // The response-level onFinish reconstructs the assistant message, and a
+    // resumed turn *continues* one rather than starting it. Without
+    // `originalMessages` that reconstruction throws "No tool invocation found
+    // for tool call ID" — and because the callback was only attached when
+    // tracing was on, the whole path was unreachable until it was.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}')))
+
+    const first = await app.request(
+      '/api/chat',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            {
+              id: 'm1',
+              role: 'user',
+              parts: [{ type: 'text', text: 'Deploy v9.1.0 to staging.' }],
+            },
+          ],
+        }),
+      },
+      traced,
+    )
+    const chunks = parseChunks(await first.text())
+    const approval = chunks.find((chunk) => chunk.type === 'tool-approval-request')
+    const call = chunks.find((chunk) => chunk.type === 'tool-input-available')
+    expect(approval).toBeDefined()
+
+    const resumed = await app.request(
+      '/api/chat',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            {
+              id: 'm1',
+              role: 'user',
+              parts: [{ type: 'text', text: 'Deploy v9.1.0 to staging.' }],
+            },
+            {
+              id: 'a1',
+              role: 'assistant',
+              parts: [
+                { type: 'step-start' },
+                {
+                  type: `tool-${String(call?.toolName)}`,
+                  toolCallId: String(call?.toolCallId),
+                  state: 'approval-responded',
+                  input: call?.input,
+                  approval: {
+                    id: String((approval as { approvalId?: string }).approvalId),
+                    approved: false,
+                    reason: 'not now',
+                    signature: (approval as { signature?: string }).signature,
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+      },
+      traced,
+    )
+
+    expect(resumed.status).toBe(200)
+    const body = await resumed.text()
+    expect(body).not.toContain('No tool invocation found')
   })
 
   it('stays entirely off without keys — no header, no export', async () => {

@@ -32,4 +32,10 @@ export type AppEnv = Env & {
   LANGFUSE_HOST?: string
   /** Tags traces with the environment they came from, e.g. `production`. */
   DEVSPRINT_ENV?: string
+  /**
+   * Model tokens the demo may spend in a UTC day before it degrades into the
+   * "budget reached" state (ADR-0005's kill-switch, built in ADR-0016).
+   * Defaults to Groq's free-tier 100K/day; `0` disables the cap.
+   */
+  DAILY_TOKEN_CAP?: string
 }

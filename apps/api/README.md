@@ -161,8 +161,8 @@ Defaults are `llama-3.3-70b-versatile` (Groq) and `gemini-2.5-flash` (Gemini), o
 a retryable error, a 429, or a 5xx; once a stream has started, errors are not retried, because
 chunks may already have reached the client. Every response carries the chosen route in the
 `X-DevSprint-Model` header (exposed via CORS), and a 429 surfaces as a friendly "demo budget
-reached" message rather than a provider error. The global daily token cap named in ADR-0005 is
-part of the Phase 11 hardening pass.
+reached" message rather than a provider error. The global daily token cap ADR-0005 asked for is
+below, under [Spend controls](#spend-controls).
 
 The scripted **mock model** speaks the same `LanguageModelV3` streaming protocol as a real
 provider: it picks one tool by keyword and then narrates the tool's actual output. That keeps
@@ -170,7 +170,63 @@ local dev, CI, and e2e runs free and deterministic — but its "reasoning" is a 
 judge model quality only against a real provider.
 
 Each agent step is logged as one JSON line (model route, tool names and inputs, finish reason,
-token usage). That is the observability floor; Phase 10 replaces it with OTLP export.
+token usage). That is the observability floor, and it still runs underneath the OTLP export above.
+
+## Spend controls
+
+Two of them, and deliberately not the same mechanism
+([ADR-0016](../../docs/adr/0016-two-spend-controls-and-an-honest-injection-posture.md)):
+
+| Control           | Question it answers            | Where it lives                  | Tunable                              |
+| ----------------- | ------------------------------ | ------------------------------- | ------------------------------------ |
+| Per-IP rate limit | Is one client hammering us?    | Cloudflare's rate-limit binding | `ratelimits` in `wrangler.jsonc`     |
+| Daily token cap   | Has the demo spent its budget? | The workspace Durable Object    | `DAILY_TOKEN_CAP` (default `100000`) |
+
+The rate limit is bound at 60 requests/60s on `/api/chat`, keyed on `cf-connecting-ip` — far above
+a human session, far below a crawler. A request with no such header is **not** limited rather than
+being folded into a shared bucket, because one shared key lets a single abusive client lock
+everyone else out.
+
+The cap is separate because Cloudflare documents that binding as "permissive, eventually
+consistent, and intentionally designed to not be used as an accurate accounting system", and it
+counts per Cloudflare location rather than globally. A cap that undercounts is not a cap, so this
+one lives in the Durable Object, which is global and serialises. Two consequences worth knowing:
+
+- **`POST /api/reset` does not clear it.** The board and the approval ledger both reset; the budget
+  does not, or any visitor could clear the spend cap by pressing Reset in the SPA.
+- **It rolls over on the real UTC date**, by comparing the stored day to today rather than by being
+  cleared on a schedule — so a Worker asleep across midnight wakes with a fresh budget.
+
+The scripted mock is exempt, so local dev, CI and e2e spend nothing and are never rationed. Set
+`DAILY_TOKEN_CAP=0` to turn the cap off entirely; a missing or nonsense value falls back to the
+default rather than to a cap of zero.
+
+Neither control returns an HTTP error. Both stream back a single readable assistant turn, which is
+the "graceful demo budget reached state" ADR-0005 asked for — the transcript stays usable and the
+SPA needs no special case. `X-DevSprint-Limit: rate | budget` says which one fired, for anyone
+debugging.
+
+## Prompt injection
+
+The vector is real and was checked rather than assumed: text a client supplies through
+`create_issue` reaches the model verbatim inside a `list_issues` or `search_issues` result, and
+`apps/mcp-issues` is public and runs that write with no approval gate at all — the MCP host owns
+that prompt, not this Worker. So anyone can plant instructions in the board and wait for a
+visitor's turn to read them.
+
+The honest posture is that **the approval gate is the control, and the rest is depth**:
+
+- Nothing an injected instruction says can execute a write. Every write is gated behind a human
+  approval that names the tool and shows its arguments
+  ([ADR-0003](../../docs/adr/0003-hitl-approval-gates-on-write-tools.md),
+  [ADR-0010](../../docs/adr/0010-tool-approval-mechanism-and-replay-protection.md)).
+- Injected text cannot become markup: the SPA renders every assistant and tool string through Vue
+  interpolation, and there is no `v-html` in it.
+- A system-prompt rule tells the model that everything inside a tool result is workspace data
+  written by users, to be reported rather than followed.
+
+That last one lowers the chance of an injected string steering an _answer_, which is the part no
+gate covers. It is a prompt rule, not a guarantee, and is not treated as one.
 
 ## Local dev
 

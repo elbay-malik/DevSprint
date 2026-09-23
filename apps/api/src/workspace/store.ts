@@ -1,5 +1,5 @@
 import { createWorkspaceSeed, type Workspace } from '@devsprint/shared'
-import type { WorkspaceApi } from '@devsprint/shared/tools'
+import type { DailyModelUsage, WorkspaceApi } from '@devsprint/shared/tools'
 import {
   diffReleaseNotes,
   getBurndown,
@@ -24,6 +24,9 @@ export interface WorkspaceStore {
   reset(): void
   /** Approval ids already spent, mirroring the DO's persisted ledger (ADR-0014). */
   spentApprovals(): Set<string>
+  /** Model tokens spent today, mirroring the DO's daily budget (ADR-0016). */
+  modelUsage(): DailyModelUsage
+  recordModelUsage(tokens: number): DailyModelUsage
 }
 
 /**
@@ -36,6 +39,14 @@ export interface WorkspaceStore {
  */
 export function createWorkspaceStore(): WorkspaceStore {
   let workspace = createWorkspaceSeed()
+  let usage: DailyModelUsage | undefined
+
+  /** Rolls over on the real UTC date, the same way the DO's copy does. */
+  const currentUsage = (): DailyModelUsage => {
+    const day = new Date(Date.now()).toISOString().slice(0, 10)
+    if (!usage || usage.day !== day) usage = { day, tokens: 0 }
+    return usage
+  }
   let ledger = new Set<string>()
   return {
     get: () => workspace,
@@ -44,6 +55,13 @@ export function createWorkspaceStore(): WorkspaceStore {
       ledger = new Set()
     },
     spentApprovals: () => ledger,
+    modelUsage: () => currentUsage(),
+    recordModelUsage: (tokens) => {
+      const current = currentUsage()
+      const spent = Number.isFinite(tokens) && tokens > 0 ? Math.floor(tokens) : 0
+      usage = { day: current.day, tokens: current.tokens + spent }
+      return usage
+    },
   }
 }
 
@@ -71,6 +89,10 @@ export function createLocalWorkspaceApi(store: WorkspaceStore): WorkspaceApi {
     startDeployment: (input) => Promise.resolve(startDeployment(store.get(), input)),
     setDeploymentStage: (input) => Promise.resolve(setDeploymentStage(store.get(), input)),
     finishDeployment: (input) => Promise.resolve(finishDeployment(store.get(), input)),
+    // The in-memory twin of the DO's daily budget: same contract, no storage,
+    // so a test can drive the cap without a Durable Object.
+    modelUsage: () => Promise.resolve(store.modelUsage()),
+    recordModelUsage: (tokens) => Promise.resolve(store.recordModelUsage(tokens)),
     // One at a time rather than filter-then-bulk-add, so an in-call duplicate
     // is caught too — mirrors the DO's real implementation. No eviction cap
     // here: that guards a Durable Object storage limit this in-memory Set does

@@ -6,6 +6,7 @@ import {
   type Workspace,
 } from '@devsprint/shared'
 import type {
+  DailyModelUsage,
   WorkspaceApi,
   CreateIssueInput,
   CreateReleaseNotesInput,
@@ -65,6 +66,13 @@ const LEDGER_MAX = 1500
  * grown past half a megabyte is already broken as a demo.
  */
 const MAX_WORKSPACE_BYTES = 512_000
+/**
+ * Model tokens spent today. Deliberately its own key, and deliberately not
+ * touched by `reset()`: the board and the ledger both mean "start the demo
+ * over", but a budget a visitor can clear by pressing Reset is not a budget
+ * (ADR-0016).
+ */
+const USAGE_KEY = 'daily-model-usage'
 
 /**
  * The one copy of the workspace.
@@ -236,6 +244,35 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
     await this.ctx.storage.put(LEDGER_KEY, [...next])
     this.ledger = next
     return alreadySpent
+  }
+
+  /** Real wall-clock UTC, like the reset alarm — not the frozen demo clock. */
+  private today(): string {
+    return new Date(Date.now()).toISOString().slice(0, 10)
+  }
+
+  /**
+   * Rolls over by comparing the stored day to today rather than by being
+   * cleared on a schedule, so a Worker that was asleep across midnight comes
+   * back with a fresh budget without anything having had to fire.
+   */
+  private async loadUsage(): Promise<DailyModelUsage> {
+    const stored = await this.ctx.storage.get<DailyModelUsage>(USAGE_KEY)
+    const day = this.today()
+    return stored && stored.day === day ? stored : { day, tokens: 0 }
+  }
+
+  async modelUsage(): Promise<DailyModelUsage> {
+    return await this.loadUsage()
+  }
+
+  async recordModelUsage(tokens: number): Promise<DailyModelUsage> {
+    const current = await this.loadUsage()
+    // Negative or nonsense usage would quietly buy back budget.
+    const spent = Number.isFinite(tokens) && tokens > 0 ? Math.floor(tokens) : 0
+    const next: DailyModelUsage = { day: current.day, tokens: current.tokens + spent }
+    await this.ctx.storage.put(USAGE_KEY, next)
+    return next
   }
 
   // --- reads ------------------------------------------------------------------

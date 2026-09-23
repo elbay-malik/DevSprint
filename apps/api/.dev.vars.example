@@ -28,3 +28,9 @@
 # LANGFUSE_HOST=https://us.cloud.langfuse.com
 # Tags traces with the environment they came from.
 # DEVSPRINT_ENV=local
+
+# Model tokens the demo may spend per UTC day before it degrades into the
+# "budget reached" state (ADR-0016). Default: 100000, matching Groq's free
+# tier. Set 0 to disable. The scripted mock is always exempt — it spends
+# nothing, so local dev and CI are never rationed.
+# DAILY_TOKEN_CAP=100000

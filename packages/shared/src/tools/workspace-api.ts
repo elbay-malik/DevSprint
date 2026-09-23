@@ -64,6 +64,18 @@ export interface WorkspaceApi {
    */
   spendApprovals(ids: string[]): Promise<string[]>
 
+  /**
+   * The model tokens this demo has spent today, and the day they belong to.
+   *
+   * Lives beside the board rather than in the Worker for the same reason the
+   * approval ledger does: it has to be global and it has to survive a restart,
+   * or it is not a spend control. Unlike the board and the ledger it is *not*
+   * cleared by `reset` — a cap a visitor can clear by pressing Reset is not a
+   * cap (ADR-0016). It rolls over on the real UTC date instead.
+   */
+  modelUsage(): Promise<DailyModelUsage>
+  recordModelUsage(tokens: number): Promise<DailyModelUsage>
+
   listIssues(input: ListIssuesInput): Promise<ToolResult<ListIssuesData>>
   searchIssues(input: SearchIssuesInput): Promise<ToolResult<SearchIssuesData>>
   getSprintStatus(input: GetSprintStatusInput): Promise<ToolResult<SprintStatusData>>
@@ -84,6 +96,12 @@ export interface WorkspaceApi {
   startDeployment(input: RunDeploymentInput): Promise<ToolResult<RunDeploymentData>>
   setDeploymentStage(input: SetDeploymentStageInput): Promise<ToolResult<RunDeploymentData>>
   finishDeployment(input: FinishDeploymentInput): Promise<ToolResult<RunDeploymentData>>
+}
+
+export interface DailyModelUsage {
+  /** `YYYY-MM-DD`, in UTC. */
+  day: string
+  tokens: number
 }
 
 export interface SetDeploymentStageInput {

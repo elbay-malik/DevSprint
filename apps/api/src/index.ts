@@ -19,6 +19,14 @@ import { createTools, MCP_OWNED_TOOL_NAMES, type DevSprintTools } from './agent/
 import { createMcpIssueTools } from './agent/mcp-tools'
 import { resolveApprovalSecret, settleApprovals } from './agent/approvals'
 import { createTurnTracer, resolveTracingConfig } from './agent/tracing'
+import {
+  BUDGET_REACHED_MESSAGE,
+  messageOnlyResponse,
+  RATE_LIMITED_MESSAGE,
+  rateLimitKey,
+  resolveDailyTokenCap,
+  type RateLimitBinding,
+} from './agent/limits'
 
 /** Mirrors the SPA's `DevSprintUIMessage` so tool parts validate against the real schemas. */
 type ChatUIMessage = UIMessage<unknown, UIDataTypes, InferUITools<DevSprintTools>>
@@ -81,7 +89,12 @@ app.use('/api/*', (c, next) =>
     origin: c.env.CORS_ORIGIN,
     allowMethods: ['GET', 'POST', 'OPTIONS'],
     allowHeaders: ['Content-Type'],
-    exposeHeaders: ['X-DevSprint-Model', 'X-DevSprint-Tools', 'X-DevSprint-Trace'],
+    exposeHeaders: [
+      'X-DevSprint-Model',
+      'X-DevSprint-Tools',
+      'X-DevSprint-Trace',
+      'X-DevSprint-Limit',
+    ],
     maxAge: 86400,
   })(c, next),
 )
@@ -159,6 +172,23 @@ app.post(API_ROUTES.chat, async (c) => {
       void promise
     }
   }
+  // Per-IP throttle first: it is the cheapest check and the one that protects
+  // everything after it. Absent binding means absent limit, which is what local
+  // dev and CI get — the limiter is a deploy-time protection, not a dependency.
+  // Typed `| undefined` on purpose: the generated binding type says it is always
+  // there, and under vitest or a deploy without the binding it is not.
+  const limiter: RateLimitBinding | undefined = c.env.CHAT_RATE_LIMIT
+  const clientKey = rateLimitKey(c.req.raw)
+  if (limiter && clientKey !== undefined) {
+    const { success } = await limiter.limit({ key: clientKey })
+    if (!success) {
+      console.warn(JSON.stringify({ event: 'rate-limited' }))
+      // A readable turn rather than a bare 429: the transcript stays usable and
+      // the SPA needs no special case for it.
+      return messageOnlyResponse(RATE_LIMITED_MESSAGE, { 'X-DevSprint-Limit': 'rate' })
+    }
+  }
+
   const { tools, source: toolSource } = await buildTools(c.env, workspace, waitUntil)
 
   let uiMessages: ChatUIMessage[]
@@ -190,6 +220,21 @@ app.post(API_ROUTES.chat, async (c) => {
   }
   const { model, label } = resolved
 
+  // The day's budget. Only a real provider spends anything, so the scripted
+  // mock is exempt — otherwise local dev and CI would be rationing a resource
+  // they do not consume.
+  const dailyCap = resolveDailyTokenCap(c.env.DAILY_TOKEN_CAP)
+  if (dailyCap !== undefined && label !== 'mock') {
+    const usage = await workspace.modelUsage()
+    if (usage.tokens >= dailyCap) {
+      console.warn(JSON.stringify({ event: 'budget-reached', day: usage.day, spent: usage.tokens }))
+      return messageOnlyResponse(BUDGET_REACHED_MESSAGE, {
+        'X-DevSprint-Model': label,
+        'X-DevSprint-Limit': 'budget',
+      })
+    }
+  }
+
   // One trace per turn (ADR-0015). Undefined whenever Langfuse is not
   // configured, which is the normal case locally and in CI.
   const tracingConfig = resolveTracingConfig(c.env)
@@ -201,6 +246,11 @@ app.post(API_ROUTES.chat, async (c) => {
     tools,
     approvalSecret: resolveApprovalSecret(c.env.TOOL_APPROVAL_SECRET),
     ...(turnTracer ? { tracer: turnTracer.tracer } : {}),
+    // Spend is recorded after the fact, on `waitUntil`: the answer has already
+    // streamed by then, and a turn still costs whatever it cost.
+    ...(dailyCap !== undefined && label !== 'mock'
+      ? { onUsage: (tokens: number) => waitUntil(workspace.recordModelUsage(tokens)) }
+      : {}),
   })
 
   // The request signal is what makes the composer's Stop button real: aborting
@@ -233,7 +283,16 @@ app.post(API_ROUTES.chat, async (c) => {
     // The response *is* the stream, so this cannot be awaited inside the
     // handler; it rides the same `waitUntil` a cancelled deployment uses to
     // record itself once the request is over (ADR-0013, ADR-0015).
-    ...(turnTracer ? { onFinish: () => waitUntil(turnTracer.flush()) } : {}),
+    // `originalMessages` is required alongside this callback: without it the
+    // stream cannot reconstruct a response that *continues* an existing
+    // assistant message, which is exactly what an approval resume is — it
+    // throws "No tool invocation found for tool call ID" instead.
+    ...(turnTracer
+      ? {
+          originalMessages: uiMessages,
+          onFinish: () => waitUntil(turnTracer.flush()),
+        }
+      : {}),
     onError: (error) => {
       console.error(
         JSON.stringify({ event: 'model-error', model: label, error: describeError(error) }),
