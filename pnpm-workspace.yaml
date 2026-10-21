@@ -31,7 +31,7 @@ catalog:
   '@tailwindcss/vite': 4.3.2
   # Backend / Workers
   hono: 4.12.28
-  wrangler: 4.108.0
+  wrangler: 4.148.0
   zod: 4.4.3
   # AI SDK v6 line — npm `latest` is v7; these are the official ai-v6 dist-tag
   # versions (all on @ai-sdk/provider 3.0.15). DO NOT bump to 7.x.
@@ -56,6 +56,4 @@ minimumReleaseAgeExclude:
   - '@ai-sdk/vue@3.0.277'
   - '@vue/language-core@3.3.7'
   - ai@6.0.277
-  - miniflare@4.20260706.0
   - vue-tsc@3.3.7
-  - wrangler@4.108.0

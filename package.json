@@ -12,13 +12,16 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm -r typecheck && tsc --noEmit -p tsconfig.json",
     "test": "pnpm -r test",
     "eval": "pnpm --filter @devsprint/api eval",
     "build": "pnpm -r --if-present build",
-    "prepare": "husky"
+    "prepare": "husky",
+    "deploy:all": "node scripts/deploy.ts",
+    "smoke": "node scripts/smoke.ts"
   },
   "devDependencies": {
+    "@types/node": "^24.13.2",
     "@vue/eslint-config-prettier": "catalog:",
     "@vue/eslint-config-typescript": "catalog:",
     "eslint": "catalog:",
