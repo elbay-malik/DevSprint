@@ -3,6 +3,10 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
+  // Every spec drives the one shared workspace (ADR-0014) and resets it first,
+  // so two files in parallel workers wipe each other's board mid-test — a
+  // deployment vanishes under its own progress card. One worker, on purpose.
+  workers: 1,
   use: { baseURL: 'http://localhost:5173' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   // Both panes are under test, so both servers run: the SPA hydrates its board

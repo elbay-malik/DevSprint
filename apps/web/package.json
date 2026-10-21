@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "deploy": "pnpm run build && wrangler deploy",
+    "lighthouse": "node scripts/lighthouse.ts",
     "envdump": "env"
   },
   "dependencies": {
@@ -34,6 +35,7 @@
     "vue-sonner": "^2.0.9"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "^24.13.2",
@@ -41,6 +43,7 @@
     "@vue/test-utils": "2.5.0",
     "@vue/tsconfig": "catalog:",
     "happy-dom": "^20.10.6",
+    "lighthouse": "13.5.0",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
