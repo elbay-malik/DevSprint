@@ -19,7 +19,7 @@ const pane = ref<'after' | 'before'>('after')
 const shown = computed(() => (pane.value === 'after' ? props.data.after : props.data.before))
 
 const CHANGE_TONES: Record<string, string> = {
-  added: 'text-emerald-600 dark:text-emerald-400',
+  added: 'text-emerald-700 dark:text-emerald-400',
   removed: 'text-destructive',
   modified: 'text-muted-foreground',
 }

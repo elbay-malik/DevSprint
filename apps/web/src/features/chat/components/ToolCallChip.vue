@@ -34,7 +34,7 @@ interface ChipStatus {
 
 const TONE_CLASSES: Record<Tone, string> = {
   pending: 'text-muted-foreground',
-  success: 'text-emerald-600 dark:text-emerald-400',
+  success: 'text-emerald-700 dark:text-emerald-400',
   error: 'text-destructive',
   muted: 'text-muted-foreground',
 }
@@ -107,11 +107,11 @@ const outputJson = computed(() =>
       <span v-if="errorText" class="text-destructive min-w-0 truncate">{{ errorText }}</span>
     </div>
     <details>
-      <summary class="text-muted-foreground cursor-pointer select-none">Arguments</summary>
+      <summary class="text-muted-foreground cursor-pointer py-1 select-none">Arguments</summary>
       <pre class="mt-1 max-h-64 overflow-auto font-mono text-xs">{{ inputJson }}</pre>
     </details>
     <details v-if="outputJson !== undefined">
-      <summary class="text-muted-foreground cursor-pointer select-none">Result</summary>
+      <summary class="text-muted-foreground cursor-pointer py-1 select-none">Result</summary>
       <pre class="mt-1 max-h-64 overflow-auto font-mono text-xs">{{ outputJson }}</pre>
     </details>
   </div>

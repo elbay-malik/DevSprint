@@ -27,9 +27,13 @@ watch(
 </script>
 
 <template>
+  <!-- The pane scrolls on its own and holds nothing focusable, so without a tab
+       stop a keyboard user could never reach the lower columns. -->
   <section
     data-testid="workspace-pane"
-    class="flex min-h-0 flex-col gap-4 overflow-y-auto p-4 lg:p-6"
+    tabindex="0"
+    aria-label="Sprint board"
+    class="focus-visible:ring-ring/50 flex min-h-0 flex-col gap-4 overflow-y-auto p-4 outline-none focus-visible:ring-[3px] focus-visible:ring-inset lg:p-6"
   >
     <header>
       <div class="flex items-center gap-2">

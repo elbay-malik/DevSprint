@@ -35,7 +35,7 @@ const shown = computed(() => {
 const STAGE_TONES: Record<StageStatus, string> = {
   pending: 'text-muted-foreground',
   running: 'text-foreground',
-  succeeded: 'text-emerald-600 dark:text-emerald-400',
+  succeeded: 'text-emerald-700 dark:text-emerald-400',
   failed: 'text-destructive',
   skipped: 'text-muted-foreground',
 }
@@ -71,7 +71,7 @@ const progressPct = computed(() => {
 
 const STATUS_TONES: Record<string, string> = {
   running: 'text-foreground',
-  succeeded: 'text-emerald-600 dark:text-emerald-400',
+  succeeded: 'text-emerald-700 dark:text-emerald-400',
   failed: 'text-destructive',
   cancelled: 'text-muted-foreground',
   queued: 'text-muted-foreground',
