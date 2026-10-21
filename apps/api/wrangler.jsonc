@@ -3,16 +3,26 @@
   "name": "devsprint-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-01",
+  // Served on workers.dev (ADR-0019). No version preview URLs: Cloudflare does
+  // not generate them for a Worker that defines a Durable Object anyway, and
+  // PR previews are the SPA's alone.
+  "workers_dev": true,
+  "preview_urls": false,
   // Not needed for the echo route, but standard for the AI SDK providers
   // arriving in Phase 3 — avoids a config change later.
   "compatibility_flags": ["nodejs_compat"],
   "dev": {
     "port": 8787,
   },
+  // These are the *deployed* values (ADR-0019); `pnpm dev` and the e2e suite
+  // override them with `--var` for localhost. Neither is a secret.
   "vars": {
-    // Build-config var, not a secret. Must be updated to the deployed web
-    // origin before a real deploy — see README.md runbook.
-    "CORS_ORIGIN": "http://localhost:5173",
+    // The SPA and its PR preview aliases — see src/cors.ts for the matching.
+    "CORS_ORIGIN": "https://devsprint-web.eleo-666.workers.dev,https://*-devsprint-web.eleo-666.workers.dev",
+    // The live demo starts on the scripted model: it spends nothing and can
+    // only answer the scripted prompts. Switching to `auto` (with the provider
+    // keys set as secrets) is a deliberate, reviewable one-line change.
+    "MODEL_PROVIDER": "mock",
   },
   // Per-IP throttle on the chat route (ADR-0016). 60/minute is far above any
   // human session and far below what a crawler does, and the binding's own

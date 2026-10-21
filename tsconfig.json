@@ -1,4 +1,9 @@
 {
   "extends": "./tsconfig.base.json",
-  "include": ["eslint.config.ts"]
+  "compilerOptions": {
+    // scripts/ runs on Node directly (type stripping), importing its siblings by .ts path.
+    "types": ["node"],
+    "allowImportingTsExtensions": true
+  },
+  "include": ["eslint.config.ts", "scripts/**/*.ts"]
 }

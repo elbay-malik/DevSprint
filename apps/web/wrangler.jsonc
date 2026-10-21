@@ -1,9 +1,13 @@
-// Deploy-ready SPA config: assets-only Worker (Workers Static Assets, ADR-0009).
-// Not deployed yet — see apps/api/README.md for the one-time deploy runbook.
+// The SPA as an assets-only Worker (Workers Static Assets, ADR-0009), live at
+// https://devsprint-web.eleo-666.workers.dev. Deployed by `pnpm deploy:all` (ADR-0019).
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "devsprint-web",
   "compatibility_date": "2026-07-01",
+  // PR previews upload a version with `--preview-alias pr-<n>`, served at
+  // pr-<n>-devsprint-web.<subdomain> against the production api (ADR-0019).
+  "workers_dev": true,
+  "preview_urls": true,
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application",

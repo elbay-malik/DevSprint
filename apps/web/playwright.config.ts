@@ -24,7 +24,8 @@ export default defineConfig({
       // `--var MODEL_PROVIDER:mock` pins the scripted model regardless of any
       // local apps/api/.dev.vars, so e2e stays deterministic, offline and free.
       // A reused local server is checked for this too (e2e/support.ts).
-      command: 'pnpm --filter @devsprint/api exec wrangler dev --var MODEL_PROVIDER:mock',
+      command:
+        'pnpm --filter @devsprint/api exec wrangler dev --var MODEL_PROVIDER:mock --var CORS_ORIGIN:http://localhost:5173',
       url: 'http://localhost:8787/api/health',
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,

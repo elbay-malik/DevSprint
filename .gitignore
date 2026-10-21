@@ -34,3 +34,6 @@ playwright/.cache/
 
 # vue-tsc --build leaves these; the typecheck script is --noEmit
 *.tsbuildinfo
+
+# Written and removed by scripts/deploy.ts on a first deploy only.
+apps/api/wrangler.bootstrap.json
