@@ -7,7 +7,9 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseded PR runs are cancelled; a run on main never is, because it may be
+  # mid-deploy and a half-finished deploy is worse than a late one.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   checks:
@@ -51,3 +53,66 @@ jobs:
             apps/web/playwright-report
             apps/web/test-results
           retention-days: 7
+
+  # Push-to-main deploys the whole topology, only once both suites have passed
+  # (ADR-0019). The script handles first deploy and steady state alike, and
+  # ends with smoke checks against the live URLs.
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [checks, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: https://devsprint-web.eleo-666.workers.dev
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm deploy:all
+
+  # A PR gets its SPA as a preview version of the web Worker, against the
+  # production api. Forks have no secrets, so they get no preview.
+  preview:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [checks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      ALIAS: pr-${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @devsprint/web build
+      - run: >
+          pnpm --filter @devsprint/web exec wrangler versions upload
+          --preview-alias "$ALIAS"
+          --message "PR #${{ github.event.pull_request.number }} @ ${{ github.event.pull_request.head.sha }}"
+      - name: Link the preview on the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: https://${{ env.ALIAS }}-devsprint-web.eleo-666.workers.dev
+        run: |
+          body="Preview of this PR's SPA (against the production api): $URL"
+          gh pr comment "${{ github.event.pull_request.number }}" --edit-last --body "$body" \
+            || gh pr comment "${{ github.event.pull_request.number }}" --body "$body"
