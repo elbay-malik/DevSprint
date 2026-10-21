@@ -50,13 +50,20 @@ const handleById = computed(() => new Map(props.users.map((user) => [user.id, `@
         />
       </div>
     </div>
-    <div v-if="backlog.length > 0" class="flex flex-col gap-2">
+    <div v-if="backlog.length > 0" data-testid="board-backlog" class="flex flex-col gap-2">
       <div class="flex items-center gap-2">
         <h2 class="text-muted-foreground text-sm font-medium">Backlog</h2>
         <Badge variant="secondary">{{ backlog.length }}</Badge>
       </div>
       <div class="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-5">
-        <IssueCard v-for="issue in backlog" :key="issue.id" :issue="issue" />
+        <!-- Backlog issues sit outside the sprint's columns, so their status
+             has to be on the card or a move made elsewhere (S-F) is invisible. -->
+        <IssueCard
+          v-for="issue in backlog"
+          :key="issue.id"
+          :issue="issue"
+          :status-label="STATUS_LABELS[issue.status]"
+        />
       </div>
     </div>
   </div>

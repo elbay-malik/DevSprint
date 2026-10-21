@@ -67,7 +67,12 @@ const STATUS_LABELS: Record<string, string> = {
         </tr>
       </thead>
       <tbody>
-        <tr v-for="row in rows" :key="row.key" class="border-b last:border-0">
+        <tr
+          v-for="row in rows"
+          :key="row.key"
+          :data-issue-key="row.key"
+          class="border-b last:border-0"
+        >
           <td class="min-w-0 px-3 py-1.5">
             <span class="text-muted-foreground font-mono">{{ row.key }}</span>
             <span class="ml-2">{{ row.title }}</span>

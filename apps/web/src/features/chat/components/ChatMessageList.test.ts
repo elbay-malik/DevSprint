@@ -134,6 +134,65 @@ describe('ChatMessageList', () => {
     expect(wrapper.find('[data-testid="issue-table"]').exists()).toBe(false)
   })
 
+  it('gives an approved write that failed its error card too (S-E)', () => {
+    chat.messages = [
+      {
+        id: 'm1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-update_issue_status',
+            toolCallId: 'c1',
+            state: 'output-available',
+            input: { issueKey: 'DS-42', status: 'done' },
+            approval: { id: 'a1', approved: true },
+            output: {
+              ok: false,
+              error: { code: 'ISSUE_NOT_FOUND', message: "No issue with key 'DS-42'." },
+            },
+          },
+        ],
+      } as unknown as DevSprintUIMessage,
+    ]
+    chat.status = 'ready'
+
+    const wrapper = mount(ChatMessageList)
+
+    // The decision stays recorded, and the typed error is not reduced to a
+    // footnote on it.
+    expect(wrapper.findAll('[data-testid="approval-card"]')).toHaveLength(1)
+    const error = wrapper.find('[data-testid="error-card"]')
+    expect(error.exists()).toBe(true)
+    expect(error.text()).toContain('ISSUE_NOT_FOUND')
+  })
+
+  it('shows a deployment awaiting its gate as the approval card alone (S-C step 3)', () => {
+    // Until it is approved there is no run to draw, and a chip of the same call
+    // under the card would say it twice — once without the decision attached.
+    chat.messages = [
+      {
+        id: 'm1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-run_deployment',
+            toolCallId: 'c1',
+            state: 'approval-requested',
+            input: { environment: 'staging', version: 'v1.5.0-rc.1' },
+            approval: { id: 'a1' },
+          },
+        ],
+      } as unknown as DevSprintUIMessage,
+    ]
+    chat.status = 'ready'
+
+    const wrapper = mount(ChatMessageList)
+
+    expect(wrapper.findAll('[data-testid="approval-card"]')).toHaveLength(1)
+    expect(wrapper.find('[data-testid="tool-call-chip"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="deployment-progress"]').exists()).toBe(false)
+  })
+
   it('gives a gated deployment both cards, because it is gated and long-running', () => {
     chat.messages = [
       {

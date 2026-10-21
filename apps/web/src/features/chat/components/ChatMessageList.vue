@@ -37,6 +37,18 @@ function isApprovalPart(part: { approval?: unknown }): boolean {
 function isRunningDeployment(part: { type?: string; state?: string }): boolean {
   return part.type === 'tool-run_deployment' && part.state === 'output-available'
 }
+
+/**
+ * An approved write that came back as a typed error gets the ErrorCard as well
+ * (scenario S-E): the approval card records the decision, but a one-line note
+ * on it is easy to read past as "approved, so done", and the error is what the
+ * agent's next move answers to.
+ */
+function isFailedWrite(part: { state?: string; output?: unknown }): boolean {
+  if (part.state !== 'output-available') return false
+  const output = part.output
+  return typeof output === 'object' && output !== null && 'ok' in output && output.ok === false
+}
 </script>
 
 <template>
@@ -47,6 +59,8 @@ function isRunningDeployment(part: { type?: string; state?: string }): boolean {
     <div
       v-for="message in chat.messages"
       :key="message.id"
+      data-testid="chat-message"
+      :data-role="message.role"
       class="flex max-w-[85%] flex-col gap-2 rounded-lg px-3 py-2 text-sm"
       :class="
         message.role === 'user'
@@ -77,7 +91,7 @@ function isRunningDeployment(part: { type?: string; state?: string }): boolean {
         <template v-else-if="isToolUIPart(part)">
           <ApprovalCard v-if="isApprovalPart(part)" :part="part" />
           <ToolResultCard
-            v-if="!isApprovalPart(part) || isRunningDeployment(part)"
+            v-if="!isApprovalPart(part) || isRunningDeployment(part) || isFailedWrite(part)"
             :part="part"
             :live="isLive(message.id)"
           />
