@@ -267,9 +267,12 @@ app.post(API_ROUTES.chat, async (c) => {
 
   // 'Content-Encoding: Identity' defeats wrangler dev/miniflare response
   // buffering so tokens actually stream locally (workers-sdk#8004); harmless
-  // in production.
+  // in production. The charset is what an event stream always is, said out
+  // loud: without it, tools that honour the header rather than the spec (the
+  // DevTools protocol among them) read "—" as Latin-1.
   return result.toUIMessageStreamResponse({
     headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
       'Content-Encoding': 'Identity',
       'X-DevSprint-Model': label,
       'X-DevSprint-Tools': toolSource,

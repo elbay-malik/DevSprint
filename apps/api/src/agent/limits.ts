@@ -80,6 +80,10 @@ export function messageOnlyResponse(text: string, headers: Record<string, string
   })
   return createUIMessageStreamResponse({
     stream,
-    headers: { 'Content-Encoding': 'Identity', ...headers },
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Content-Encoding': 'Identity',
+      ...headers,
+    },
   })
 }

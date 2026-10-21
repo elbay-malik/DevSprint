@@ -473,7 +473,9 @@ describe('POST /api/chat', () => {
     const res = await ask('How many open issues are in the current sprint?')
 
     expect(res.status).toBe(200)
-    expect(res.headers.get('content-type')).toMatch(/^text\/event-stream/)
+    // An event stream is always UTF-8; saying so keeps header-honouring tools
+    // from reading it as Latin-1.
+    expect(res.headers.get('content-type')).toBe('text/event-stream; charset=utf-8')
     expect(res.headers.get('x-devsprint-model')).toBe('mock')
 
     const chunks = parseChunks(await res.text())
