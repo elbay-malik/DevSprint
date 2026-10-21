@@ -9,6 +9,7 @@ import {
 } from 'ai'
 import { API_ROUTES } from '@devsprint/shared'
 import type { AppEnv } from './env'
+import { corsOriginMatcher } from './cors'
 import { workspaceStub, type WorkspaceApi } from './workspace/durable-object'
 import { createCopilotAgent } from './agent/agent'
 import { createStepAuditLogger } from './agent/audit'
@@ -86,7 +87,7 @@ async function buildTools(
 // constructed inside the handler instead of at module scope
 app.use('/api/*', (c, next) =>
   cors({
-    origin: c.env.CORS_ORIGIN,
+    origin: corsOriginMatcher(c.env.CORS_ORIGIN),
     allowMethods: ['GET', 'POST', 'OPTIONS'],
     allowHeaders: ['Content-Type'],
     exposeHeaders: [
