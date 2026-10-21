@@ -60,11 +60,21 @@ function statusFrom(text: string): IssueStatus | undefined {
   return STATUS_WORDS.find(([pattern]) => pattern.test(text))?.[1]
 }
 
-/** `v1.5.0`, `v1.5.0-rc.1` — the version the user named, if they named one. */
 /** `DS-7` named anywhere in the sentence, normalised to upper case. */
 function issueKeyFrom(text: string): string | undefined {
   return /\bds-\d+\b/i.exec(text)?.[0]?.toUpperCase()
 }
+
+/**
+ * "Sprint 12" → `{ sprintId: 'sprint-12' }`, and nothing when no sprint is
+ * named, so "the current sprint" still means the tool's own default.
+ */
+function sprintInputFrom(text: string): { sprintId?: string } {
+  const number = /\bsprint[ -]?(\d+)\b/i.exec(text)?.[1]
+  return number === undefined ? {} : { sprintId: `sprint-${number}` }
+}
+
+/** `v1.5.0`, `v1.5.0-rc.1` — the version the user named, if they named one. */
 
 function versionFrom(text: string): string | undefined {
   return /\bv\d+\.\d+\.\d+(?:-[\w.]+)?/i.exec(text)?.[0]
@@ -157,7 +167,16 @@ export function planUserText(text: string, availableTools: ReadonlySet<string>):
     })
   }
   if (/burndown|on track|trend|velocity/i.test(text)) {
-    candidates.push({ kind: 'tool-call', toolName: 'get_burndown', input: {} })
+    candidates.push({ kind: 'tool-call', toolName: 'get_burndown', input: sprintInputFrom(text) })
+  }
+  // "On track?" wants the risk named, and the series carries no issue data, so
+  // the blockers are a second read rather than a guess (S-D names DS-11).
+  if (/on track/i.test(text)) {
+    candidates.push({
+      kind: 'tool-call',
+      toolName: 'list_issues',
+      input: { sprintId: sprintInputFrom(text).sprintId ?? 'sprint-12', status: 'blocked' },
+    })
   }
   if (/find|search|look up/i.test(text)) {
     candidates.push({
@@ -170,7 +189,7 @@ export function planUserText(text: string, availableTools: ReadonlySet<string>):
   // scripted chain: how the sprint went, then what actually shipped.
   if (/release note|changelog/i.test(text)) {
     candidates.push(
-      { kind: 'tool-call', toolName: 'get_sprint_status', input: {} },
+      { kind: 'tool-call', toolName: 'get_sprint_status', input: sprintInputFrom(text) },
       {
         kind: 'tool-call',
         toolName: 'list_issues',
@@ -188,10 +207,16 @@ export function planUserText(text: string, availableTools: ReadonlySet<string>):
     })
   }
   if (/summar|how is|how are|health/i.test(text)) {
-    candidates.push({ kind: 'tool-call', toolName: 'get_sprint_status', input: {} })
+    candidates.push({
+      kind: 'tool-call',
+      toolName: 'get_sprint_status',
+      input: sprintInputFrom(text),
+    })
   }
+  // "Show me the burndown" asks for the chart alone (S-D), so a bare "show"
+  // only means a list when it is not about a chart in the same sentence.
   if (
-    /list|show|which issues|what issues|done issues|blocked issues|in review|in progress/i.test(
+    /list|show\b(?![^.?!]*\b(burndown|chart|trend|velocity)\b)|which issues|what issues|done issues|blocked issues|in review|in progress/i.test(
       text,
     )
   ) {
@@ -303,7 +328,7 @@ function summarizeBurndown(data: BurndownData): string {
       : today.remaining < today.ideal
         ? 'ahead of the ideal line'
         : 'on the ideal line'
-  return `Burndown for ${data.sprintId} as of ${today.date}: ${today.remaining} of ${data.committedPoints} points remaining vs ${today.ideal} ideal — ${verdict}.`
+  return `Burndown for ${data.sprintId} as of ${today.date}: ${data.committedPoints - today.remaining} of ${data.committedPoints} points done, ${today.remaining} remaining vs ${today.ideal} ideal — ${verdict}.`
 }
 
 function summarizeDiff(data: ReleaseNotesDiffData): string {
@@ -733,6 +758,25 @@ function recoveryCalls(
 }
 
 /**
+ * The question that closes S-E's recovery turn (step 5): once a bad key has
+ * been searched for, offer the best match back instead of acting on it. "Yes,
+ * that one." on the next turn only makes sense as the answer to this.
+ */
+function recoveryQuestion(gathered: ToolMessage[]): string[] {
+  if (!sawIssueNotFound(gathered)) return []
+  for (const message of gathered) {
+    for (const part of message.content) {
+      if (part.type !== 'tool-result' || part.toolName !== 'search_issues') continue
+      const output = unwrapOutput(part.output)
+      if (!isEnvelope(output) || !output.ok) continue
+      const [best] = (output.data as SearchIssuesData).matches
+      if (best !== undefined) return [`Did you mean ${best.key} "${best.title}" (${best.status})?`]
+    }
+  }
+  return []
+}
+
+/**
  * The part of "Mark DS-42 as done — the billing export shipped this morning"
  * that identifies the issue: the explanation, with the failed key and the
  * instruction stripped out.
@@ -742,7 +786,7 @@ function searchSubjectFrom(text: string): string {
   const afterDash = /[—–-]\s*(.+)$/.exec(withoutKey)?.[1]
   const subject = (afterDash ?? withoutKey)
     .replace(
-      /\b(mark|set|move|close|reopen|flag|put|as|done|todo|blocked|the|this|morning)\b/gi,
+      /\b(mark|set|move|close|reopen|flag|put|as|done|todo|blocked|the|this|morning|shipped|landed)\b/gi,
       ' ',
     )
     .replace(/[?.!,]+/g, ' ')
@@ -854,7 +898,10 @@ export function scriptChunks(options: LanguageModelV3CallOptions): LanguageModel
       body = toolCallChunks(recovery)
     } else {
       const inputs = inputsByToolCallId(options.prompt)
-      const summary = gathered.map((message) => summarizeToolMessage(message, inputs)).join(' ')
+      const summary = [
+        ...gathered.map((message) => summarizeToolMessage(message, inputs)),
+        ...recoveryQuestion(gathered),
+      ].join(' ')
       body = textChunks(summary.length > 0 ? summary : 'I have nothing to report.')
     }
   }

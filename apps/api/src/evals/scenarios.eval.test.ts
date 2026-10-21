@@ -149,10 +149,16 @@ describe('S-D — burndown as a rich card', () => {
     // "`get_burndown` is called exactly once (no redundant re-fetches)."
     expect(run.trajectory.filter((name) => name === 'get_burndown')).toHaveLength(1)
 
-    // "The final answer references values grounded in the returned series."
+    // "The final answer references values grounded in the returned series
+    // (committed 31, completed 8) and mentions DS-11." The series carries no
+    // issue data, so DS-11 has to come from a read that does — this once
+    // passed only because a stray list_issues happened to run.
     const answer = run.turns.at(-1)?.text ?? ''
-    expect(answer).toContain('31')
+    expect(answer).toContain('8 of 31 points done')
+    expect(answer).toContain('behind the ideal line')
+    expect(answer).not.toMatch(/\bon track\b/i)
     expect(answer).toContain('DS-11')
+    expect(run.trajectory).toEqual(['get_burndown', 'list_issues'])
   })
 })
 
@@ -165,6 +171,7 @@ describe('S-E — a typed error, recovered by searching', () => {
           prompt: 'Mark DS-42 as done — the billing export shipped this morning.',
           decide: approveAll,
         },
+        { prompt: 'Yes, that one.', decide: approveAll },
       ],
     })
 
@@ -183,8 +190,29 @@ describe('S-E — a typed error, recovered by searching', () => {
     const afterError = run.trajectory.slice(run.trajectory.indexOf('update_issue_status') + 1)
     expect(afterError[0]).toBe('search_issues')
 
-    // "Final workspace state: ... no issue DS-42 exists."
-    expect(run.store.get().issues.some((issue) => issue.key === 'DS-42')).toBe(false)
+    // Step 5: the agent offers the match back rather than acting on it.
+    const recovered = run.turns.find((turn) =>
+      turn.toolCalls.some((c) => c.name === 'search_issues'),
+    )
+    expect(recovered?.text).toContain('Did you mean DS-7')
+
+    // "The corrected update_issue_status for DS-7 executes only after a
+    // second, separate approval" — a fresh card, never the DS-42 one reused.
+    const approvals = run.turns.flatMap((turn) => turn.approvals)
+    expect(approvals).toHaveLength(2)
+    expect(new Set(approvals.map((approval) => approval.approvalId)).size).toBe(2)
+    const writes = run.turns.flatMap((turn) =>
+      turn.toolCalls.filter((call) => call.name === 'update_issue_status'),
+    )
+    expect(writes.map((write) => write.input)).toEqual([
+      { issueKey: 'DS-42', status: 'done' },
+      { issueKey: 'DS-7', status: 'done' },
+    ])
+
+    // "Final workspace state: DS-7 is done; no issue DS-42 exists."
+    const issues = run.store.get().issues
+    expect(issues.find((issue) => issue.key === 'DS-7')?.status).toBe('done')
+    expect(issues.some((issue) => issue.key === 'DS-42')).toBe(false)
   })
 })
 

@@ -80,6 +80,28 @@ describe('planUserText', () => {
     expect(plan[1]).toMatchObject({ input: { sprintId: 'sprint-12', status: 'done' } })
   })
 
+  it('passes the sprint the user named, exactly as the scenarios spell it', () => {
+    const [status] = planUserText('Summarize Sprint 12 and draft release notes.', ALL_TOOLS)
+    expect(status).toMatchObject({ input: { sprintId: 'sprint-12' } })
+    // No sprint named means the tool's own default, not a guessed one.
+    const [current] = planUserText('How is the sprint going?', ALL_TOOLS)
+    expect(current).toMatchObject({ toolName: 'get_sprint_status', input: {} })
+  })
+
+  it('reads the chart and the blockers for an "on track?" question (S-D)', () => {
+    // "Show me the burndown" used to plan a list of every issue too, through
+    // the bare "show". The blockers are the read the narration actually needs.
+    const plan = planUserText('Is Sprint 12 on track? Show me the burndown.', ALL_TOOLS)
+    expect(plan).toEqual([
+      { kind: 'tool-call', toolName: 'get_burndown', input: { sprintId: 'sprint-12' } },
+      {
+        kind: 'tool-call',
+        toolName: 'list_issues',
+        input: { sprintId: 'sprint-12', status: 'blocked' },
+      },
+    ])
+  })
+
   it('chains a tool per question in a compound ask', () => {
     const plan = planUserText(
       'Is Sprint 12 on track? Show me the burndown and the blocked issues.',
