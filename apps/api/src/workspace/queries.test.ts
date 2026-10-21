@@ -8,7 +8,7 @@ import {
   listIssues,
   searchIssues,
 } from './queries'
-import { finishDeployment, startDeployment } from './mutations'
+import { createReleaseNotes, finishDeployment, startDeployment } from './mutations'
 
 const workspace = createWorkspaceSeed()
 
@@ -275,6 +275,17 @@ describe('diffReleaseNotes', () => {
       { heading: 'Added', changeType: 'modified' },
       { heading: 'v1.5.0 — Sprint 12: Notifications & billing', changeType: 'added' },
     ])
+  })
+
+  it('compares against the last *published* note, even once a newer draft exists', () => {
+    // create_release_notes only ever saves drafts, so after one S-A run the
+    // newest note is v1.5.0's own draft. Diffing against that would compare the
+    // draft with itself; the baseline is what readers were last shown.
+    const withDraft = createWorkspaceSeed()
+    expectOk(createReleaseNotes(withDraft, { version: 'v1.5.0', markdown: draft }))
+    const data = expectOk(diffReleaseNotes(withDraft, { draftMarkdown: draft }))
+    expect(data.baseVersion).toBe('v1.4.2')
+    expect(data.changedSections).not.toHaveLength(0)
   })
 
   it('does not mistake a comment inside a code fence for a heading', () => {

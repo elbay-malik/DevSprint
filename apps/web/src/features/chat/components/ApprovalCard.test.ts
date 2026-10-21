@@ -116,6 +116,28 @@ describe('ApprovalCard', () => {
     expect(denied.find('[data-testid="approval-deny"]').exists()).toBe(false)
   })
 
+  it('styles an applied write as settled, keeping red for real failures', () => {
+    // Text alone can say "applied" in the colour of an error; a reader takes
+    // the colour first, so four red cards in S-B would read as four failures.
+    const applied = mountCard({
+      ...requested({ issueKey: 'DS-7', status: 'done' }),
+      state: 'output-available',
+      output: { ok: true, data: {} },
+      approval: { id: 'approval-1', approved: true, signature: 'sig' },
+    })
+    expect(applied.get('[data-testid="approval-outcome"]').classes()).not.toContain(
+      'text-destructive',
+    )
+
+    const failed = mountCard({
+      ...requested({ issueKey: 'DS-42', status: 'done' }),
+      state: 'output-available',
+      output: { ok: false, error: { code: 'ISSUE_NOT_FOUND', message: 'No such issue.' } },
+      approval: { id: 'approval-1', approved: true, signature: 'sig' },
+    })
+    expect(failed.get('[data-testid="approval-outcome"]').classes()).toContain('text-destructive')
+  })
+
   it('does not rewrite its own record once the board catches up', () => {
     // The store still says DS-7 is in_review while pending, but after the write
     // lands it says done — a live "from" status would read "done → done".

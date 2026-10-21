@@ -20,6 +20,27 @@ function burndown(overrides: Partial<BurndownData> = {}): BurndownData {
 }
 
 describe('BurndownChart', () => {
+  /** The y of each point on a path, in SVG units (larger is lower on screen). */
+  function ys(d: string | undefined): number[] {
+    return [...(d ?? '').matchAll(/[ML][\d.]+ ([\d.]+)/g)].map((match) => Number(match[1]))
+  }
+
+  it('draws each series from its own values, the right way up', () => {
+    const wrapper = mount(BurndownChart, { props: { data: burndown() } })
+    const ideal = wrapper.get('path[stroke-dasharray]').attributes('d')
+    const remaining = wrapper.get('path:not([stroke-dasharray])').attributes('d')
+
+    // Two lines from two series, not one series drawn twice.
+    expect(ideal).not.toBe(remaining)
+    // Ideal burns 12.4 → 0, so it falls down the chart (y grows).
+    const idealYs = ys(ideal)
+    expect(idealYs).toHaveLength(3)
+    expect(idealYs[0]).toBeLessThan(idealYs[2] ?? 0)
+    // Behind the line means more left than ideal, which is drawn *above* it —
+    // the picture has to agree with the narration's "behind" (S-D).
+    expect(ys(remaining)[2]).toBeLessThan(idealYs[2] ?? 0)
+  })
+
   it('reads the sprint at the demo clock, not at the last day', () => {
     // The sprint runs past `asOf`, so the last bucket is a projection. Leading
     // with it would claim the sprint had already ended.

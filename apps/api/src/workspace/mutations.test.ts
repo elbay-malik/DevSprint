@@ -46,6 +46,20 @@ describe('createIssue', () => {
     expect(workspace.issues).toHaveLength(14)
   })
 
+  it('keeps every field the caller chose', () => {
+    // The key is ours to assign; the rest is the host's write (S-F) and must
+    // land as asked, not with a default quietly substituted.
+    const { issue } = expectOk(
+      createIssue(seed(), {
+        title: 'Rate-limit exports',
+        type: 'bug',
+        priority: 'urgent',
+        sprintId: null,
+      }),
+    )
+    expect(issue).toMatchObject({ title: 'Rate-limit exports', type: 'bug', priority: 'urgent' })
+  })
+
   it('stamps the fixed demo clock rather than real time', () => {
     const { issue } = expectOk(
       createIssue(seed(), { title: 'Anything', type: 'chore', priority: 'low', sprintId: null }),

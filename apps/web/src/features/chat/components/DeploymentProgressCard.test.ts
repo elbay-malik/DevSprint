@@ -97,6 +97,17 @@ describe('DeploymentProgressCard', () => {
     expect(bar.attributes('aria-valuetext')).toContain('1 of 4 stages complete')
   })
 
+  it('fills the bar as wide as the progress it reports', () => {
+    // aria-valuenow is only the claim; the fill's width is what is drawn, and a
+    // unitless width is invalid CSS that leaves the bar empty all run.
+    const wrapper = mountCard({
+      deployment: deployment({ stages: stagesWith({ build: 'succeeded', test: 'running' }) }),
+      live: true,
+    })
+    const fill = wrapper.get('[role="progressbar"] > div')
+    expect(fill.attributes('style')).toContain('width: 25%')
+  })
+
   it('still counts a deliberately skipped stage on a run that finished', () => {
     // skipTests is not lost progress: the run did everything it was asked to.
     const wrapper = mountCard({

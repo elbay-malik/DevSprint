@@ -37,6 +37,8 @@ describe('IssueTable', () => {
     expect(wrapper.find('thead').text()).toContain('Score')
     expect(wrapper.find('thead').text()).not.toContain('Pts')
     expect(wrapper.text()).toContain('0.56')
+    // The title is how a reader recognises the issue they meant (S-E step 4).
+    for (const match of MATCHES) expect(wrapper.text()).toContain(match.title)
   })
 
   it('counts what it is showing', () => {
