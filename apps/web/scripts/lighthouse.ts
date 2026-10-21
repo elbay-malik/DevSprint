@@ -2,15 +2,15 @@
  * The Phase 12 gate, made repeatable: every Lighthouse category ≥ 90, on the
  * mobile and desktop presets, as the median of three runs.
  *
- * It audits whatever is already serving the URL, because a meaningful score
- * needs the production build *and* the api — without the Worker the board fetch
- * fails, the console logs it, and Best Practices drops for a reason that is not
- * the SPA's. The api only allows its configured CORS origin, so serve the build
- * on that port:
+ * It audits the deployed site by default — the one place the production build
+ * genuinely talks to its api (ADR-0019):
  *
- *   pnpm --filter @devsprint/api exec wrangler dev --var MODEL_PROVIDER:mock
- *   pnpm --filter @devsprint/web build && pnpm --filter @devsprint/web preview --port 5173
- *   pnpm --filter @devsprint/web lighthouse
+ *   pnpm --filter @devsprint/web lighthouse [url]
+ *
+ * A local `vite preview` is not a substitute. Before Phase 14 it was what this
+ * script measured, and the build then had no VITE_API_URL: the board fetch hit
+ * the preview server, failed quietly and fell back to seed data, so the scores
+ * recorded in ADR-0017 were for a page that never reached the api.
  *
  * Not a CI step: shared runners swing the simulated-throttling performance
  * score by several points between identical runs, so a hard 90 there would fail
@@ -21,7 +21,7 @@
 import { spawnSync } from 'node:child_process'
 import { chromium } from '@playwright/test'
 
-const URL = process.argv[2] ?? 'http://localhost:5173'
+const URL = process.argv[2] ?? 'https://devsprint-web.eleo-666.workers.dev'
 const RUNS = 3
 const THRESHOLD = 90
 const CATEGORIES = ['performance', 'accessibility', 'best-practices', 'seo'] as const
