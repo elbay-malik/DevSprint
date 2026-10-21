@@ -11,11 +11,13 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "deploy": "pnpm run build && wrangler deploy"
+    "deploy": "pnpm run build && wrangler deploy",
+    "envdump": "env"
   },
   "dependencies": {
     "@ai-sdk/vue": "catalog:",
     "@devsprint/shared": "workspace:*",
+    "@fontsource-variable/geist": "^5.3.0",
     "@lucide/vue": "^1.23.0",
     "@tanstack/vue-table": "^8.21.3",
     "@vueuse/core": "^14.3.0",
