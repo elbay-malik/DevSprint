@@ -43,3 +43,10 @@ on Vapor reaching stable and Reka UI confirming compatibility.
 
 - [ADR-0006](0006-ui-kit-shadcn-vue.md) — the Reka UI dependency that gates the experiment
 - [docs/roadmap.md](../roadmap.md) — Phase 12 (a11y + performance, optional Vapor experiment)
+
+## Revisit — 2026-10-21 (Phase 12)
+
+The gate was checked rather than skipped, and it is not met. On npm, Vue's `latest` is 3.5.44;
+the 3.6 line carrying Vapor is at `3.6.0-rc.12`, a release candidate, not stable. The experiment
+therefore does not run this phase, and nothing in the app depends on it. Re-check when 3.6 reaches
+`latest`, together with Reka UI's compatibility, which this ADR also requires.

@@ -6,7 +6,7 @@ A project/DevOps copilot over a mock sprint workspace — Vue 3 SPA (Vite 8) + H
 
 ## Status
 
-Early development. Implemented so far: Phases 0–11 of the [16-phase roadmap](docs/roadmap.md) — design docs, SPA shell, streaming chat, real tools, a multi-step agent loop, approval gates on every write, the MCP refactor with a public issues server, the in-stream result cards, the long-running deploy tool with mid-run cancel, a daily reset alarm with a persisted approval ledger, OTLP tracing with trajectory evals for all six demo scenarios, and two spend controls guarding the live demo. **Local-only but deploy-ready**: wrangler configs and deploy scripts are committed; nothing is deployed yet.
+Early development. Implemented so far: Phases 0–12 of the [16-phase roadmap](docs/roadmap.md) — design docs, SPA shell, streaming chat, real tools, a multi-step agent loop, approval gates on every write, the MCP refactor with a public issues server, the in-stream result cards, the long-running deploy tool with mid-run cancel, a daily reset alarm with a persisted approval ledger, OTLP tracing with trajectory evals for all six demo scenarios, two spend controls guarding the live demo, and an accessibility pass gated by axe across every card and both themes. **Local-only but deploy-ready**: wrangler configs and deploy scripts are committed; nothing is deployed yet.
 
 ## Architecture at a glance
 
