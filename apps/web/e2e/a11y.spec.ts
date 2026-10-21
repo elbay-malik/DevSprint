@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
+import { resetBoard } from './support'
 
 /**
  * Lighthouse only ever sees the first paint — an empty transcript — so its
@@ -30,7 +31,7 @@ async function send(page: Page, text: string) {
 }
 
 test.beforeEach(async ({ request }) => {
-  await request.post('http://localhost:8787/api/workspace/reset')
+  await resetBoard(request)
 })
 
 for (const colorScheme of ['light', 'dark'] as const) {

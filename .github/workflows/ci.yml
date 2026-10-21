@@ -41,3 +41,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @devsprint/web exec playwright install chromium --with-deps
       - run: pnpm --filter @devsprint/web test:e2e
+      # A failure is otherwise readable only from the log; the report carries
+      # each failed test's trace (playwright.config.ts: retain-on-failure).
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          retention-days: 7

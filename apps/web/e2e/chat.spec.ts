@@ -1,9 +1,11 @@
 import { expect, test } from '@playwright/test'
+import { resetBoard } from './support'
 
 // Approved writes mutate the Worker's workspace, so every test starts from the
-// seed rather than inheriting whatever an earlier run left behind.
+// seed rather than inheriting whatever an earlier run left behind. The six
+// demo scenarios themselves, end to end, are in scenarios.spec.ts.
 test.beforeEach(async ({ request }) => {
-  await request.post('http://localhost:8787/api/workspace/reset')
+  await resetBoard(request)
 })
 
 /**
@@ -202,56 +204,11 @@ test('the header resets the board and switches theme', async ({ page }) => {
   await expect(doneColumn).toContainText('DS-7')
 
   await page.getByTestId('reset-demo').click()
+  // Back where the seed has it, not merely gone from Done.
   await expect(doneColumn).not.toContainText('DS-7')
-})
-
-test('every write is gated, one card per issue, and a denial is respected', async ({ page }) => {
-  await page.goto('/')
-  await expect(page.getByTestId('workspace-source')).toHaveText(/live/i)
-
-  await page.getByTestId('chat-input').fill(CLOSE_OUT)
-  await page.getByTestId('chat-input').press('Enter')
-
-  // One gate per mutation — never a single card covering all five.
-  const cards = page.getByTestId('approval-card')
-  await expect(cards).toHaveCount(5)
-  await expect(cards.first()).toContainText('update_issue_status')
-  await expect(page.getByTestId('approval-headline').first()).toContainText('DS-7')
-
-  // Nothing has run yet: the board still shows DS-7 outside the Done column.
-  const doneColumn = page.getByTestId('board-column-done')
-  await expect(page.getByTestId('workspace-pane')).toContainText('DS-7')
-  await expect(doneColumn).not.toContainText('DS-7')
-
-  // Typing is refused while decisions are outstanding, otherwise answering the
-  // cards would silently do nothing.
-  await expect(page.getByTestId('chat-input')).toBeDisabled()
-
-  // Approve the first four, deny DS-11 with a reason (scenario S-B step 9).
-  for (let index = 0; index < 4; index += 1) {
-    await cards.nth(index).getByTestId('approval-approve').click()
-  }
-  const denied = cards.nth(4)
-  await denied.getByTestId('approval-reason').fill('Still blocked on vendor sandbox')
-  await denied.getByTestId('approval-deny').click()
-
-  // The turn resumes on its own once every card is answered.
-  const chat = page.getByTestId('chat-pane')
-  await expect(chat).toContainText('DS-7 moved in_review → done')
-  await expect(chat).toContainText('DS-11 was not approved')
-  await expect(chat).toContainText('Still blocked on vendor sandbox')
-
-  // The card keeps the decision as an audit record.
-  await expect(denied.getByTestId('approval-outcome')).toContainText('Denied')
-  await expect(cards.first().getByTestId('approval-outcome')).toContainText('Approved by you')
-
-  // The composer is usable again.
-  await expect(page.getByTestId('chat-input')).toBeEnabled()
-
-  // And the board reflects the approved writes without a reload: DS-7 has moved
-  // to Done, while the denied DS-11 has not.
-  await expect(doneColumn).toContainText('DS-7')
-  await expect(doneColumn).not.toContainText('DS-11')
+  await expect(
+    page.getByTestId('board-column-in_review').locator('[data-issue-key="DS-7"]'),
+  ).toBeVisible()
 })
 
 test('tool results render as cards, not raw JSON', async ({ page }) => {
@@ -278,7 +235,7 @@ test('tool results render as cards, not raw JSON', async ({ page }) => {
   await expect(page.getByTestId('tool-call-chip')).toHaveCount(0)
 })
 
-test('a search renders the compact table and a failure renders an error', async ({ page }) => {
+test('a search renders the compact table with match scores', async ({ page }) => {
   await page.goto('/')
 
   await page.getByTestId('chat-input').fill('Find the billing export issue')
@@ -289,81 +246,4 @@ test('a search renders the compact table and a failure renders an error', async 
   await expect(table).toContainText('DS-7')
   // The compact variant carries the match score instead of points.
   await expect(table).toContainText('Score')
-})
-
-test('a deployment is approved, then streams its stages to done (S-C)', async ({ page }) => {
-  await page.goto('/')
-
-  await page.getByTestId('chat-input').fill('Deploy v1.5.0-rc.1 to staging.')
-  await page.getByTestId('chat-input').press('Enter')
-
-  // Nothing runs before the gate is answered.
-  const approval = page.getByTestId('approval-card')
-  await expect(approval).toBeVisible()
-  await expect(approval).toContainText('run_deployment')
-  await expect(page.getByTestId('deployment-progress')).toHaveCount(0)
-
-  await approval.getByTestId('approval-approve').click()
-
-  const card = page.getByTestId('deployment-progress')
-  await expect(card).toBeVisible()
-  // Every stage is named, so the reader sees the shape of the run, not a bar.
-  for (const stage of ['build', 'test', 'migrate', 'release']) {
-    await expect(card.locator(`[data-stage="${stage}"]`)).toBeVisible()
-  }
-
-  // Asserted while the run is still going, because the card is re-read from the
-  // board once the turn settles. Without this, a card that never moved and only
-  // rendered the final state would pass every other assertion here.
-  await expect(card.locator('[data-stage="build"]')).toHaveAttribute('data-stage-status', 'running')
-  await expect(card).toHaveAttribute('data-status', 'running')
-  await expect(card.locator('[data-stage="release"]')).toHaveAttribute(
-    'data-stage-status',
-    'pending',
-  )
-  // Then it advances on its own, without a reload or a new message.
-  await expect(card.locator('[data-stage="build"]')).toHaveAttribute(
-    'data-stage-status',
-    'succeeded',
-    { timeout: 15_000 },
-  )
-
-  await expect(card).toHaveAttribute('data-status', 'succeeded', { timeout: 30_000 })
-  await expect(card.locator('[data-stage="release"]')).toHaveAttribute(
-    'data-stage-status',
-    'succeeded',
-  )
-})
-
-test('cancelling mid-run leaves a cancelled deployment (S-C variant C2)', async ({
-  page,
-  request,
-}) => {
-  await page.goto('/')
-
-  await page.getByTestId('chat-input').fill('Deploy v1.6.0 to staging.')
-  await page.getByTestId('chat-input').press('Enter')
-  await page.getByTestId('approval-card').getByTestId('approval-approve').click()
-
-  const card = page.getByTestId('deployment-progress')
-  await expect(card).toBeVisible()
-  await card.getByTestId('deployment-cancel').click()
-
-  // Cancelled, not failed, and not left mid-flight.
-  await expect(card).toHaveAttribute('data-status', 'cancelled', { timeout: 30_000 })
-  await expect(card.locator('[data-stage-status="running"]')).toHaveCount(0)
-
-  // And the workspace agrees with what the card claims. This is the half that
-  // is easy to get wrong: the run carries on server-side while the card says it
-  // stopped, so assert against the stored deployment rather than the pixels.
-  const stored = await (await request.get('http://localhost:8787/api/workspace')).json()
-  const deployed = stored.deployments.find((entry: { version: string }) => {
-    return entry.version === 'v1.6.0'
-  })
-  expect(deployed.status).toBe('cancelled')
-  expect(deployed.stages.every((stage: { status: string }) => stage.status !== 'running')).toBe(
-    true,
-  )
-  // The run stopped where it got to instead of quietly finishing.
-  expect(deployed.stages.at(-1).status).toBe('skipped')
 })
