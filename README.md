@@ -6,7 +6,10 @@ A project/DevOps copilot over a mock sprint workspace — Vue 3 SPA (Vite 8) + H
 
 ## Status
 
-Early development. Implemented so far: Phases 0–13 of the [16-phase roadmap](docs/roadmap.md) — design docs, SPA shell, streaming chat, real tools, a multi-step agent loop, approval gates on every write, the MCP refactor with a public issues server, the in-stream result cards, the long-running deploy tool with mid-run cancel, a daily reset alarm with a persisted approval ledger, OTLP tracing with trajectory evals for all six demo scenarios, two spend controls guarding the live demo, an accessibility pass gated by axe across every card and both themes, and one browser test per demo scenario that checks the page, the stream and the stored board. **Local-only but deploy-ready**: wrangler configs and deploy scripts are committed; nothing is deployed yet.
+Early development. Implemented so far: Phases 0–13 of the [16-phase roadmap](docs/roadmap.md) — design docs, SPA shell, streaming chat, real tools, a multi-step agent loop, approval gates on every write, the MCP refactor with a public issues server, the in-stream result cards, the long-running deploy tool with mid-run cancel, a daily reset alarm with a persisted approval ledger, OTLP tracing with trajectory evals for all six demo scenarios, two spend controls guarding the live demo, an accessibility pass gated by axe across every card and both themes, one browser test per demo scenario that checks the page, the stream and the stored board, and a live deploy on Cloudflare Workers that redeploys on every push to `main`.
+
+**Live demo:** https://devsprint-web.eleo-666.workers.dev. It currently runs on the scripted mock model, so it answers the [demo scenarios](docs/demo-scenarios.md)' prompts, not free-form questions.
+**Public MCP server** (scenario S-F): `https://devsprint-mcp-issues.eleo-666.workers.dev/mcp`. Add it to Claude Desktop or Cursor as a remote Streamable HTTP server, and its writes show up on the demo's board.
 
 ## Architecture at a glance
 

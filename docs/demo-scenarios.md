@@ -9,13 +9,14 @@ the fixed demo clock `WORKSPACE_NOW = 2026-07-01T09:00:00Z`. The original plan g
 (except S-F, which runs in an external MCP host) a one-click scripted-scenario button in the chat
 composer; that button is **not built**, so today a reviewer types the verbatim prompts below.
 
-Current repo status: Phases 0–13 are implemented (local-only but deploy-ready). Every scenario
+Current repo status: Phases 0–14 are implemented and deployed (ADR-0019). Every scenario
 runs end to end against the scripted mock model in two suites that transcribe its "Eval
 assertions" block: the trajectory evals (`apps/api/src/evals/scenarios.eval.test.ts`) and the
 browser specs (`apps/web/e2e/scenarios.spec.ts`), which also assert what the page drew, what the
 browser was streamed and what the workspace Durable Object stored. S-F is driven in the browser
 suite by the stock MCP SDK client standing in for the external host; the scenario as written also
-needs a real host and the deploy its preconditions call for, which is Phase 14.
+needs a real host; its other precondition, the deployed server, is live at
+`https://devsprint-mcp-issues.eleo-666.workers.dev/mcp`.
 
 Expected-UI details that are **not built**, marked where they appear: the composer's scenario
 buttons, the workspace pane's Sprint and Deploys tabs, the release-notes badge, markdown rendering

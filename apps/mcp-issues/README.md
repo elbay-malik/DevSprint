@@ -56,8 +56,10 @@ curl -s -H 'Content-Type: application/json' \
   http://localhost:8788/mcp
 ```
 
-## Not deployed yet
+## Deployed
 
-Scenario S-F's first precondition is a deployed server with a published URL, so the scenario is only
-fully runnable once Phase 14 does the deploy. Everything below that line is verified locally: the
-handshake, `tools/list`, and a `create_issue` whose result shows up in the api Worker's board.
+The public endpoint is `https://devsprint-mcp-issues.eleo-666.workers.dev/mcp` (Streamable HTTP,
+stateless). Add it to any MCP host as a remote server. This is scenario S-F's first precondition.
+It deploys with the rest of the topology (`pnpm deploy:all`, see `apps/api/README.md`). The
+deploy's smoke checks confirm it lists exactly the four issue tools and reads the same board as
+the api. It has no preview URLs, because a preview would write to the production board.

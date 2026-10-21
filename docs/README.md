@@ -3,8 +3,8 @@
 Design documentation for DevSprint Copilot. Start with the product brief, then follow the links
 below.
 
-> **Current repo status:** repo bootstrap + Phases 0–13 are implemented; local-only but
-> deploy-ready (wrangler config committed, no Cloudflare deploy).
+> **Current repo status:** Phases 0–14 are implemented and deployed: the SPA at
+> https://devsprint-web.eleo-666.workers.dev, redeployed on every push to `main` (ADR-0019).
 
 ## Index
 

@@ -263,28 +263,33 @@ pnpm --filter @devsprint/api cf-typegen
 `wrangler types` also reads `.dev.vars`, so run it only when bindings actually change and review
 the diff before committing — it must not bake local secret names into `worker-configuration.d.ts`.
 
-## One-time deploy runbook (not executed yet)
+## Deploying
 
-**The two Workers bind each other, so neither can go first cleanly.** `apps/api` declares a
-service binding to `devsprint-mcp-issues`, and `apps/mcp-issues` declares a Durable Object binding
-with `script_name: devsprint-api`. A first deploy therefore has to break the cycle — deploy the api
-once with the `services` block commented out, then the MCP Worker, then restore the block and
-redeploy. Resolving that properly is Phase 14's job; it is written down here because the runbook
-below reads as if a clean order existed, and it does not.
+Live at `https://devsprint-api.eleo-666.workers.dev` (ADR-0019). The whole topology deploys with one
+command from the repo root, first time or any time after:
 
-1. `pnpm dlx wrangler login`
-2. `pnpm --filter @devsprint/api exec wrangler secret put GROQ_API_KEY` (and/or
-   `GOOGLE_GENERATIVE_AI_API_KEY`)
-3. `pnpm --filter @devsprint/api exec wrangler secret put TOOL_APPROVAL_SECRET` — **not optional.**
-   Without it the Worker signs approvals with a random per-isolate secret, so every approval stops
-   verifying the moment the isolate recycles.
-4. `pnpm --filter @devsprint/api deploy` (first pass, `services` commented out) — note the URL
-5. `pnpm --filter @devsprint/mcp-issues deploy` — the public MCP endpoint, and the other half of
-   scenario S-F
-6. Restore the `services` block in `apps/api/wrangler.jsonc` and redeploy the api
-7. Set `VITE_API_URL` in `apps/web/.env.production` to the api URL
-8. `pnpm --filter @devsprint/web deploy` — note the printed web URL
-9. Update `CORS_ORIGIN` in `apps/api/wrangler.jsonc` (or via a dashboard env override) to the
-   web URL and redeploy the api
+```sh
+pnpm deploy:all
+```
 
-CI never deploys; `pnpm build` runs `wrangler deploy --dry-run` which needs no Cloudflare auth.
+`scripts/deploy.ts` builds the SPA, deploys the api, MCP and web Workers in the one order that
+works, and ends with `scripts/smoke.ts` against the live URLs. The api and `apps/mcp-issues` bind
+each other, so on a **first** deploy it breaks the cycle itself: the api goes out once without its
+service binding, then the MCP Worker, then the api again. It also generates `TOOL_APPROVAL_SECRET`
+whenever the api lacks one, through a temp file, never printed. That secret is **not optional**:
+without it every isolate signs approvals with its own random key.
+
+Push to `main` runs the same script in CI once the checks and e2e jobs pass. Locally it uses your
+`wrangler login`; CI uses the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repo secrets.
+`pnpm smoke` re-runs the read-only checks at any time.
+
+The deployed values live in `wrangler.jsonc` `vars`. `MODEL_PROVIDER` is `mock` until provider
+keys are set:
+
+```sh
+pnpm --filter @devsprint/api exec wrangler secret put GROQ_API_KEY
+pnpm --filter @devsprint/api exec wrangler secret put GOOGLE_GENERATIVE_AI_API_KEY
+```
+
+Then change `MODEL_PROVIDER` to `auto` in `wrangler.jsonc` and merge. That last step is a
+deliberate, reviewable change, not a dashboard toggle.

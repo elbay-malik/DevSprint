@@ -85,3 +85,14 @@ runs with `workers: 1`.
 - [ADR-0014](0014-daily-reset-alarm-and-a-persisted-approval-ledger.md) — the single shared
   workspace that makes the e2e suite serial
 - [docs/roadmap.md](../roadmap.md) — Phase 12
+
+## Correction — 2026-10-21 (Phase 14)
+
+The scores above were not measured against "the production build with the api running", as the
+context section says. That build had no `VITE_API_URL`, so its board fetch went to the preview
+server, failed quietly, and fell back to seed data. Measured against the deployed site (ADR-0019),
+which really does talk to its api, Lighthouse scores 100 / 100 / 100 / 100 on both mobile and
+desktop, median of three runs. The `lighthouse` script now targets the live URL by default.
+Separately, the intermittent `NO_FCP` this ADR retried around was an incompatibility between
+Lighthouse 13.5 and Playwright 1.61's Chromium. Against the live site it failed every time, and it
+went away with Playwright 1.64.0.

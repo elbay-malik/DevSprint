@@ -39,7 +39,7 @@ Vue 3 (3.6-track) SPA (Vite 8, shadcn-vue) in `apps/web` → Hono on Cloudflare 
 `apps/api` running an AI SDK v6 ToolLoopAgent (Groq primary / Gemini Flash fallback), sharing
 types and fixtures via `packages/shared` → later an MCP client to 2–3 custom MCP servers on
 Workers (Phase 6), one publicly exposed to Claude Desktop/Cursor. The SPA ships as a Workers
-Static Assets (assets-only Worker) deploy; this pass is local-only but deploy-ready.
+Static Assets (assets-only Worker) deploy, live since Phase 14 (ADR-0019).
 
 ## Non-goals
 
