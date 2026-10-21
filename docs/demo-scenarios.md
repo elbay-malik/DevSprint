@@ -5,20 +5,25 @@ trajectory-eval suite and the Phase 13 Playwright E2E spec: each "eval assertion
 meant to be transcribed 1:1 into eval checks and E2E expectations, not reinterpreted.
 
 All scenarios run against the deterministic seed defined in [domain-model.md](./domain-model.md) at
-the fixed demo clock `WORKSPACE_NOW = 2026-07-01T09:00:00Z`. Each scenario (except S-F, which runs
-in an external MCP host) will get a one-click scripted-scenario button in the chat composer, so a
-reviewer can run a full demo without free-typing prompts — this also acts as spend control on the
-model budget.
+the fixed demo clock `WORKSPACE_NOW = 2026-07-01T09:00:00Z`. The original plan gave each scenario
+(except S-F, which runs in an external MCP host) a one-click scripted-scenario button in the chat
+composer; that button is **not built**, so today a reviewer types the verbatim prompts below.
 
-Current repo status: repo bootstrap + Phases 0–9 are implemented (local-only but deploy-ready).
-All six read/rich-data tools, all four gated writes, the MCP refactor and the rich in-stream cards
-are built, so S-A through S-E run end to end today against the scripted mock model — which is what
-CI and the Playwright suite use, so the scenarios are exercised rather than merely described.
-S-F's tools, writes and shared workspace are verified locally against `apps/mcp-issues`; the
-scenario as written also needs an external MCP host and the deploy its preconditions call for,
-which is Phase 14. Two expected-UI details below are still unbuilt and are marked where they
-appear: the Deploys tab and the release-notes badge in the workspace pane. The "first fully
-runnable phase" field on each scenario says when it lights up; see [roadmap.md](./roadmap.md).
+Current repo status: Phases 0–13 are implemented (local-only but deploy-ready). Every scenario
+runs end to end against the scripted mock model in two suites that transcribe its "Eval
+assertions" block: the trajectory evals (`apps/api/src/evals/scenarios.eval.test.ts`) and the
+browser specs (`apps/web/e2e/scenarios.spec.ts`), which also assert what the page drew, what the
+browser was streamed and what the workspace Durable Object stored. S-F is driven in the browser
+suite by the stock MCP SDK client standing in for the external host; the scenario as written also
+needs a real host and the deploy its preconditions call for, which is Phase 14.
+
+Expected-UI details that are **not built**, marked where they appear: the composer's scenario
+buttons, the workspace pane's Sprint and Deploys tabs, the release-notes badge, markdown rendering
+of chat text (S-A step 4: text is shown as plain text, on purpose — ADR-0016 keeps `v-html` out of
+the chat, and the draft itself is readable in the diff card), and a distinct "interrupted" state
+for the stage a cancel lands in (S-C C2: that stage reads `skipped`, the same as an unreached one).
+The "first fully runnable phase" field on each scenario says when it lit up; see
+[roadmap.md](./roadmap.md).
 
 Conventions used in the step tables:
 
@@ -26,7 +31,8 @@ Conventions used in the step tables:
 - "Stream parts" are described generically (text, tool call/result, approval request part,
   progress data parts) — the exact AI SDK part type names are an implementation detail of Phase 5.
 - "Workspace pane" is the left pane (five-column board: Todo / In Progress / In Review / Blocked /
-  Done, plus Sprint and Deploys tabs); "chat pane" is the right pane. See
+  Done, with the backlog below it; the Sprint and Deploys tabs are not built); "chat pane" is the
+  right pane. See
   [wireframes.md](./wireframes.md).
 
 ---
@@ -47,7 +53,7 @@ Conventions used in the step tables:
 | 1    | User  | "Summarize Sprint 12 and draft release notes for v1.5.0." | —                                                              | —                        | Chat: user message appears                                                                                                            |
 | 2    | Agent | Reads sprint health                                       | `get_sprint_status({ sprintId: 'sprint-12' })`                 | tool call + result       | Chat: tool chip; streamed summary text (8/31 points done, DS-11 blocked)                                                              |
 | 3    | Agent | Lists completed work                                      | `list_issues({ sprintId: 'sprint-12', status: 'done' })`       | tool call + result       | Chat: IssueTable with DS-5, DS-6                                                                                                      |
-| 4    | Agent | Composes v1.5.0 draft markdown from DS-5/DS-6 (no tool)   | —                                                              | text                     | Chat: draft streams as markdown                                                                                                       |
+| 4    | Agent | Composes v1.5.0 draft markdown from DS-5/DS-6 (no tool)   | —                                                              | text                     | Chat: draft streams as text (plain, not rendered markdown — see the status note above)                                                |
 | 5    | Agent | Diffs draft vs last published                             | `diff_release_notes({ draftMarkdown, baseVersion: 'v1.4.2' })` | tool call + result       | Chat: ReleaseNotesDiff card, before/after vs rn-1                                                                                     |
 | 6    | User  | "Looks good, save it."                                    | —                                                              | —                        | Chat: user message                                                                                                                    |
 | 7    | Agent | Requests the gated save                                   | `create_release_notes({ version: 'v1.5.0', markdown })`        | approval request part    | Chat: ApprovalCard (pending)                                                                                                          |
@@ -132,7 +138,7 @@ Conventions used in the step tables:
 
 | Step | Actor                                                                           | Action or prompt (verbatim)                                          | Expected tool call      | Expected stream parts                          | Expected UI (workspace / chat)                                              |
 | ---- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------- | ---------------------------------------------- | --------------------------------------------------------------------------- |
-| C2-1 | Steps 1-4 as above, then user clicks Cancel on the card during the 'test' stage | `POST /api/deployments/:id/cancel`                                   | —                       | (turn keeps streaming)                         | Chat: DeploymentProgressCard shows 'test' interrupted                       |
+| C2-1 | Steps 1-4 as above, then user clicks Cancel on the card during the 'test' stage | `POST /api/deployments/:id/cancel`                                   | —                       | (turn keeps streaming)                         | Chat: DeploymentProgressCard shows cancelled; 'test' and later read skipped |
 | C2-2 | System                                                                          | The deploy loop reads the cancel from its next stage write and stops | (same call, ends early) | final preliminary result, then the tool result | Workspace + card: deployment status `cancelled`, unreached stages `skipped` |
 
 **Success criteria**
@@ -166,11 +172,12 @@ Conventions used in the step tables:
 - **Preconditions:** fresh seed at `WORKSPACE_NOW` (2026-07-01T09:00:00Z): Sprint 12 has 31
   committed points, 8 done — slightly behind the ideal line; DS-11 is blocked.
 
-| Step | Actor | Action or prompt (verbatim)                    | Expected tool call                        | Expected stream parts | Expected UI (workspace / chat)                                                                                               |
-| ---- | ----- | ---------------------------------------------- | ----------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| 1    | User  | "Is Sprint 12 on track? Show me the burndown." | —                                         | —                     | Chat: user message                                                                                                           |
-| 2    | Agent | Fetches the burndown series                    | `get_burndown({ sprintId: 'sprint-12' })` | tool call + result    | Chat: BurndownChart card — remaining vs ideal lines over the sprint's 14 calendar days                                       |
-| 3    | Agent | Narrates the chart                             | —                                         | final text            | Chat: states the sprint is slightly behind ideal (8/31 points done at 2026-07-01) and names DS-11 (blocked) as the main risk |
+| Step | Actor | Action or prompt (verbatim)                    | Expected tool call                                          | Expected stream parts | Expected UI (workspace / chat)                                                                                               |
+| ---- | ----- | ---------------------------------------------- | ----------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 1    | User  | "Is Sprint 12 on track? Show me the burndown." | —                                                           | —                     | Chat: user message                                                                                                           |
+| 2    | Agent | Fetches the burndown series                    | `get_burndown({ sprintId: 'sprint-12' })`                   | tool call + result    | Chat: BurndownChart card — remaining vs ideal lines over the sprint's 14 calendar days                                       |
+| 2b   | Agent | Reads the blockers the risk is named from      | `list_issues({ sprintId: 'sprint-12', status: 'blocked' })` | tool call + result    | Chat: IssueTable with DS-11. The series carries no issue data, so naming DS-11 without this read would be ungrounded         |
+| 3    | Agent | Narrates the chart                             | —                                                           | final text            | Chat: states the sprint is slightly behind ideal (8/31 points done at 2026-07-01) and names DS-11 (blocked) as the main risk |
 
 **Success criteria**
 
@@ -234,15 +241,15 @@ Conventions used in the step tables:
   open in a browser alongside the external host. This scenario has no composer button — it is
   driven from the external host.
 
-| Step | Actor                         | Action or prompt (verbatim)                                                                                                                   | Expected tool call                                                                                                  | Expected stream parts | Expected UI (workspace / chat)                                                      |
-| ---- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------- | ----------------------------------------------------------------------------------- |
-| 1    | Operator                      | Copies the public issues MCP server URL (Streamable HTTP) from the README and adds it to Claude Desktop (or Cursor) as a remote MCP server    | —                                                                                                                   | —                     | Host: server connected                                                              |
-| 2    | Host                          | Lists the server's tools                                                                                                                      | (MCP tools/list)                                                                                                    | —                     | Host: shows `list_issues`, `search_issues`, `create_issue`, `update_issue_status`   |
-| 3    | Operator                      | In the external host: "Create a DevSprint issue titled \"Add CSV export progress indicator\", type feature, medium priority, in the backlog." | —                                                                                                                   | —                     | Host: prompt sent                                                                   |
-| 4    | Host                          | Requests the write; shows its own tool-permission prompt (this replaces our ApprovalCard; server-side validation still applies)               | `create_issue({ title: 'Add CSV export progress indicator', type: 'feature', priority: 'medium', sprintId: null })` | — (host-native UI)    | Host: permission prompt → allow                                                     |
-| 5    | Server                        | Executes the validated write                                                                                                                  | (same call)                                                                                                         | —                     | Host: tool result with the new issue DS-14                                          |
-| 6    | Operator                      | Switches to the DevSprint SPA                                                                                                                 | —                                                                                                                   | —                     | Workspace: new backlog issue DS-14 visible on the board                             |
-| 7    | Operator (optional follow-up) | In the external host: "Move DS-14 to in progress."                                                                                            | `update_issue_status({ issueKey: 'DS-14', status: 'in_progress' })`                                                 | — (host-native UI)    | Host: permission prompt → allow; workspace: DS-14 appears in the In Progress column |
+| Step | Actor                         | Action or prompt (verbatim)                                                                                                                   | Expected tool call                                                                                                  | Expected stream parts | Expected UI (workspace / chat)                                                     |
+| ---- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------- |
+| 1    | Operator                      | Copies the public issues MCP server URL (Streamable HTTP) from the README and adds it to Claude Desktop (or Cursor) as a remote MCP server    | —                                                                                                                   | —                     | Host: server connected                                                             |
+| 2    | Host                          | Lists the server's tools                                                                                                                      | (MCP tools/list)                                                                                                    | —                     | Host: shows `list_issues`, `search_issues`, `create_issue`, `update_issue_status`  |
+| 3    | Operator                      | In the external host: "Create a DevSprint issue titled \"Add CSV export progress indicator\", type feature, medium priority, in the backlog." | —                                                                                                                   | —                     | Host: prompt sent                                                                  |
+| 4    | Host                          | Requests the write; shows its own tool-permission prompt (this replaces our ApprovalCard; server-side validation still applies)               | `create_issue({ title: 'Add CSV export progress indicator', type: 'feature', priority: 'medium', sprintId: null })` | — (host-native UI)    | Host: permission prompt → allow                                                    |
+| 5    | Server                        | Executes the validated write                                                                                                                  | (same call)                                                                                                         | —                     | Host: tool result with the new issue DS-14                                         |
+| 6    | Operator                      | Switches to the DevSprint SPA                                                                                                                 | —                                                                                                                   | —                     | Workspace: new backlog issue DS-14 visible on the board                            |
+| 7    | Operator (optional follow-up) | In the external host: "Move DS-14 to in progress."                                                                                            | `update_issue_status({ issueKey: 'DS-14', status: 'in_progress' })`                                                 | — (host-native UI)    | Host: permission prompt → allow; workspace: DS-14's backlog card reads In progress |
 
 **Success criteria**
 
@@ -269,7 +276,7 @@ scenario.
 
 | Tool                   | S-A | S-B | S-C | S-D | S-E | S-F |
 | ---------------------- | --- | --- | --- | --- | --- | --- |
-| list_issues            | x   | x   |     |     |     |     |
+| list_issues            | x   | x   |     | x   |     |     |
 | search_issues          |     |     |     |     | x   |     |
 | get_sprint_status      | x   |     |     |     |     |     |
 | get_deployment_history |     |     | x   |     |     |     |
@@ -288,7 +295,7 @@ but are not required by the script; `update_issue_status` is exercised by the op
 
 | Component              | S-A | S-B | S-C | S-D | S-E | S-F                          |
 | ---------------------- | --- | --- | --- | --- | --- | ---------------------------- |
-| IssueTable             | x   | x   |     |     | x   |                              |
+| IssueTable             | x   | x   |     | x   | x   |                              |
 | BurndownChart          |     |     |     | x   |     |                              |
 | ReleaseNotesDiff       | x   |     |     |     |     |                              |
 | DeploymentProgressCard |     |     | x   |     |     |                              |
@@ -297,4 +304,5 @@ but are not required by the script; `update_issue_status` is exercised by the op
 
 S-F exercises no in-stream SPA cards — approval happens in the external host's own permission
 prompt — but the SPA's workspace board is the observed surface (DS-14 appears in the backlog and,
-with the optional follow-up, in the In Progress column of the five-column board).
+with the optional follow-up, still in the backlog with its status reading In progress — a backlog
+issue has no sprint, so it never enters the sprint's five columns).
