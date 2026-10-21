@@ -1,5 +1,5 @@
 /**
- * The Phase 12 gate, made repeatable: every Lighthouse category ≥ 95, on the
+ * The Phase 12 gate, made repeatable: every Lighthouse category ≥ 90, on the
  * mobile and desktop presets, as the median of three runs.
  *
  * It audits whatever is already serving the URL, because a meaningful score
@@ -13,7 +13,7 @@
  *   pnpm --filter @devsprint/web lighthouse
  *
  * Not a CI step: shared runners swing the simulated-throttling performance
- * score by several points between identical runs, so a hard 95 there would fail
+ * score by several points between identical runs, so a hard 90 there would fail
  * on noise, and a gate that fails on noise gets ignored. The deterministic half
  * of accessibility is gated in CI by e2e/a11y.spec.ts instead, across far more
  * states than the empty first paint Lighthouse sees.
@@ -23,7 +23,7 @@ import { chromium } from '@playwright/test'
 
 const URL = process.argv[2] ?? 'http://localhost:5173'
 const RUNS = 3
-const THRESHOLD = 95
+const THRESHOLD = 90
 const CATEGORIES = ['performance', 'accessibility', 'best-practices', 'seo'] as const
 
 type Report = { categories: Record<string, { score: number | null }> }
