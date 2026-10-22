@@ -1,6 +1,8 @@
 /**
- * Model routing per ADR-0005: Groq `llama-3.3-70b-versatile` primary, Gemini
- * Flash fallback, selected from the Worker env. With no keys at all the
+ * Model routing per ADR-0005: Groq primary, Gemini Flash fallback, selected
+ * from the Worker env. The Groq model is `openai/gpt-oss-120b`: Groq retired
+ * `llama-3.3-70b-versatile`, and gpt-oss beat the one other tool-calling model
+ * it offers on the live scenario evals (ADR-0021). With no keys at all the
  * scripted mock keeps local dev and CI running end-to-end. API keys are read
  * here and passed straight to the provider factories — never logged.
  */
@@ -20,8 +22,8 @@ export type ModelEnv = Pick<
 import { withFallback } from './fallback-model'
 import { createMockModel } from './mock-model'
 
-export const DEFAULT_GROQ_MODEL = 'llama-3.3-70b-versatile'
-export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
+export const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-120b'
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash'
 
 const MODEL_PROVIDERS = ['auto', 'groq', 'gemini', 'mock'] as const
 export type ModelProvider = (typeof MODEL_PROVIDERS)[number]

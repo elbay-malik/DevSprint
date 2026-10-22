@@ -2,9 +2,9 @@
 # With no keys set the api falls back to a scripted mock model, so the whole
 # app still runs end to end without spending provider quota.
 
-# auto | groq | gemini | mock. wrangler.jsonc sets `mock`, because that is what
-# the deployed demo runs; to use the keys below locally, set `auto` here —
-# .dev.vars overrides wrangler.jsonc's vars under `wrangler dev`.
+# auto | groq | gemini | mock. wrangler.jsonc sets `auto`, which uses whichever
+# keys are present and falls back to the scripted mock when there are none —
+# so a fresh clone runs on the mock, and adding a key below switches it over.
 # MODEL_PROVIDER=auto
 
 # Primary provider (ADR-0005). https://console.groq.com/keys
@@ -14,8 +14,8 @@
 # GOOGLE_GENERATIVE_AI_API_KEY=
 
 # Model id overrides — defaults shown.
-# GROQ_MODEL=llama-3.3-70b-versatile
-# GEMINI_MODEL=gemini-2.5-flash
+# GROQ_MODEL=openai/gpt-oss-120b
+# GEMINI_MODEL=gemini-3.8-flash
 
 # Signs tool approvals so a forged one cannot execute a write. Unset falls back
 # to a random per-isolate secret (fine locally, set a real one before deploying).

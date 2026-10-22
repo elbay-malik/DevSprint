@@ -19,10 +19,10 @@
   "vars": {
     // The SPA and its PR preview aliases — see src/cors.ts for the matching.
     "CORS_ORIGIN": "https://devsprint-web.eleo-666.workers.dev,https://*-devsprint-web.eleo-666.workers.dev",
-    // The live demo starts on the scripted model: it spends nothing and can
-    // only answer the scripted prompts. Switching to `auto` (with the provider
-    // keys set as secrets) is a deliberate, reviewable one-line change.
-    "MODEL_PROVIDER": "mock",
+    // Groq first, Gemini when Groq fails or rate-limits (ADR-0005, ADR-0021).
+    // The keys are Worker secrets. `mock` puts the demo back on the scripted
+    // model, which spends nothing.
+    "MODEL_PROVIDER": "auto",
   },
   // Per-IP throttle on the chat route (ADR-0016). 60/minute is far above any
   // human session and far below what a crawler does, and the binding's own
