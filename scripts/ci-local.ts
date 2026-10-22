@@ -75,6 +75,19 @@ async function portFree(port: number): Promise<boolean> {
   return (await tryListen('127.0.0.1')) && (await tryListen('::1'))
 }
 
+/** A port nothing is listening on, from the OS. */
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer()
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      const port = typeof address === 'object' && address !== null ? address.port : 0
+      server.close(() => resolve(port))
+    })
+  })
+}
+
 function holderOf(port: number): string {
   const result = spawnSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8' })
   return result.stdout.split('\n').slice(1).filter(Boolean).join('\n    ') || 'unknown process'
@@ -146,9 +159,11 @@ async function waitFor(url: string, timeoutMs: number): Promise<boolean> {
 }
 
 async function startServers(): Promise<boolean> {
-  // 9229/9230 are the two wrangler inspectors (apps/mcp-issues moves to 9230).
+  // Only the ports the tests talk to must be free. Each wrangler dev also opens
+  // a debugger (9229, and 9230 for apps/mcp-issues), which other Wrangler
+  // projects on the same machine often hold; those get a free port instead.
   const busy: string[] = []
-  for (const port of [8787, 8788, 5173, 9229, 9230]) {
+  for (const port of [8787, 8788, 5173]) {
     if (!(await portFree(port))) busy.push(`  :${port} is held by\n    ${holderOf(port)}`)
   }
   if (busy.length > 0) {
@@ -159,7 +174,10 @@ async function startServers(): Promise<boolean> {
     process.stdout.write(`▶ start ${server.name} `)
     const log = logFile(`server-${server.name}`)
     const out = createWriteStream(log)
-    const child = spawn(server.command, { cwd: WEB, env: ENV, shell: true, detached: true })
+    const command = server.command.includes('wrangler dev')
+      ? `${server.command} --inspector-port ${await freePort()}`
+      : server.command
+    const child = spawn(command, { cwd: WEB, env: ENV, shell: true, detached: true })
     child.stdout?.pipe(out)
     child.stderr?.pipe(out)
     started.push(child)
