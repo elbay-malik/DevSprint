@@ -34,6 +34,26 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toMatch(/denied/i)
   })
 
+  it('asks for plain text, because the chat does not render markdown', () => {
+    // Chat text is shown as-is (no v-html, ADR-0016). The prompt used to ask
+    // for markdown, so a live model's **bold** and pipe tables reached
+    // visitors as raw characters; the scripted mock never wrote any.
+    expect(prompt).toMatch(/plain text/)
+    expect(prompt).not.toMatch(/in markdown\./)
+  })
+
+  it('has "on track?" name the blockers, which the burndown cannot (S-D)', () => {
+    expect(prompt).toMatch(/on track.*blocked issues/s)
+  })
+
+  it('separates drafting release notes from saving them (S-A)', () => {
+    // create_release_notes saves a *draft*, so "draft release notes for v1.5.0"
+    // read as "call create_release_notes" to a live model, which skipped the
+    // diff the scenario turns on. The scripted mock never read the words.
+    expect(prompt).toMatch(/Drafting release notes means .*diff_release_notes/s)
+    expect(prompt).toMatch(/create_release_notes only once the user asks to save/)
+  })
+
   it('offers the deploy tool rather than still calling it unavailable', () => {
     // Same trap as the writes above, one phase later: the Phase 4 prompt said
     // deploying was not available yet. Left in place, a real model would refuse

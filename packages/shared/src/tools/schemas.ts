@@ -48,13 +48,13 @@ export const TOOL_DESCRIPTIONS: Record<ReadToolName | WriteToolName, string> = {
   get_burndown:
     'Use when the user asks whether a sprint is on track, asks about trend/velocity, or requests a burndown or progress chart.',
   diff_release_notes:
-    'Use when the user wants to compare draft release notes against the last published version before saving or publishing.',
+    'Use when the user asks to draft or write release notes, or to compare a draft with the last published version: compose the markdown yourself (from done issues) and pass it in, so the user sees the change before anything is saved.',
   create_issue:
     'Use when the user asks to add, file, or log a new issue, bug, task, or spike in the workspace.',
   update_issue_status:
     'Use when the user asks to move, close, block, unblock, or reopen an existing issue (any status change).',
   create_release_notes:
-    'Use when the user asks to draft or save release notes for a version. The agent composes the markdown itself (from done issues) and passes it in.',
+    'Use when the user asks to save or publish release notes they have already been shown — not to draft them, which is diff_release_notes. Pass the markdown the user saw.',
   run_deployment:
     'Use when the user asks to deploy, ship, release, or roll out a version to an environment.',
 }
