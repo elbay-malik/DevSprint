@@ -19,9 +19,9 @@ needs a real host; its other precondition, the deployed server, is live at
 `https://devsprint-mcp-issues.eleo-666.workers.dev/mcp`.
 
 Expected-UI details that are **not built**, marked where they appear: the composer's scenario
-buttons, the workspace pane's Sprint and Deploys tabs, the release-notes badge, markdown rendering
-of chat text (S-A step 4: text is shown as plain text, on purpose — ADR-0016 keeps `v-html` out of
-the chat, and the draft itself is readable in the diff card), and a distinct "interrupted" state
+buttons, the workspace pane's Sprint and Deploys tabs, the release-notes badge, full markdown in
+chat text (S-A step 4: a safe subset renders since ADR-0022, without `v-html` and without links,
+and the draft itself is readable in the diff card), and a distinct "interrupted" state
 for the stage a cancel lands in (S-C C2: that stage reads `skipped`, the same as an unreached one).
 The "first fully runnable phase" field on each scenario says when it lit up; see
 [roadmap.md](./roadmap.md).

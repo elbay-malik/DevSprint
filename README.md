@@ -101,8 +101,9 @@ tests are checked as well as run:
 - **Unlimited use of the live model.** It runs on free tiers. A per-IP rate limit and a daily
   token cap keep one visitor from spending it for everyone, and once the cap is reached the demo
   says so instead of failing.
-- **Markdown in chat.** Assistant text is shown as plain text on purpose: there's no `v-html` in
-  the chat, as one layer of the injection posture.
+- **Full markdown in chat.** Answers render bold, lists, tables and code, but never links, and
+  never through `v-html`. A model repeating planted board text can't produce markup or a clickable
+  URL ([ADR-0022](docs/adr/0022-a-safe-markdown-subset-in-chat.md)).
 - **A few planned UI pieces were never built:** the composer's one-click scenario buttons, the
   Sprint and Deploys tabs, a release-notes badge, and a distinct "interrupted" stage state. The
   [demo scenarios doc](docs/demo-scenarios.md) names each one, rather than describing them as if

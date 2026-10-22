@@ -52,3 +52,9 @@ with charts on Unovis and toasts on Sonner.
 Amended by ADR-0012: charts are inline SVG, and Unovis was never installed. Streaming markdown
 rendering was not adopted either. Chat text is plain text, and ADR-0016 keeps `v-html` out of the
 chat. The rest of the stack stands: shadcn-vue on Reka UI v2 with Tailwind v4, and Sonner.
+
+## Status note — 2026-10-22 (chat formatting)
+
+Correction to the note above: chat text now renders a safe markdown subset (ADR-0022). It is our
+own small parser, rendered by interpolation, with no `v-html` and no links. No streaming-markdown
+library was adopted.

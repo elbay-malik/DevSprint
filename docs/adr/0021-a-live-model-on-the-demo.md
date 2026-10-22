@@ -116,3 +116,8 @@ The binding constraint is the fallback's free quota. Google's own error reports
 it up. Rate limits are per Google Cloud project and are listed at aistudio.google.com/rate-limit,
 not in the public docs. A model with a larger free daily quota, or billing on the project, is the
 remedy. The repo can't decide either, because both depend on the account.
+
+## Status note — 2026-10-22 (formatting)
+
+The plain-text prompt rule did not hold. On the live site, gpt-oss-120b still wrote `**bold**` and
+bullets. ADR-0022 renders that safe subset instead, and the prompt now describes what renders.
