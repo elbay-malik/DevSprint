@@ -139,18 +139,18 @@ daily cap that the mock never counts against.
 
 ### Scripts
 
-| Script              | What it does                                        |
-| ------------------- | --------------------------------------------------- |
-| `pnpm dev`          | all package dev servers in parallel                 |
-| `pnpm lint`         | ESLint (single root flat config)                    |
-| `pnpm format:check` | Prettier check                                      |
-| `pnpm typecheck`    | recursive per-package typecheck                     |
-| `pnpm test`         | recursive Vitest                                    |
-| `pnpm eval`         | trajectory evals for the 6 demo scenarios           |
-| `pnpm build`        | recursive builds (web: vite; api: wrangler dry-run) |
-| `pnpm ci:local`     | CI's `checks` and `e2e` jobs, on this machine       |
-| `pnpm deploy:all`   | deploy all three Workers, then smoke-check them     |
-| `pnpm smoke`        | read-only checks against the live deployment        |
+| Script              | What it does                                                          |
+| ------------------- | --------------------------------------------------------------------- |
+| `pnpm dev`          | all package dev servers in parallel                                   |
+| `pnpm lint`         | ESLint (single root flat config)                                      |
+| `pnpm format:check` | Prettier check                                                        |
+| `pnpm typecheck`    | recursive per-package typecheck                                       |
+| `pnpm test`         | recursive Vitest                                                      |
+| `pnpm eval`         | trajectory evals for the 6 demo scenarios                             |
+| `pnpm build`        | recursive builds (web: vite; api: wrangler dry-run)                   |
+| `pnpm ci:local`     | CI's `checks` and `e2e` jobs, on this machine                         |
+| `pnpm deploy:all`   | deploy all three Workers, then smoke-check them (`--plan` to preview) |
+| `pnpm smoke`        | read-only checks against the live deployment                          |
 
 Browser tests live in `apps/web`:
 

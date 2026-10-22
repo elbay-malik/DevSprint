@@ -132,3 +132,17 @@ Corrections and one caveat:
 - **"Chromium 1248" is a Playwright browser revision, not a Chrome version.** Playwright 1.64.0
   ships Chrome 156, against 1.61's Chrome 149.
 - **The smoke checks also cover the SPA shell, `robots.txt` and api health.**
+
+## Status note — 2026-10-22 (deploy order)
+
+Every deploy after the first now goes **MCP Worker first, then api**; it used to be api first. A
+change that spans both Workers runs half old, half new for a few seconds in either order, because
+each calls into the other at runtime. The order decides something else: whether the deploy can be
+refused halfway. The MCP Worker binds a Durable Object class that already exists, so the api's state
+cannot block it. The api binds an MCP entrypoint that may exist only in the new MCP code, which is
+exactly what ADR-0020's `Internal` entrypoint was. That deploy had to be run by hand, in this
+order.
+
+The exception is a change that adds a new Durable Object class the MCP Worker binds. Deploy the api
+first, by hand. `pnpm deploy:all --plan` prints the order a deploy would take without deploying
+anything.

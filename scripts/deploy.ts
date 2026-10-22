@@ -4,12 +4,24 @@
  *
  *   pnpm deploy:all
  *
+ *   pnpm deploy:all --plan     print what it would do, deploy nothing
+ *
  * The two Workers depend on each other: apps/api service-binds
- * devsprint-mcp-issues, and apps/mcp-issues binds the WorkspaceDO class that
- * devsprint-api defines. The very first deploy breaks that cycle by deploying
- * the api once without its service binding (it falls back to its local copy
- * of the issue tools until the MCP Worker exists), then the MCP Worker, then
- * the api again with the binding. Every later deploy is a straight run.
+ * devsprint-mcp-issues (its `Internal` entrypoint, ADR-0020), and
+ * apps/mcp-issues binds the WorkspaceDO class that devsprint-api defines. The
+ * very first deploy breaks that cycle by deploying the api once without its
+ * service binding (it falls back to its local copy of the issue tools until the
+ * MCP Worker exists), then the MCP Worker, then the api again with the binding.
+ *
+ * Every later deploy goes MCP Worker first, then api. Both orders leave a few
+ * seconds where a change spanning both Workers runs half old, half new, because
+ * each calls into the other at runtime. What the order decides is whether the
+ * deploy can be refused halfway: the MCP Worker binds a Durable Object class
+ * that already exists, so nothing about the api can block it, whereas the api
+ * binds an MCP entrypoint that may only exist in the new MCP code (exactly what
+ * PR #17 did). The one change this order cannot carry is a *new* Durable Object
+ * class that the MCP Worker binds: that one needs the api deployed first, by
+ * hand, with `pnpm --filter @devsprint/api exec wrangler deploy`.
  *
  * Auth is whatever wrangler already has: `wrangler login` locally,
  * CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in CI.
@@ -93,18 +105,62 @@ function deployApi(options: { bootstrap: boolean; secretsFile: string | undefine
 }
 
 async function main() {
+  const planOnly = process.argv.includes('--plan')
+
   // Built first so a type or build error stops the run before anything ships.
-  must('building the SPA', run('pnpm', ['--filter', '@devsprint/web', 'build']))
+  if (!planOnly) must('building the SPA', run('pnpm', ['--filter', '@devsprint/web', 'build']))
 
   const firstDeploy = !workerExists('devsprint-mcp-issues')
   const apiExists = workerExists('devsprint-api')
-
   // The approval signing secret (ADR-0010) is generated once, here, and never
   // printed. Without it every isolate signs with its own random key, so an
   // approval issued by one would not verify on another.
+  const needsSecret = !apiExists || !apiHasApprovalSecret()
+
+  const steps: Array<{
+    label: string
+    /** Deploys the api, so it can carry the secrets file. */
+    api?: true
+    run: (secretsFile: string | undefined) => void
+  }> = firstDeploy
+    ? [
+        {
+          label: 'api, without its service binding (first deploy only)',
+          api: true,
+          run: (secretsFile) => deployApi({ bootstrap: true, secretsFile }),
+        },
+        {
+          label: 'mcp-issues',
+          run: () => must('deploying mcp-issues', wrangler('mcp-issues', ['deploy'])),
+        },
+        {
+          label: 'api, with its binding',
+          api: true,
+          run: () => deployApi({ bootstrap: false, secretsFile: undefined }),
+        },
+      ]
+    : [
+        {
+          label: 'mcp-issues',
+          run: () => must('deploying mcp-issues', wrangler('mcp-issues', ['deploy'])),
+        },
+        {
+          label: 'api',
+          api: true,
+          run: (secretsFile) => deployApi({ bootstrap: false, secretsFile }),
+        },
+      ]
+  steps.push({ label: 'web', run: () => must('deploying the SPA', wrangler('web', ['deploy'])) })
+
+  console.log(`${firstDeploy ? 'First deploy' : 'Deploy'} plan:`)
+  steps.forEach((step, index) => console.log(`  ${index + 1}. ${step.label}`))
+  console.log(`  then smoke checks${firstDeploy ? ', including the shared-board write' : ''}`)
+  if (needsSecret) console.log('  TOOL_APPROVAL_SECRET will be generated (not shown)')
+  if (planOnly) return
+
   let secretsDir: string | undefined
   let secretsFile: string | undefined
-  if (!apiExists || !apiHasApprovalSecret()) {
+  if (needsSecret) {
     secretsDir = mkdtempSync(join(tmpdir(), 'devsprint-secrets-'))
     secretsFile = join(secretsDir, 'secrets.json')
     writeFileSync(
@@ -112,24 +168,19 @@ async function main() {
       JSON.stringify({ TOOL_APPROVAL_SECRET: randomBytes(32).toString('base64url') }),
       { mode: 0o600 },
     )
-    console.log('Setting TOOL_APPROVAL_SECRET (generated, not shown).')
   }
 
   try {
-    if (firstDeploy) {
-      console.log('First deploy: breaking the api ⇄ mcp-issues binding cycle.')
-      deployApi({ bootstrap: true, secretsFile })
-      must('deploying mcp-issues', wrangler('mcp-issues', ['deploy']))
-      deployApi({ bootstrap: false, secretsFile: undefined })
-    } else {
-      deployApi({ bootstrap: false, secretsFile })
-      must('deploying mcp-issues', wrangler('mcp-issues', ['deploy']))
+    // The secret travels with the first api deploy in the plan; it is additive.
+    let pending = secretsFile
+    for (const step of steps) {
+      const usesSecret = step.api === true && pending !== undefined
+      step.run(usesSecret ? pending : undefined)
+      if (usesSecret) pending = undefined
     }
   } finally {
     if (secretsDir) rmSync(secretsDir, { recursive: true, force: true })
   }
-
-  must('deploying the SPA', wrangler('web', ['deploy']))
 
   const { smoke } = await import('./smoke.ts')
   await smoke({ proveSharedBoard: firstDeploy })
