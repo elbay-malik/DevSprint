@@ -12,6 +12,7 @@ coverage/
 .vite/
 
 # Env & secrets — Vite mode files (.env.development, .env.production) ARE committed
+.env
 .env.local
 .env.*.local
 .dev.vars*
