@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
+import { E2E_SERVERS } from './e2e/servers'
 
 export default defineConfig({
   testDir: './e2e',
@@ -15,34 +16,16 @@ export default defineConfig({
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: { baseURL: 'http://localhost:5173', trace: 'retain-on-failure' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  // Both panes are under test, so all three servers run: the SPA hydrates its
-  // board from the Worker and the composer streams through it. They start in
-  // array order, and the api goes first because it defines the workspace
-  // Durable Object that mcp-issues binds to (apps/mcp-issues/README.md).
-  webServer: [
-    {
-      // `--var MODEL_PROVIDER:mock` pins the scripted model regardless of any
-      // local apps/api/.dev.vars, so e2e stays deterministic, offline and free.
-      // A reused local server is checked for this too (e2e/support.ts).
-      command:
-        'pnpm --filter @devsprint/api exec wrangler dev --var MODEL_PROVIDER:mock --var CORS_ORIGIN:http://localhost:5173',
-      url: 'http://localhost:8787/api/health',
-      reuseExistingServer: !process.env.CI,
-      timeout: 60_000,
-    },
-    {
-      // The agent sources its issue tools from here, so the browser tests
-      // exercise the MCP path rather than the local fallback.
-      command: 'pnpm --filter @devsprint/mcp-issues exec wrangler dev',
-      url: 'http://localhost:8788/health',
-      reuseExistingServer: !process.env.CI,
-      timeout: 60_000,
-    },
-    {
-      command: 'pnpm dev',
-      url: 'http://localhost:5173',
-      reuseExistingServer: !process.env.CI,
-      timeout: 60_000,
-    },
-  ],
+  // Both panes are under test, so all three servers run; e2e/servers.ts
+  // defines them for this file and scripts/ci-local.ts alike. Playwright
+  // starts them in order unless something else already has
+  // (E2E_EXTERNAL_SERVERS=1, set by `pnpm ci:local`).
+  webServer: process.env.E2E_EXTERNAL_SERVERS
+    ? []
+    : E2E_SERVERS.map((server) => ({
+        command: server.command,
+        url: server.url,
+        reuseExistingServer: !process.env.CI,
+        timeout: 60_000,
+      })),
 })
