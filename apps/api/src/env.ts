@@ -5,9 +5,12 @@
  * `wrangler types` run that emits them as `string` stays assignable.
  *
  * Locally these come from apps/api/.dev.vars (see .dev.vars.example); in
- * production from `wrangler secret put`. None of them is a wrangler.jsonc var.
+ * production from `wrangler secret put`. The exception is MODEL_PROVIDER, which
+ * wrangler.jsonc sets for the deployed demo (ADR-0019): it is generated as
+ * required, but the resolver treats an absent value as `auto` and its tests
+ * rely on that, so the optional declaration below replaces the generated one.
  */
-export type AppEnv = Env & {
+export type AppEnv = Omit<Env, 'MODEL_PROVIDER'> & {
   /** Groq API key — primary provider (ADR-0005). */
   GROQ_API_KEY?: string
   /** Google Generative AI key — Gemini Flash fallback (ADR-0005). */
