@@ -48,3 +48,10 @@ revisit at Phase 14.
 - [ADR-0004](0004-hono-on-cloudflare-workers.md) — the API Worker this shape sits alongside
 - [docs/roadmap.md](../roadmap.md) — Phase 14 (CI/CD deploy topology, PR previews)
 - `apps/web/wrangler.jsonc` — the committed assets-only Worker config this ADR matches
+
+## Status note — 2026-10-22
+
+**Deployed 2026-10-21** at `https://devsprint-web.eleo-666.workers.dev` by `pnpm deploy:all`
+(ADR-0019). Pages was not needed for PR previews: a preview is a version of this Worker uploaded
+with `--preview-alias pr-<n>`, running against the production api. The single-Worker consolidation
+left open above was considered in ADR-0019 and declined.

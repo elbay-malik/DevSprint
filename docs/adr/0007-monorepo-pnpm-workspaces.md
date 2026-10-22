@@ -45,3 +45,9 @@ not scaffolded in this pass.
 - [ADR-0002](0002-staged-mcp-adoption.md) — why the `apps/mcp-*` paths exist at all
 - [docs/domain-model.md](../domain-model.md) — the contract `packages/shared` fixtures are
   generated from
+
+## Status note — 2026-10-22
+
+The workspaces are `apps/web`, `apps/api`, `apps/mcp-issues` and `packages/shared`. Only one of the
+reserved MCP apps was built; `apps/mcp-deploys` and `apps/mcp-analytics` never were (ADR-0002's
+note). Root `scripts/` holds the deploy, smoke and local-CI scripts, run directly by Node.

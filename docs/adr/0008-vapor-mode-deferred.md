@@ -1,6 +1,7 @@
 # ADR-0008: Vapor Mode deferred
 
-- Status: Accepted (decision to defer; the experiment itself is deferred to Phase 12)
+- Status: Accepted (decision to defer; the experiment itself is deferred to Phase 12 — gate checked
+  2026-10-21, not met)
 - Date: 2026-07-08
 - Deciders: repo owner (solo project)
 

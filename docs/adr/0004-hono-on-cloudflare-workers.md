@@ -42,3 +42,8 @@ We will run the agent loop as a Hono application on Cloudflare Workers (`apps/ap
 - [ADR-0003](0003-hitl-approval-gates-on-write-tools.md) — server-side enforcement requirement
 - [ADR-0009](0009-workers-static-assets-over-pages.md) — the SPA's Workers Static Assets shape
 - [docs/roadmap.md](../roadmap.md) — Phase 2 (streaming echo) and Phase 14 (deploy topology)
+
+## Status note — 2026-10-22
+
+Deployed at `https://devsprint-api.eleo-666.workers.dev` since 2026-10-21 (ADR-0019). The Phase 10
+OTLP risk flagged above did not hold up (ADR-0015).

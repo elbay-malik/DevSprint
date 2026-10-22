@@ -102,3 +102,15 @@ Smaller fixes the browser tests forced:
 - [ADR-0016](0016-two-spend-controls-and-an-honest-injection-posture.md): why chat text is not
   rendered as markdown
 - [ADR-0017](0017-accessibility-gated-across-states-not-by-lighthouse.md): the single-worker suite
+
+## Status note — 2026-10-22
+
+Corrections to this ADR as written:
+
+- **`mutants.json` was a working file and was never committed,** so "cheap to repeat" overstated
+  it. What persists is the ten unit tests, each named in commit `56f60bb`'s message for the
+  mutation it kills, which keeps the pass reproducible by hand.
+- **"About 1.4 minutes" is the local time;** CI took about 2.2 minutes.
+- **"One browser test per scenario" is seven tests for six,** because C2 is its own test.
+- **The e2e servers are now defined once,** in `apps/web/e2e/servers.ts`, which both
+  `playwright.config.ts` and `pnpm ci:local` use.

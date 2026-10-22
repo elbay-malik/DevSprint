@@ -110,3 +110,11 @@ What Phase 9 actually builds:
 - [ADR-0011](0011-workspace-state-in-a-durable-object.md) — the Durable Object this alarm and
   ledger live in
 - [docs/roadmap.md](../roadmap.md) — Phase 9
+
+## Status note — 2026-10-22
+
+The deploy this ADR waited for happened on 2026-10-21, but whether the alarm fired at the next UTC
+midnight is **still unverified**. The board was also reset by hand several times that day, which
+would mask it, and nothing in the repo records an alarm firing in production. To check it, watch
+`wrangler tail devsprint-api` across a midnight, or look for the reset in Workers Observability,
+and record the result here.

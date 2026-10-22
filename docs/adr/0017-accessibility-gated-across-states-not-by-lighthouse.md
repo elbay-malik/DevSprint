@@ -96,3 +96,12 @@ desktop, median of three runs. The `lighthouse` script now targets the live URL 
 Separately, the intermittent `NO_FCP` this ADR retried around was an incompatibility between
 Lighthouse 13.5 and Playwright 1.61's Chromium. Against the live site it failed every time, and it
 went away with Playwright 1.64.0.
+
+## Status note — 2026-10-22
+
+The "about 1.1 minutes" above was local, before the scenario specs (ADR-0018). The 29-test suite
+takes about 1.4 minutes locally and took 2.2 minutes on CI's last green run.
+
+The `NO_FCP` retry in `apps/web/scripts/lighthouse.ts` is now a vestigial safeguard. Its cause went
+away with Playwright 1.64 (see the correction above), and it still retries only that one
+"nothing was measured" failure, never a low score.

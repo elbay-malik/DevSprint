@@ -113,3 +113,22 @@ the production api.
   measurement above
 - Cloudflare docs: Version URLs (limitations), Previews, Deployment management (Durable Object
   migrations)
+
+## Status note — 2026-10-22
+
+Corrections and one caveat:
+
+- **CI has not deployed yet.** "CI deploys on push to `main`" is configured
+  (`.github/workflows/ci.yml`) but has never run: from 2026-10-22, GitHub Actions refused to start
+  any job over an account billing problem. Both deploys so far ran from a laptop with
+  `pnpm deploy:all`. The merges after that were gated by `pnpm ci:local`, which runs the workflow's
+  own steps. Record the first successful CI deploy here.
+- **The model switch really is one line now.** The smoke check reads the expected
+  `MODEL_PROVIDER` from `apps/api/wrangler.jsonc`; it used to hard-code `mock`, which would have
+  failed the switch.
+- **Only e2e overrides `MODEL_PROVIDER` locally.** `pnpm dev` overrides only `CORS_ORIGIN`.
+- **The CORS matcher is `apps/api/src/cors.ts`,** and its wildcard matches lowercase letters,
+  digits and hyphens. Origins are lowercase.
+- **"Chromium 1248" is a Playwright browser revision, not a Chrome version.** Playwright 1.64.0
+  ships Chrome 156, against 1.61's Chrome 149.
+- **The smoke checks also cover the SPA shell, `robots.txt` and api health.**

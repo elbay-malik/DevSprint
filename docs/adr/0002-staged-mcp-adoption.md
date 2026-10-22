@@ -46,3 +46,19 @@ over Streamable HTTP, with the issues server publicly exposed. Tool definitions 
 - [docs/tool-inventory.md](../tool-inventory.md) — the 10 tools and their future MCP server mapping
 - [docs/demo-scenarios.md](../demo-scenarios.md) — scenario S-F (external MCP host)
 - [ADR-0007](0007-monorepo-pnpm-workspaces.md) — reserved `apps/mcp-*` workspace paths
+
+## Status note — 2026-10-22 (Phase 15)
+
+The staging happened, smaller than planned:
+
+- **One MCP server, not two or three.** Phase 6 built a single server, `apps/mcp-issues`, with the
+  four issue tools. It has been public since 2026-10-21 at
+  `https://devsprint-mcp-issues.eleo-666.workers.dev/mcp` (ADR-0019). The deploys and analytics
+  servers were never built, so those six tools remain plain function calls in `apps/api`.
+- **Vendoring held, the tool did not.** Tool definitions are vendored from our own zod schemas, not
+  through `mcp-to-ai-sdk`, which targets the previous AI SDK major (`apps/api/src/agent/mcp-tools.ts`).
+- **The shared workspace came from ADR-0011.**
+- **The hardening this ADR anticipated is incomplete.** The public server caps input sizes, but it
+  has **no per-IP rate limit**: ADR-0016's limit covers `/api/chat` only. It also runs
+  `create_issue` without an approval gate of ours, because the host owns that prompt. This is an
+  open gap, not a closed one.

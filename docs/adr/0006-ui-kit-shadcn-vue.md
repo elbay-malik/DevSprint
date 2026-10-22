@@ -46,3 +46,9 @@ with charts on Unovis and toasts on Sonner.
 - [docs/wireframes.md](../wireframes.md) — Section 5, component registry
 - https://www.shadcn-vue.com/docs/changelog — Reka UI v2 + Tailwind v4 support
 - https://www.shadcn-vue.com/docs/components/chart — Unovis-based charts
+
+## Status note — 2026-10-22
+
+Amended by ADR-0012: charts are inline SVG, and Unovis was never installed. Streaming markdown
+rendering was not adopted either. Chat text is plain text, and ADR-0016 keeps `v-html` out of the
+chat. The rest of the stack stands: shadcn-vue on Reka UI v2 with Tailwind v4, and Sonner.

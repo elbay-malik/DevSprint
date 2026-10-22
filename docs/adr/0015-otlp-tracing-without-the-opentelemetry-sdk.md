@@ -115,3 +115,14 @@ it just cannot live in CI, because it costs quota and a real model is not determ
 - [docs/demo-scenarios.md](../demo-scenarios.md) — the six scenarios and their eval assertions
 - [ADR-0005](0005-model-routing-groq-primary-gemini-fallback.md) — the scripted mock the evals run against
 - [ADR-0013](0013-deployment-cancel-as-an-api-route.md) — the `waitUntil` plumbing export reuses
+
+## Status note — 2026-10-22
+
+Two figures above drifted:
+
+- `apps/api/src/agent/tracing.ts` is about 260 lines, roughly 190 without comments, not 150.
+- "The same plumbing ADR-0013 added" means the `waitUntil` option `run_deployment` uses. ADR-0013's
+  own text does not mention it.
+
+Live Langfuse ingestion is still unverified: production runs the mock model, with no Langfuse
+keys set.

@@ -111,3 +111,13 @@ no gate covers. It is not a guarantee and is not treated as one.
 - [ADR-0011](0011-workspace-state-in-a-durable-object.md) — the Durable Object the budget lives in
 - [ADR-0014](0014-daily-reset-alarm-and-a-persisted-approval-ledger.md) — reset semantics the budget deliberately departs from
 - [docs/roadmap.md](../roadmap.md) — Phase 11
+
+## Status note — 2026-10-22
+
+"Local dev and CI are unaffected … an unbound limiter is no limiter" is imprecise. `CHAT_RATE_LIMIT`
+is declared in `apps/api/wrangler.jsonc`, so `wrangler dev` and the e2e stack bind a simulated
+60-per-minute limiter too. That rate is far above any test's, which is why nothing trips it. Only
+unit tests run unbound.
+
+A gap this ADR did not cover: the public MCP server has **no per-IP rate limit and no cap on the
+number of issues**, so `create_issue` can be called in a loop without approval (ADR-0002's note).

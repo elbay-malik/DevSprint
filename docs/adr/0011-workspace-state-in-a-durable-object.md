@@ -74,3 +74,15 @@ session state. Conflating the two is the trap this decision exists to avoid.
 - [ADR-0002](0002-staged-mcp-adoption.md) — staged MCP adoption; this is how its Phase 6 lands
 - [docs/demo-scenarios.md](../demo-scenarios.md) — S-F, "same workspace, two clients"
 - [docs/roadmap.md](../roadmap.md) — Phase 9 (persistence) and Phase 14 (deploy topology)
+
+## Status note — 2026-10-22
+
+Three statements above were forward-looking when written:
+
+- **"S-F passes … when deployed":** first true on 2026-10-21. The first deploy's smoke check wrote an
+  issue through MCP and read it back through the api (ADR-0019).
+- **"Suffixing names for PR previews breaks them":** resolved by not previewing the api or the MCP
+  Worker at all. Both set `preview_urls: false`, and previews are the SPA's alone (ADR-0019).
+- **"Storage behaviour is covered by the live smoke rather than by unit tests":** superseded by
+  ADR-0014, which added `apps/api/test/durable-object-state.ts` and unit tests for the object's
+  storage.

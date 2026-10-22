@@ -235,8 +235,8 @@ Conventions used in the step tables:
 - **Goal:** prove the bidirectional MCP story — an external MCP host (Claude Desktop or Cursor)
   connects to the public issues MCP server and performs a write that is immediately visible in the
   DevSprint SPA. Same workspace, two clients.
-- **First fully runnable phase:** Phase 6. (The MCP server apps — apps/mcp-issues, apps/mcp-deploys,
-  apps/mcp-analytics — are reserved for Phase 6 and are not scaffolded in this pass.)
+- **First fully runnable phase:** Phase 6 locally; as written, with a public URL, since the Phase 14
+  deploy. (Only `apps/mcp-issues` was built; the deploys and analytics servers were not.)
 - **Preconditions:** Phase 6 deployed; the public issues MCP server URL (Streamable HTTP) is
   published in the README; fresh seed (highest existing issue key is DS-13); the DevSprint SPA is
   open in a browser alongside the external host. This scenario has no composer button — it is

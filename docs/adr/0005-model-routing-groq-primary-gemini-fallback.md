@@ -41,3 +41,15 @@ reached" state instead of surfacing provider errors.
 
 - [docs/product-brief.md](../product-brief.md) — success criteria and budget
 - [docs/roadmap.md](../roadmap.md) — staged thresholds (fallback triggers at 1K RPD / 100K TPD)
+
+## Status note — 2026-10-22
+
+Four points this ADR does not say:
+
+- **The keyless scripted mock and `MODEL_PROVIDER`** (`auto | groq | gemini | mock`) were added at
+  Phase 3, so dev, CI and the evals never need a key (`apps/api/src/agent/model.ts`).
+- **The daily token-cap kill-switch was deferred to Phase 11.** It lives in the workspace Durable
+  Object, because Cloudflare's rate-limit binding is not an accounting system (ADR-0016).
+- **The Workers AI emergency leg was never built.**
+- **The live demo currently runs `MODEL_PROVIDER=mock`** (`apps/api/wrangler.jsonc`). Groq and
+  Gemini serve only when keys are set and that line changes (ADR-0019).

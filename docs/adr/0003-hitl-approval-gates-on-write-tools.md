@@ -53,3 +53,10 @@ deprecated but still functional.
 - [docs/wireframes.md](../wireframes.md) — ApprovalCard anatomy and HITL sequence diagram
 - vercel/ai issue #10196 — approvals in `createAgentUIStream`
 - https://ai-sdk.dev/docs/agents/tool-approvals
+
+## Status note — 2026-10-22
+
+The mechanism described above did not exist in the installed SDK. There is no `toolApproval` map,
+and `needsApproval` is not deprecated: it is the gate (`apps/api/src/agent/tools.ts`). The policy
+held unchanged; ADR-0010 records the mechanism actually used. The hand-rolled state-machine fallback
+was never needed.

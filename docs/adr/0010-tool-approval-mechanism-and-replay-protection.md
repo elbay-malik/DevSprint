@@ -75,3 +75,9 @@ conversation.
 - [ADR-0003](0003-hitl-approval-gates-on-write-tools.md) — the policy this implements
 - [docs/tool-inventory.md](../tool-inventory.md) §3 — approval policy, mechanism paragraph corrected
 - [docs/demo-scenarios.md](../demo-scenarios.md) — S-B, and its Phase 5 choreography note
+
+## Status note — 2026-10-22
+
+"Keyless local dev and CI are the only ways this demo runs" no longer holds. Production has run
+since 2026-10-21, and `scripts/deploy.ts` sets `TOOL_APPROVAL_SECRET` on the first deploy, so the
+random per-isolate fallback is reached only locally (ADR-0019).
