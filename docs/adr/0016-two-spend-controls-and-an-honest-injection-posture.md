@@ -119,5 +119,6 @@ is declared in `apps/api/wrangler.jsonc`, so `wrangler dev` and the e2e stack bi
 60-per-minute limiter too. That rate is far above any test's, which is why nothing trips it. Only
 unit tests run unbound.
 
-A gap this ADR did not cover: the public MCP server has **no per-IP rate limit and no cap on the
-number of issues**, so `create_issue` can be called in a loop without approval (ADR-0002's note).
+A gap this ADR did not cover: the public MCP server had no per-IP rate limit. The board's 512 KB
+cap bounded storage, but one client could still fill it in seconds. ADR-0020 closes that with a
+limit on the public endpoint and an unthrottled internal entrypoint for the agent.

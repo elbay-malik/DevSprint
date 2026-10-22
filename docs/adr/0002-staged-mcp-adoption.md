@@ -58,7 +58,7 @@ The staging happened, smaller than planned:
 - **Vendoring held, the tool did not.** Tool definitions are vendored from our own zod schemas, not
   through `mcp-to-ai-sdk`, which targets the previous AI SDK major (`apps/api/src/agent/mcp-tools.ts`).
 - **The shared workspace came from ADR-0011.**
-- **The hardening this ADR anticipated is incomplete.** The public server caps input sizes, but it
-  has **no per-IP rate limit**: ADR-0016's limit covers `/api/chat` only. It also runs
-  `create_issue` without an approval gate of ours, because the host owns that prompt. This is an
-  open gap, not a closed one.
+- **The hardening this ADR anticipated arrived in two parts.** Input sizes are capped per field,
+  and the board as a whole is capped at 512 KB. Until ADR-0020 there was no per-IP rate limit on
+  the public endpoint, so a loop of `create_issue` calls, ungated because the host owns that
+  prompt, could fill the board in seconds. ADR-0020 added that limit.
