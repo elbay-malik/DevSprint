@@ -41,3 +41,6 @@ apps/api/wrangler.bootstrap.json
 
 # Step and server logs from `pnpm ci:local`.
 .ci-local/
+
+# The demo video, attached to the v1.0.0 release rather than committed (docs/demo-video.md).
+/devsprint-demo.mp4
