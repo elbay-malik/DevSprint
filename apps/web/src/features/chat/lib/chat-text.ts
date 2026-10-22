@@ -14,6 +14,7 @@ export type Inline =
   | { kind: 'strong'; text: string }
   | { kind: 'em'; text: string }
   | { kind: 'code'; text: string }
+  | { kind: 'break' }
 
 export type Block =
   | { kind: 'paragraph'; lines: Inline[][] }
@@ -27,7 +28,20 @@ export type Block =
 const INLINE =
   /\*\*([^*\n]+?)\*\*|__([^_\n]+?)__|`([^`\n]+)`|\*([^*\s][^*\n]*?)\*|(?<![\w])_([^_\s][^_\n]*?)_(?![\w])/g
 
+// Models put `<br>` inside table cells, where a real newline would end the
+// row. Only the bare tag counts; `<br onclick=…>` or any other markup stays
+// escaped text, so this is a token, not a hole in the no-HTML rule.
+const LINE_BREAK = /<br\s*\/?>/gi
+
 export function parseInline(text: string): Inline[] {
+  return text
+    .split(LINE_BREAK)
+    .flatMap((segment, index): Inline[] =>
+      index === 0 ? parseSegment(segment) : [{ kind: 'break' }, ...parseSegment(segment)],
+    )
+}
+
+function parseSegment(text: string): Inline[] {
   const out: Inline[] = []
   let last = 0
   for (const match of text.matchAll(INLINE)) {

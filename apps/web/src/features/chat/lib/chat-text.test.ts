@@ -26,6 +26,27 @@ describe('parseInline', () => {
     ])
   })
 
+  it('reads a bare <br> as a line break, and nothing else that looks like markup', () => {
+    // What the live model wrote inside a table cell, 2026-10-22.
+    expect(parseInline('**DS-7** – in_review <br>• **DS-9**')).toEqual([
+      { kind: 'strong', text: 'DS-7' },
+      { kind: 'text', text: ' – in_review ' },
+      { kind: 'break' },
+      { kind: 'text', text: '• ' },
+      { kind: 'strong', text: 'DS-9' },
+    ])
+    expect(parseInline('a<BR/>b<br />c')).toEqual([
+      { kind: 'text', text: 'a' },
+      { kind: 'break' },
+      { kind: 'text', text: 'b' },
+      { kind: 'break' },
+      { kind: 'text', text: 'c' },
+    ])
+    expect(parseInline('<br onclick=alert(1)>')).toEqual([
+      { kind: 'text', text: '<br onclick=alert(1)>' },
+    ])
+  })
+
   it('keeps link syntax as plain text, never a link', () => {
     expect(parseInline('[click](https://evil.example)')).toEqual([
       { kind: 'text', text: '[click](https://evil.example)' },

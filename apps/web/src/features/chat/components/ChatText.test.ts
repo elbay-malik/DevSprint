@@ -24,6 +24,17 @@ describe('ChatText', () => {
     expect(wrapper.get('strong').text()).toBe('<img src=x onerror=alert(1)>')
   })
 
+  it('breaks a table cell where the model wrote <br>, without rendering markup', () => {
+    const wrapper = mount(ChatText, {
+      props: { text: '| Who | Issues |\n|---|---|\n| Ben | DS-7 <br> DS-9 <br onclick=x> |' },
+    })
+    const cell = wrapper.findAll('td')[1]
+    expect(cell?.findAll('br')).toHaveLength(1)
+    expect(cell?.text()).not.toContain('<br>')
+    expect(cell?.text()).toContain('<br onclick=x>')
+    expect(cell?.find('[onclick]').exists()).toBe(false)
+  })
+
   it('never turns link syntax into a link', () => {
     const wrapper = mount(ChatText, { props: { text: 'See [the docs](https://evil.example)' } })
     expect(wrapper.find('a').exists()).toBe(false)

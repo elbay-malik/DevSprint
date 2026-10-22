@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import type { Inline } from '../lib/chat-text'
 
-/** One run of inline text: plain, bold, italic or code, all interpolated. */
+/** One run of inline text: plain, bold, italic, code or a line break, all interpolated. */
 defineProps<{ parts: Inline[] }>()
 </script>
 
 <template>
   <template v-for="(part, index) in parts" :key="index">
-    <strong v-if="part.kind === 'strong'" class="font-semibold">{{ part.text }}</strong>
+    <br v-if="part.kind === 'break'" />
+    <strong v-else-if="part.kind === 'strong'" class="font-semibold">{{ part.text }}</strong>
     <em v-else-if="part.kind === 'em'">{{ part.text }}</em>
     <code
       v-else-if="part.kind === 'code'"
