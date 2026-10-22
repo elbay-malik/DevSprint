@@ -34,11 +34,12 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toMatch(/denied/i)
   })
 
-  it('asks for plain text, because the chat does not render markdown', () => {
-    // Chat text is shown as-is (no v-html, ADR-0016). The prompt used to ask
-    // for markdown, so a live model's **bold** and pipe tables reached
-    // visitors as raw characters; the scripted mock never wrote any.
-    expect(prompt).toMatch(/plain text/)
+  it('describes the formatting the chat actually renders (ADR-0022)', () => {
+    // The chat renders a safe markdown subset and no links. Asking a live
+    // model for plain text did not stop it writing **bold**, so the prompt now
+    // matches the renderer instead of fighting the model.
+    expect(prompt).toMatch(/renders only bold, italics, bullet and numbered lists/)
+    expect(prompt).toMatch(/links are shown as plain text/)
     expect(prompt).not.toMatch(/in markdown\./)
   })
 

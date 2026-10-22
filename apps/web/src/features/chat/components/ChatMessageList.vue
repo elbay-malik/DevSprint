@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { isToolUIPart } from 'ai'
 import { useDevSprintChat } from '../composables/useDevSprintChat'
 import ApprovalCard from './ApprovalCard.vue'
+import ChatText from './ChatText.vue'
 import ToolResultCard from './ToolResultCard.vue'
 
 const chat = useDevSprintChat()
@@ -80,7 +81,10 @@ function isFailedWrite(part: { state?: string; output?: unknown }): boolean {
         v-for="(part, index) in message.parts"
         :key="`${index}-${'state' in part ? part.state : part.type}`"
       >
-        <span v-if="part.type === 'text'" class="whitespace-pre-wrap">{{ part.text }}</span>
+        <!-- The assistant's text gets the safe markdown subset (ADR-0022); a
+             user's own message is shown exactly as typed. -->
+        <ChatText v-if="part.type === 'text' && message.role === 'assistant'" :text="part.text" />
+        <span v-else-if="part.type === 'text'" class="whitespace-pre-wrap">{{ part.text }}</span>
         <!--
           One chain, deliberately. A second top-level `v-if` here would start a
           chain of its own and detach the catch-all below from the ApprovalCard,
