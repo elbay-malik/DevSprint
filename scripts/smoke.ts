@@ -9,11 +9,23 @@
  * and reading back through the api — which mutates the board, so it then
  * resets it, and it is only done while nobody can have been using it yet.
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import ts from 'typescript'
+
 const SUBDOMAIN = 'eleo-666.workers.dev'
 export const URLS = {
   web: `https://devsprint-web.${SUBDOMAIN}`,
   api: `https://devsprint-api.${SUBDOMAIN}`,
   mcp: `https://devsprint-mcp-issues.${SUBDOMAIN}`,
+}
+
+/** MODEL_PROVIDER as apps/api/wrangler.jsonc deploys it. */
+function expectedModelProvider(): string {
+  const path = join(import.meta.dirname, '../apps/api/wrangler.jsonc')
+  const parsed = ts.parseConfigFileTextToJson(path, readFileSync(path, 'utf8'))
+  const vars = (parsed.config as { vars?: Record<string, string> } | undefined)?.vars
+  return vars?.MODEL_PROVIDER ?? 'auto'
 }
 
 let failures = 0
@@ -121,10 +133,14 @@ export async function smoke(options: { proveSharedBoard: boolean } = { proveShar
   })
   const stream = await turn.text()
   check('chat streams a grounded tool call', turn.ok && stream.includes('"tool-input-available"'))
+  // The model the committed config asks for, so switching MODEL_PROVIDER is
+  // a one-line change: `auto` may resolve to groq or gemini, never to mock.
+  const configured = expectedModelProvider()
+  const served = turn.headers.get('x-devsprint-model') ?? ''
   check(
-    'chat runs the scripted model (MODEL_PROVIDER=mock)',
-    turn.headers.get('x-devsprint-model') === 'mock',
-    `got ${turn.headers.get('x-devsprint-model')}`,
+    `chat runs the configured model (MODEL_PROVIDER=${configured})`,
+    configured === 'auto' ? served !== 'mock' && served.length > 0 : served.startsWith(configured),
+    `got ${served || 'none'}`,
   )
   check(
     'issue tools come over the service binding',
