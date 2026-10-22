@@ -62,4 +62,6 @@ The public endpoint is `https://devsprint-mcp-issues.eleo-666.workers.dev/mcp` (
 stateless). Add it to any MCP host as a remote server. This is scenario S-F's first precondition.
 It deploys with the rest of the topology (`pnpm deploy:all`, see `apps/api/README.md`). The
 deploy's smoke checks confirm it lists exactly the four issue tools and reads the same board as
-the api. It has no preview URLs, because a preview would write to the production board.
+the api. It has no preview URLs, because a preview would write to the production board. The public `/mcp`
+endpoint allows 30 requests a minute per client IP. Past that it answers HTTP 429 with a JSON-RPC
+error. The in-app agent uses the `Internal` entrypoint and is not counted (ADR-0020).

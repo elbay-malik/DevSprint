@@ -39,7 +39,11 @@
   // The agent sources its four issue tools from the public MCP server, the same
   // way an external host does (ADR-0002). A service binding keeps that call
   // inside Cloudflare's network rather than going out over the internet.
-  "services": [{ "binding": "MCP_ISSUES", "service": "devsprint-mcp-issues" }],
+  // The `Internal` entrypoint, so the agent's MCP calls never share the public
+  // endpoint's per-IP limit (ADR-0020).
+  "services": [
+    { "binding": "MCP_ISSUES", "service": "devsprint-mcp-issues", "entrypoint": "Internal" },
+  ],
   // The one copy of the workspace. It lives here, and the MCP servers bind it
   // cross-script, so both clients see the same board (scenario S-F).
   "durable_objects": {

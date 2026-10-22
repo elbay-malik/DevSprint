@@ -1,5 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
+import { WorkerEntrypoint } from 'cloudflare:workers'
+import { refuseIfThrottled } from './limit'
 import { registerIssueTools } from './tools'
 import { workspaceOf } from './workspace'
 
@@ -18,24 +20,46 @@ import { workspaceOf } from './workspace'
  * those two ideas apart is what stops this server growing session state it does
  * not need.
  */
+async function serve(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url)
+
+  if (url.pathname === '/health') {
+    return Response.json({ ok: true })
+  }
+  if (url.pathname !== '/mcp') {
+    return new Response('Not found', { status: 404 })
+  }
+
+  const server = new McpServer({ name: 'devsprint-issues', version: '1.0.0' })
+  registerIssueTools(server, workspaceOf(env.WORKSPACE))
+
+  // No session id generator: stateless, so any request can be served by any
+  // isolate without shared session state.
+  const transport = new WebStandardStreamableHTTPServerTransport()
+  await server.connect(transport)
+  return await transport.handleRequest(request)
+}
+
+/** The public endpoint: external MCP hosts, throttled per client IP (ADR-0020). */
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url)
-
-    if (url.pathname === '/health') {
-      return Response.json({ ok: true })
+    if (new URL(request.url).pathname === '/mcp') {
+      const refused = await refuseIfThrottled(request, env.MCP_RATE_LIMIT)
+      if (refused) return refused
     }
-    if (url.pathname !== '/mcp') {
-      return new Response('Not found', { status: 404 })
-    }
-
-    const server = new McpServer({ name: 'devsprint-issues', version: '1.0.0' })
-    registerIssueTools(server, workspaceOf(env.WORKSPACE))
-
-    // No session id generator: stateless, so any request can be served by any
-    // isolate without shared session state.
-    const transport = new WebStandardStreamableHTTPServerTransport()
-    await server.connect(transport)
-    return await transport.handleRequest(request)
+    return await serve(request, env)
   },
+} satisfies ExportedHandler<Env>
+
+/**
+ * The in-app agent's way in. apps/api's service binding names this entrypoint,
+ * so its traffic never shares the public limit: a binding request carries no
+ * client IP, and lumping every visitor's turns into one bucket would let the
+ * demo throttle itself. It is not reachable from the internet — only a binding
+ * in this account can name it.
+ */
+export class Internal extends WorkerEntrypoint<Env> {
+  override async fetch(request: Request): Promise<Response> {
+    return await serve(request, this.env)
+  }
 }

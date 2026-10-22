@@ -20,6 +20,13 @@
   // The workspace Durable Object is defined in the api Worker; this binds the
   // same class cross-script so both Workers see one board. Locally that means
   // `devsprint-api` must be running too — `pnpm dev` starts both.
+  // Per-IP throttle on the public /mcp endpoint (ADR-0020). 30 a minute is
+  // several times what an MCP host uses in a session, and makes filling the
+  // board to its size cap a matter of tens of minutes per IP, not seconds. The
+  // in-app agent comes in through the `Internal` entrypoint and is not counted.
+  "ratelimits": [
+    { "name": "MCP_RATE_LIMIT", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } },
+  ],
   "durable_objects": {
     "bindings": [
       { "name": "WORKSPACE", "class_name": "WorkspaceDO", "script_name": "devsprint-api" },
