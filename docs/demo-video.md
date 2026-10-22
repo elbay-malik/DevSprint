@@ -1,8 +1,20 @@
 # Demo video: storyboard
 
-A 3½-minute screen recording of the live demo, shot by shot. Every prompt is one the live site's
-scripted model answers, so each take behaves exactly the same way. Narration lines are
-suggestions; say them in your own words.
+A 3½-minute screen recording of the live demo, shot by shot. Narration lines are suggestions; say
+them in your own words.
+
+**The live site runs a real model** (Groq gpt-oss-120b, Gemini fallback; ADR-0021), so each take
+can word things differently, and may take a slightly different route. The shots below were
+rehearsed against the scripted mock, which is what the quoted outputs show. Two shots differ in
+practice:
+
+- **Shot 4:** the model may ask for the five writes one card at a time rather than all at once.
+- **Shot 6:** the model often checks DS-42 _before_ writing. It then offers DS-7 straight as an
+  approval card, so you see no error card, and that card is the confirmation.
+
+Both are correct behaviour. For a take that matches this script word for word, record against a
+local copy (`pnpm dev` with no keys runs the mock), or ask me to put the live site back on `mock`
+while you record.
 
 **Target length:** about 3:30. **Where it goes:** attached to the `v1.0.0` GitHub release, and
 linked from the README.

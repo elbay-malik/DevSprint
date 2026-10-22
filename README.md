@@ -14,9 +14,10 @@ An AI copilot for a sprint board, built to show how an agent can be **useful wit
 
 ## Try it
 
-The live demo runs a **scripted model**, so it answers the six demo scenarios' prompts, not
-free-form questions. That's deliberate: it's free, deterministic, and can't be talked into
-spending anyone's API quota. Paste these into the chat:
+The live demo runs a **real model**: Groq's `openai/gpt-oss-120b`, with Gemini 2.5 Flash taking
+over when Groq fails or hits its rate limit. Ask it anything about the board. These six prompts
+are the demo scenarios, and each one exercises a different part of the system. A real model words
+its answers its own way, and may take a slightly different route than described here:
 
 | Prompt                                                                                   | What you'll see                                                                                               |
 | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
@@ -60,15 +61,16 @@ A turn starts when the SPA streams a question to the **api Worker**. There, an A
 Each of these is an [ADR](docs/adr/README.md). Several record a plan that didn't survive contact
 with the real thing, and say why.
 
-| Decision                                                                                                                      | Why it's interesting                                                                                                                                              |
-| ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Approvals are signed, and single-use through our own ledger](docs/adr/0010-tool-approval-mechanism-and-replay-protection.md) | The SDK's signature has no nonce, so a captured approval could be replayed. The ledger closes that, with its two exceptions named rather than hidden              |
-| [The workspace lives in a Durable Object](docs/adr/0011-workspace-state-in-a-durable-object.md)                               | It's what lets two Workers, and any outside MCP host, share one board. It replaced the planned D1 database                                                        |
-| [Deployment cancel is an api route](docs/adr/0013-deployment-cancel-as-an-api-route.md)                                       | A browser that stops reading a stream does not reliably abort the Worker, so the run would finish while the card said "cancelled"                                 |
-| [Tracing without the OpenTelemetry SDK](docs/adr/0015-otlp-tracing-without-the-opentelemetry-sdk.md)                          | About 200 hand-written lines. The "risky on workerd" assumption was measured, not believed                                                                        |
-| [Two spend controls, deliberately different](docs/adr/0016-two-spend-controls-and-an-honest-injection-posture.md)             | Cloudflare's rate limiter disclaims being an accounting system, so the token cap lives elsewhere. Prompt injection is answered by the approval gate, not a prompt |
-| [Scenario specs assert three layers](docs/adr/0018-scenario-specs-assert-three-layers.md)                                     | Green tests turned out to prove little. A mutation pass found ten product bugs every suite let through                                                            |
-| [A deploy that bootstraps itself](docs/adr/0019-deploy-topology-and-spa-only-previews.md)                                     | The two Workers bind each other, so a first deploy has to break the cycle. Also why PR previews stop at the SPA                                                   |
+| Decision                                                                                                                      | Why it's interesting                                                                                                                                                    |
+| ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Approvals are signed, and single-use through our own ledger](docs/adr/0010-tool-approval-mechanism-and-replay-protection.md) | The SDK's signature has no nonce, so a captured approval could be replayed. The ledger closes that, with its two exceptions named rather than hidden                    |
+| [The workspace lives in a Durable Object](docs/adr/0011-workspace-state-in-a-durable-object.md)                               | It's what lets two Workers, and any outside MCP host, share one board. It replaced the planned D1 database                                                              |
+| [Deployment cancel is an api route](docs/adr/0013-deployment-cancel-as-an-api-route.md)                                       | A browser that stops reading a stream does not reliably abort the Worker, so the run would finish while the card said "cancelled"                                       |
+| [Tracing without the OpenTelemetry SDK](docs/adr/0015-otlp-tracing-without-the-opentelemetry-sdk.md)                          | About 200 hand-written lines. The "risky on workerd" assumption was measured, not believed                                                                              |
+| [Two spend controls, deliberately different](docs/adr/0016-two-spend-controls-and-an-honest-injection-posture.md)             | Cloudflare's rate limiter disclaims being an accounting system, so the token cap lives elsewhere. Prompt injection is answered by the approval gate, not a prompt       |
+| [Scenario specs assert three layers](docs/adr/0018-scenario-specs-assert-three-layers.md)                                     | Green tests turned out to prove little. A mutation pass found ten product bugs every suite let through                                                                  |
+| [A deploy that bootstraps itself](docs/adr/0019-deploy-topology-and-spa-only-previews.md)                                     | The two Workers bind each other, so a first deploy has to break the cycle. Also why PR previews stop at the SPA                                                         |
+| [Switching to a live model](docs/adr/0021-a-live-model-on-the-demo.md)                                                        | The "one-line" switch would have sent every turn to two retired models. Running the scenarios live first found that and five quieter gaps the scripted model had hidden |
 
 ## How it's tested, and what "green" was found not to prove
 
@@ -96,7 +98,9 @@ tests are checked as well as run:
 
 - **Per-visitor workspaces.** Multi-tenancy is a non-goal, so everyone shares one board, reset
   daily ([ADR-0014](docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
-- **A live model on the demo, for now.** Switching is one reviewed line, plus two secrets.
+- **Unlimited use of the live model.** It runs on free tiers. A per-IP rate limit and a daily
+  token cap keep one visitor from spending it for everyone, and once the cap is reached the demo
+  says so instead of failing.
 - **Markdown in chat.** Assistant text is shown as plain text on purpose: there's no `v-html` in
   the chat, as one layer of the injection posture.
 - **A few planned UI pieces were never built:** the composer's one-click scenario buttons, the
@@ -124,16 +128,17 @@ pnpm dev        # web on :5173, api on :8787, mcp-issues on :8788
 ```
 
 That runs end to end on the scripted model, with no keys and no account. To use a real model
-locally, copy `apps/api/.dev.vars.example` to `apps/api/.dev.vars`, then set
-`MODEL_PROVIDER=auto` and `GROQ_API_KEY` and/or `GOOGLE_GENERATIVE_AI_API_KEY`.
+locally, copy `apps/api/.dev.vars.example` to `apps/api/.dev.vars` and set `GROQ_API_KEY` and/or
+`GOOGLE_GENERATIVE_AI_API_KEY`.
 
 #### Model providers
 
-Routing follows [ADR-0005](docs/adr/0005-model-routing-groq-primary-gemini-fallback.md). Groq
-`llama-3.3-70b-versatile` is primary. Gemini `gemini-2.5-flash` is the fallback, used when Groq
-fails with a retryable error, a 429 or a 5xx. `MODEL_PROVIDER` takes `auto`, `groq`, `gemini` or
-`mock`. `wrangler.jsonc` sets `mock`, because that's what the deployed demo runs, and `.dev.vars`
-overrides it locally. Each response reports the resolved route in the `X-DevSprint-Model` header.
+Routing follows [ADR-0005](docs/adr/0005-model-routing-groq-primary-gemini-fallback.md) and
+[ADR-0021](docs/adr/0021-a-live-model-on-the-demo.md). Groq `openai/gpt-oss-120b` is primary,
+since Groq retired `llama-3.3-70b-versatile`. Gemini `gemini-2.5-flash` is the fallback, used when
+Groq fails with a retryable error, a 429 or a 5xx. `MODEL_PROVIDER` takes `auto`, `groq`, `gemini`
+or `mock`. `wrangler.jsonc` sets `auto`, which falls back to the mock when no keys are set, so a
+fresh clone still runs without any. Each response reports the resolved route in the `X-DevSprint-Model` header.
 Two spend controls bound a live model: 60 chat requests a minute per IP, and a 100,000-token
 daily cap that the mock never counts against.
 

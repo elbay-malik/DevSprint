@@ -126,3 +126,10 @@ Two figures above drifted:
 
 Live Langfuse ingestion is still unverified: production runs the mock model, with no Langfuse
 keys set.
+
+## Status note — 2026-10-22 (live evals)
+
+"`EVAL_MODEL_PROVIDER` runs the same assertions against a real provider on demand" was not true
+until ADR-0021. The eval file never passed provider keys into the Worker env it builds, so every
+live run failed before reaching a model. That's fixed now, and the assertions have two tiers: the
+scenario's meaning for every model, and exact sentences for the mock.

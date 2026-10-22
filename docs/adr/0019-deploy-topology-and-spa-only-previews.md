@@ -146,3 +146,9 @@ order.
 The exception is a change that adds a new Durable Object class the MCP Worker binds. Deploy the api
 first, by hand. `pnpm deploy:all --plan` prints the order a deploy would take without deploying
 anything.
+
+## Status note — 2026-10-22 (live model)
+
+`MODEL_PROVIDER` is now `auto` (ADR-0021). The switch took more than the one line this ADR
+promised: both configured models had been retired, so the change also carries new model IDs,
+corrected tool descriptions and prompt rules, and evals that work against a live model.

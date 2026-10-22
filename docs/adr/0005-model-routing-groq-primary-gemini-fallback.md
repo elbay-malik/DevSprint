@@ -53,3 +53,10 @@ Four points this ADR does not say:
 - **The Workers AI emergency leg was never built.**
 - **The live demo currently runs `MODEL_PROVIDER=mock`** (`apps/api/wrangler.jsonc`). Groq and
   Gemini serve only when keys are set and that line changes (ADR-0019).
+
+## Status note — 2026-10-22 (live)
+
+Both models named above have been retired by their providers. Groq dropped
+`llama-3.3-70b-versatile`, and Google refuses `gemini-2.5-flash` to new keys. The routing stands.
+The models are now Groq `openai/gpt-oss-120b` and Gemini `gemini-3.8-flash`, chosen on live
+scenario runs, and the demo runs `auto` (ADR-0021).
