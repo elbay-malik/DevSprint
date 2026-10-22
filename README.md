@@ -2,62 +2,142 @@
 
 [![CI](https://github.com/EleoXDA/DevSprint/actions/workflows/ci.yml/badge.svg)](https://github.com/EleoXDA/DevSprint/actions/workflows/ci.yml)
 
-A project/DevOps copilot over a mock sprint workspace — Vue 3 SPA (Vite 8) + Hono-on-Cloudflare-Workers backend running an AI SDK v6 agent loop, evolving into a bidirectional MCP story (the backend is an MCP client; one MCP server is publicly exposed to external hosts like Claude Desktop).
+An AI copilot for a sprint board, built to show how an agent can be **useful without being trusted**:
 
-## Status
+- every answer is grounded in real tool calls
+- every write waits for a human to approve it
+- the same issue tools are served to outside AI assistants over MCP, writing to the same live board
 
-Early development. Implemented so far: Phases 0–13 of the [16-phase roadmap](docs/roadmap.md) — design docs, SPA shell, streaming chat, real tools, a multi-step agent loop, approval gates on every write, the MCP refactor with a public issues server, the in-stream result cards, the long-running deploy tool with mid-run cancel, a daily reset alarm with a persisted approval ledger, OTLP tracing with trajectory evals for all six demo scenarios, two spend controls guarding the live demo, an accessibility pass gated by axe across every card and both themes, one browser test per demo scenario that checks the page, the stream and the stored board, and a live deploy on Cloudflare Workers that redeploys on every push to `main`.
+**Live demo:** https://devsprint-web.eleo-666.workers.dev
+**Public MCP server:** `https://devsprint-mcp-issues.eleo-666.workers.dev/mcp` (Streamable HTTP)
+**Demo video:** _coming with the v1.0.0 release_
 
-**Live demo:** https://devsprint-web.eleo-666.workers.dev. It currently runs on the scripted mock model, so it answers the [demo scenarios](docs/demo-scenarios.md)' prompts, not free-form questions.
-**Public MCP server** (scenario S-F): `https://devsprint-mcp-issues.eleo-666.workers.dev/mcp`. Add it to Claude Desktop or Cursor as a remote Streamable HTTP server, and its writes show up on the demo's board.
+## Try it
 
-## Architecture at a glance
+The live demo runs a **scripted model**, so it answers the six demo scenarios' prompts, not
+free-form questions. That's deliberate: it's free, deterministic, and can't be talked into
+spending anyone's API quota. Paste these into the chat:
 
-- **Frontend**: plain Vue 3 SPA (3.6-track) on Vite 8 (Rolldown), TypeScript strict, Pinia, Vue Router, shadcn-vue (Reka UI + Tailwind v4). Tool results render as cards in the transcript — an issue table, a burndown chart drawn as inline SVG ([ADR-0012](docs/adr/0012-burndown-chart-as-inline-svg.md)), a release-notes diff, and a typed error card.
-- **Backend**: Hono on Cloudflare Workers running the AI SDK v6 `ToolLoopAgent` server-side (holds all model keys) — it chains the six read/rich-data tools over the seed workspace until it can answer, bounded by a step budget, and the composer's Stop button aborts the loop mid-turn. Groq primary, Gemini Flash fallback (see [Model providers](#model-providers)).
-- **MCP**: `apps/mcp-issues` serves the four issue tools over Streamable HTTP, and the in-app agent sources those same four from it through an MCP client — one implementation, two clients. It owns no state: both Workers reach one workspace Durable Object, so a write made in an external host shows up on the SPA's board ([ADR-0011](docs/adr/0011-workspace-state-in-a-durable-object.md)).
-- **Long-running work**: `run_deployment` is an async generator, so every stage of a simulated deploy reaches the browser as a preliminary tool result and the progress card redraws from the same shape it will settle on. Cancel is an api route rather than the request's abort signal, because a browser that stops reading a stream does not reliably abort the Worker's request — the deploy would otherwise run to completion while the card claimed it had stopped ([ADR-0013](docs/adr/0013-deployment-cancel-as-an-api-route.md)).
-- **Safety**: every write the agent can make is human-approved in-stream before it runs. Approval requests are signed so a forged one cannot execute, and each is single-use so a captured one is downgraded to a denial rather than applied twice. The single-use ledger lives in the same Durable Object as the workspace, so replay protection holds across isolates and restarts, not just within one — with two named exceptions, not a blanket guarantee: it clears on reset, and it caps at 1,500 entries with the oldest evicted first ([ADR-0010](docs/adr/0010-tool-approval-mechanism-and-replay-protection.md), [ADR-0014](docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
-- **Observability**: a turn's spans export to Langfuse as OTLP/HTTP JSON, written by hand rather than with the OpenTelemetry SDK — the AI SDK hands over a tracer, so all that is actually needed is `AsyncLocalStorage` for span parentage and a `fetch` ([ADR-0015](docs/adr/0015-otlp-tracing-without-the-opentelemetry-sdk.md)). Tracing is off unless configured, and a failed export never fails a turn. The six demo scenarios' own eval assertions run as trajectory evals in CI.
-- **Spend controls**: two of them, deliberately different mechanisms ([ADR-0016](docs/adr/0016-two-spend-controls-and-an-honest-injection-posture.md)). A per-IP rate limit on the chat route uses Cloudflare's binding, whose documented looseness is fine for "is one client hammering us". The daily token cap lives in the workspace Durable Object instead, because that binding disclaims being an accounting system and counts per location — and a cap that undercounts is not a cap. It survives Reset on purpose, and both controls degrade into a readable assistant turn rather than an error.
-- **Reset**: the board resets itself every day at UTC midnight, via the same Durable Object's own alarm — no external cron trigger. Multi-tenancy is a deliberate non-goal, so this is one shared demo board, not a private copy per visitor ([ADR-0014](docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
+| Prompt                                                                                   | What you'll see                                                                                               |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `Summarize Sprint 12 and draft release notes for v1.5.0.`, then `Looks good, save it.`   | Three chained tool calls, a release-notes diff against v1.4.2, then an approval card before anything is saved |
+| `We're closing Sprint 12 today — mark every remaining open issue in the sprint as done.` | Five separate approval cards, one per issue. Deny one with a reason and watch the agent say so                |
+| `Deploy v1.5.0-rc.1 to staging.`                                                         | A gated deployment that streams build → test → migrate → release live, with a working Cancel                  |
+| `Is Sprint 12 on track? Show me the burndown.`                                           | A burndown chart drawn from the tool's own series, and a narration that names the blocker                     |
+| `Mark DS-42 as done — the billing export shipped this morning.`, then `Yes, that one.`   | A typed `ISSUE_NOT_FOUND` error, a search for what you meant, and a fresh approval for the fix                |
+| _In Claude Desktop or Cursor_: add the MCP server above, then ask it to create an issue  | The write lands on the same board. Reload the demo to see it in the backlog                                   |
 
-See [docs/](docs/README.md) for the product brief, domain model, tool inventory, demo scenarios, wireframes, and ADRs.
+The board is shared by every visitor and resets itself at midnight UTC. **Reset demo** in the
+header restores it at any time.
 
-## Monorepo layout
+## How it works
 
-| Path                 | Package                    | Purpose                                             |
-| -------------------- | -------------------------- | --------------------------------------------------- |
-| `apps/web`           | `@devsprint/web`           | Vue 3 SPA (Vite 8, shadcn-vue)                      |
-| `apps/api`           | `@devsprint/api`           | Hono Worker — chat endpoint, agent loop             |
-| `packages/shared`    | `@devsprint/shared`        | Shared TS types, API route constants, fixtures      |
-| `apps/mcp-issues`    | `@devsprint/mcp-issues`    | Public issues MCP server (Streamable HTTP)          |
-| `apps/mcp-deploys`   | `@devsprint/mcp-deploys`   | _(planned, Phase 6)_ deploys MCP server             |
-| `apps/mcp-analytics` | `@devsprint/mcp-analytics` | _(planned, Phase 6, optional)_ analytics MCP server |
+```mermaid
+flowchart LR
+  Browser["Vue 3 SPA<br/>(Workers Static Assets)"] -->|"UI message stream"| Api["api Worker<br/>Hono + AI SDK v6 ToolLoopAgent"]
+  Api -->|"service binding, MCP client"| Mcp["mcp-issues Worker<br/>4 issue tools"]
+  Host["External MCP host<br/>Claude Desktop, Cursor"] -->|"Streamable HTTP"| Mcp
+  Api --> DO[("WorkspaceDO<br/>board, approval ledger,<br/>token budget, reset alarm")]
+  Mcp --> DO
+  Api -.->|"OTLP/HTTP JSON, optional"| Langfuse["Langfuse"]
+  Api -.->|"Groq, Gemini fallback, or mock"| Model["Model"]
+```
 
-## Prerequisites
+A turn starts when the SPA streams a question to the **api Worker**. There, an AI SDK v6
+`ToolLoopAgent` chains up to six tool calls before answering.
 
-- [fnm](https://github.com/Schniz/fnm) — auto-switches to Node 24.18 via `.node-version`
-- corepack (`corepack enable`) — provides pnpm 11.10 pinned via the `packageManager` field
+- **Reads run immediately** and come back as cards in the transcript: an issue table, a burndown
+  chart, a release-notes diff.
+- **Writes don't run until approved.** Each write becomes a signed approval card, and only an
+  explicit, single-use approval lets it execute.
+- **The four issue tools live in a separate MCP Worker,** which the agent reaches over a service
+  binding as an ordinary MCP client. Any outside AI assistant can use the same server.
+- **There's one board.** Both Workers read and write it through one Durable Object, so a write
+  from Claude Desktop shows up in the SPA.
 
-## Getting started
+## Decisions worth reading
+
+Each of these is an [ADR](docs/adr/README.md). Several record a plan that didn't survive contact
+with the real thing, and say why.
+
+| Decision                                                                                                                      | Why it's interesting                                                                                                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Approvals are signed, and single-use through our own ledger](docs/adr/0010-tool-approval-mechanism-and-replay-protection.md) | The SDK's signature has no nonce, so a captured approval could be replayed. The ledger closes that, with its two exceptions named rather than hidden              |
+| [The workspace lives in a Durable Object](docs/adr/0011-workspace-state-in-a-durable-object.md)                               | It's what lets two Workers, and any outside MCP host, share one board. It replaced the planned D1 database                                                        |
+| [Deployment cancel is an api route](docs/adr/0013-deployment-cancel-as-an-api-route.md)                                       | A browser that stops reading a stream does not reliably abort the Worker, so the run would finish while the card said "cancelled"                                 |
+| [Tracing without the OpenTelemetry SDK](docs/adr/0015-otlp-tracing-without-the-opentelemetry-sdk.md)                          | About 200 hand-written lines. The "risky on workerd" assumption was measured, not believed                                                                        |
+| [Two spend controls, deliberately different](docs/adr/0016-two-spend-controls-and-an-honest-injection-posture.md)             | Cloudflare's rate limiter disclaims being an accounting system, so the token cap lives elsewhere. Prompt injection is answered by the approval gate, not a prompt |
+| [Scenario specs assert three layers](docs/adr/0018-scenario-specs-assert-three-layers.md)                                     | Green tests turned out to prove little. A mutation pass found ten product bugs every suite let through                                                            |
+| [A deploy that bootstraps itself](docs/adr/0019-deploy-topology-and-spa-only-previews.md)                                     | The two Workers bind each other, so a first deploy has to break the cycle. Also why PR previews stop at the SPA                                                   |
+
+## How it's tested, and what "green" was found not to prove
+
+The recurring lesson of this repo is that **a passing suite is a claim, not proof**. So the
+tests are checked as well as run:
+
+- **Trajectory evals.** These check which tools the agent calls, in what order and with what
+  arguments, against each demo scenario's own written assertions. They run in CI against the
+  scripted model, and against a live model on demand (`EVAL_MODEL_PROVIDER=groq pnpm eval`).
+- **One browser test per scenario.** Each checks three layers: the page, the stream the browser
+  actually received (tool order, and approval strictly before execution), and the Durable Object.
+  The last is there because a card and the database can disagree.
+- **An audit of all 173 scenario requirements.** It found two evals passing for the wrong reason.
+- **A mutation pass.** Ten one-line breaks were made deliberately, such as a frozen stats header,
+  an upside-down chart, an empty progress bar, and successful writes shown in red. All ten passed
+  every suite. Each now fails a test written for it.
+- **Accessibility.** axe checks WCAG 2.2 AA across five UI states in both themes. Lighthouse's
+  100 only ever sees the empty first page, and missed three real violations.
+- **Deploy smoke checks.** Each one names the misconfiguration it catches.
+
+**By the numbers:** 342 unit and eval tests, 29 browser tests, and Lighthouse 100 / 100 / 100 /
+100 on the live site, on mobile and desktop.
+
+## What it deliberately doesn't do
+
+- **Per-visitor workspaces.** Multi-tenancy is a non-goal, so everyone shares one board, reset
+  daily ([ADR-0014](docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
+- **A live model on the demo, for now.** Switching is one reviewed line, plus two secrets.
+- **Markdown in chat.** Assistant text is shown as plain text on purpose: there's no `v-html` in
+  the chat, as one layer of the injection posture.
+- **A few planned UI pieces were never built:** the composer's one-click scenario buttons, the
+  Sprint and Deploys tabs, a release-notes badge, and a distinct "interrupted" stage state. The
+  [demo scenarios doc](docs/demo-scenarios.md) names each one, rather than describing them as if
+  they existed.
+- **API previews.** PR previews cover the SPA only, against the production api. A preview of the
+  api would write to the live board.
+
+## Running it locally
+
+### Prerequisites
+
+- [fnm](https://github.com/Schniz/fnm), which switches to Node 24.18 via `.node-version`
+- corepack (`corepack enable`), which provides pnpm 11.10 as pinned in `packageManager`
+
+### Getting started
 
 ```sh
 git clone git@github.com:EleoXDA/DevSprint.git
 cd DevSprint
 corepack enable
 pnpm install
-cp apps/api/.dev.vars.example apps/api/.dev.vars   # model keys, optional (see below)
-pnpm dev        # runs all dev servers in parallel (web on :5173, api on :8787)
+pnpm dev        # web on :5173, api on :8787, mcp-issues on :8788
 ```
 
-Fill `GROQ_API_KEY` and/or `GOOGLE_GENERATIVE_AI_API_KEY` in `apps/api/.dev.vars` (gitignored). With no keys the api falls back to a scripted mock model, so the app still runs end-to-end — tool calls included — without spending any model quota.
+That runs end to end on the scripted model, with no keys and no account. To use a real model
+locally, copy `apps/api/.dev.vars.example` to `apps/api/.dev.vars`, then set
+`MODEL_PROVIDER=auto` and `GROQ_API_KEY` and/or `GOOGLE_GENERATIVE_AI_API_KEY`.
 
-### Model providers
+#### Model providers
 
-Routing follows [ADR-0005](docs/adr/0005-model-routing-groq-primary-gemini-fallback.md): Groq `llama-3.3-70b-versatile` is the primary model and Gemini `gemini-2.5-flash` the fallback, used when Groq fails with a retryable error, a 429, or a 5xx. `MODEL_PROVIDER=auto|groq|gemini|mock` in `apps/api/.dev.vars` selects the route — `auto` (default) uses whichever keys are present and drops to the mock when there are none; `GROQ_MODEL` / `GEMINI_MODEL` override the model ids. Each chat response reports the resolved route in the `X-DevSprint-Model` header. The daily token-cap kill-switch from the ADR is deferred to Phase 11. Details in [apps/api/README.md](apps/api/README.md).
+Routing follows [ADR-0005](docs/adr/0005-model-routing-groq-primary-gemini-fallback.md). Groq
+`llama-3.3-70b-versatile` is primary. Gemini `gemini-2.5-flash` is the fallback, used when Groq
+fails with a retryable error, a 429 or a 5xx. `MODEL_PROVIDER` takes `auto`, `groq`, `gemini` or
+`mock`. `wrangler.jsonc` sets `mock`, because that's what the deployed demo runs, and `.dev.vars`
+overrides it locally. Each response reports the resolved route in the `X-DevSprint-Model` header.
+Two spend controls bound a live model: 60 chat requests a minute per IP, and a 100,000-token
+daily cap that the mock never counts against.
 
-## Scripts
+### Scripts
 
 | Script              | What it does                                        |
 | ------------------- | --------------------------------------------------- |
@@ -82,7 +162,7 @@ Playwright starts all three servers itself and pins the scripted mock model, so 
 run needs no API key and never spends provider quota. It includes one test per demo scenario
 (`e2e/scenarios.spec.ts`).
 
-### Running CI locally
+#### Running CI locally
 
 `pnpm ci:local` runs the workflow's `checks` and `e2e` jobs on this machine, in about three
 minutes. Use it whenever GitHub Actions cannot run. `--checks` or `--e2e` runs one job.
@@ -100,9 +180,26 @@ its first connection, so another process on a port it polls can stall it until i
 
 **Package contract**: every workspace package exposes `typecheck` (web: `vue-tsc --noEmit`; others: `tsc --noEmit`) and, where meaningful, `test` (`vitest run`) and `build`. `pnpm -r` skips packages missing a script.
 
-## Roadmap
+### Deploying
 
-Phases 0–15 are tracked in [docs/roadmap.md](docs/roadmap.md): design docs → SPA shell → streaming echo → real tools → agent loop → HITL approvals → MCP refactor → generative UI → long-running deploy tool → persistence → observability → hardening → a11y/perf → testing → deployment → whitepaper.
+`pnpm deploy:all` deploys all three Workers in the one order that works and ends with smoke checks.
+Pushes to `main` run it in CI once both test jobs pass. Details are in
+[apps/api/README.md](apps/api/README.md#deploying) and
+[ADR-0019](docs/adr/0019-deploy-topology-and-spa-only-previews.md).
+
+## Repository layout
+
+| Path              | Package                 | What it is                                                    |
+| ----------------- | ----------------------- | ------------------------------------------------------------- |
+| `apps/web`        | `@devsprint/web`        | Vue 3 SPA: Vite 8, Pinia, shadcn-vue (Reka UI, Tailwind v4)   |
+| `apps/api`        | `@devsprint/api`        | Hono Worker: chat route, agent loop, workspace Durable Object |
+| `apps/mcp-issues` | `@devsprint/mcp-issues` | Public issues MCP server, Streamable HTTP and stateless       |
+| `packages/shared` | `@devsprint/shared`     | Domain types, tool schemas, seed fixtures                     |
+| `scripts/`        | (root)                  | `deploy.ts`, `smoke.ts`, `ci-local.ts`                        |
+| `docs/`           | (none)                  | Product brief, domain model, scenarios, wireframes, ADRs      |
+
+The [roadmap](docs/roadmap.md) records all 16 phases, from design docs to this write-up, with what
+each one actually found.
 
 ## Conventions
 
@@ -110,3 +207,7 @@ Phases 0–15 are tracked in [docs/roadmap.md](docs/roadmap.md): design docs →
 - Dependency versions are pinned exactly in the `pnpm-workspace.yaml` default catalog (`catalog:` protocol); the AI SDK stays on the v6 line (`ai-v6` dist-tag) — npm `latest` is v7.
 - TypeScript strict everywhere; one shared `tsconfig.base.json`; no project references.
 - Single root ESLint flat config + Prettier; per-package configs are forbidden.
+
+## License
+
+[MIT](LICENSE)
