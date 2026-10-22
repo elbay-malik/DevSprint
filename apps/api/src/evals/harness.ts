@@ -195,6 +195,9 @@ function completedAssistantMessage(chunks: EvalChunk[], id: string, names: Map<s
   return { id, role: 'assistant', parts }
 }
 
+/** More rounds than any scenario needs (S-B has five writes); a bound, not a target. */
+const MAX_APPROVAL_ROUNDS = 8
+
 export interface ScenarioStep {
   /** The user's verbatim prompt from docs/demo-scenarios.md. */
   prompt: string
@@ -264,11 +267,21 @@ export async function runScenario(options: RunScenarioOptions): Promise<Scenario
       continue
     }
 
-    // Answer the cards and resume, the way the SPA does.
-    history.push(answeredAssistantMessage(asked.chunks, step.decide, `a${index}`))
-    const resumed = await post()
-    turns.push(resumed)
-    history.push(completedAssistantMessage(resumed.chunks, `a${index}-resumed`, names))
+    // Answer the cards and resume, the way the SPA does — and keep doing it
+    // while the resumed turn raises more. A live model may ask for writes one
+    // at a time, and the SPA simply shows the next card; answering only the
+    // first round made a correct, serial model look like it stopped after one.
+    let pending = asked
+    for (let round = 1; ; round += 1) {
+      history.push(answeredAssistantMessage(pending.chunks, step.decide, `a${index}-${round}`))
+      const resumed = await post()
+      turns.push(resumed)
+      if (resumed.approvals.length === 0 || round >= MAX_APPROVAL_ROUNDS) {
+        history.push(completedAssistantMessage(resumed.chunks, `a${index}-resumed`, names))
+        break
+      }
+      pending = resumed
+    }
   }
 
   return {
