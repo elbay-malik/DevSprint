@@ -18,7 +18,8 @@
     "build": "pnpm -r --if-present build",
     "prepare": "husky",
     "deploy:all": "node scripts/deploy.ts",
-    "smoke": "node scripts/smoke.ts"
+    "smoke": "node scripts/smoke.ts",
+    "ci:local": "node scripts/ci-local.ts"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",

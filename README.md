@@ -68,6 +68,9 @@ Routing follows [ADR-0005](docs/adr/0005-model-routing-groq-primary-gemini-fallb
 | `pnpm test`         | recursive Vitest                                    |
 | `pnpm eval`         | trajectory evals for the 6 demo scenarios           |
 | `pnpm build`        | recursive builds (web: vite; api: wrangler dry-run) |
+| `pnpm ci:local`     | CI's `checks` and `e2e` jobs, on this machine       |
+| `pnpm deploy:all`   | deploy all three Workers, then smoke-check them     |
+| `pnpm smoke`        | read-only checks against the live deployment        |
 
 Browser tests live in `apps/web`:
 
@@ -75,8 +78,25 @@ Browser tests live in `apps/web`:
 pnpm --filter @devsprint/web test:e2e
 ```
 
-Playwright starts both servers itself and pins the scripted mock model, so the end-to-end run
-needs no API key and never spends provider quota. The full six-scenario suite is Phase 13.
+Playwright starts all three servers itself and pins the scripted mock model, so the end-to-end
+run needs no API key and never spends provider quota. It includes one test per demo scenario
+(`e2e/scenarios.spec.ts`).
+
+### Running CI locally
+
+`pnpm ci:local` runs the workflow's `checks` and `e2e` jobs on this machine, in about three
+minutes. Use it whenever GitHub Actions cannot run. `--checks` or `--e2e` runs one job.
+
+- **The steps come from `.github/workflows/ci.yml` itself,** so the two cannot drift.
+- **It starts the e2e servers itself** (`apps/web/e2e/servers.ts`, shared with Playwright's
+  config), waits until the api really reaches the MCP Worker, and stops them with SIGTERM so
+  wrangler can leave its dev registry cleanly.
+- **It never kills a process it did not start.** If a port the stack needs is taken, it names the
+  process holding it and stops.
+- **Logs go to `.ci-local/`.**
+
+Prefer it to a bare `CI=1 … test:e2e` on a workstation. Playwright's own readiness probe reuses
+its first connection, so another process on a port it polls can stall it until it times out.
 
 **Package contract**: every workspace package exposes `typecheck` (web: `vue-tsc --noEmit`; others: `tsc --noEmit`) and, where meaningful, `test` (`vitest run`) and `build`. `pnpm -r` skips packages missing a script.
 

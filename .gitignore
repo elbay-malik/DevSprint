@@ -38,3 +38,6 @@ playwright/.cache/
 
 # Written and removed by scripts/deploy.ts on a first deploy only.
 apps/api/wrangler.bootstrap.json
+
+# Step and server logs from `pnpm ci:local`.
+.ci-local/
