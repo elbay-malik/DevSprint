@@ -97,10 +97,14 @@ watch(
 </script>
 
 <template>
-  <section ref="root" data-testid="chat-pane" class="flex min-h-0 flex-col border-t lg:border-t-0">
+  <section
+    ref="root"
+    data-testid="chat-pane"
+    class="flex min-h-0 flex-col border-t max-lg:h-dvh lg:border-t-0"
+  >
     <header class="px-4 py-3 lg:px-6">
       <h2 class="text-sm font-semibold">Copilot</h2>
-      <p data-testid="chat-subtitle" class="text-muted-foreground text-xs">
+      <p data-testid="chat-subtitle" class="text-muted-foreground text-xs text-pretty">
         Answers come straight from the board. Nothing changes until you approve it.
       </p>
     </header>

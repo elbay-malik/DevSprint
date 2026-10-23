@@ -63,12 +63,15 @@ function isFailedWrite(part: { state?: string; output?: unknown }): boolean {
       :key="message.id"
       data-testid="chat-message"
       :data-role="message.role"
-      class="flex max-w-[85%] flex-col gap-2 rounded-lg px-3 py-2 text-sm"
-      :class="
+      class="flex flex-col gap-2 rounded-lg px-3 py-2 text-sm"
+      :class="[
         message.role === 'user'
           ? 'bg-primary text-primary-foreground self-end'
-          : 'bg-muted self-start'
-      "
+          : 'bg-muted self-start',
+        // Cards need the column's width; a text-only bubble keeps the 85% that
+        // tells the two speakers apart.
+        message.role === 'assistant' && message.parts.some(isToolUIPart) ? 'w-full' : 'max-w-[85%]',
+      ]"
     >
       <!--
         'step-start' and any other part types are intentionally not rendered.
@@ -103,24 +106,27 @@ function isFailedWrite(part: { state?: string; output?: unknown }): boolean {
         </template>
       </template>
     </div>
+    <!-- Always mounted, so a screen reader hears the text change; a live region
+         that appears already filled is often not announced at all. -->
+    <span role="status" class="sr-only">{{
+      chat.status === 'submitted' ? 'The copilot is working on your request…' : ''
+    }}</span>
     <div
       v-if="chat.status === 'submitted'"
       data-testid="thinking-indicator"
       class="flex gap-1 self-start px-1"
     >
-      <!-- The dots are for sighted readers; the status line is what gets announced. -->
-      <span role="status" class="sr-only">The copilot is working on your request…</span>
       <span
         aria-hidden="true"
-        class="bg-muted-foreground/60 inline-block size-2 animate-pulse rounded-full"
+        class="bg-muted-foreground/60 inline-block size-2 animate-pulse rounded-full motion-reduce:animate-none"
       />
       <span
         aria-hidden="true"
-        class="bg-muted-foreground/60 inline-block size-2 animate-pulse rounded-full [animation-delay:150ms]"
+        class="bg-muted-foreground/60 inline-block size-2 animate-pulse rounded-full motion-reduce:animate-none [animation-delay:150ms]"
       />
       <span
         aria-hidden="true"
-        class="bg-muted-foreground/60 inline-block size-2 animate-pulse rounded-full [animation-delay:300ms]"
+        class="bg-muted-foreground/60 inline-block size-2 animate-pulse rounded-full motion-reduce:animate-none [animation-delay:300ms]"
       />
     </div>
   </div>

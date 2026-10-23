@@ -33,20 +33,20 @@ watch(
     data-testid="workspace-pane"
     tabindex="0"
     aria-label="Sprint board"
-    class="focus-visible:ring-ring/50 flex min-h-0 flex-col gap-4 overflow-y-auto p-4 outline-none focus-visible:ring-[3px] focus-visible:ring-inset lg:p-6"
+    class="focus-visible:ring-ring/50 @container flex min-h-0 flex-col gap-4 p-4 outline-none focus-visible:ring-[3px] focus-visible:ring-inset lg:overflow-y-auto lg:p-6"
   >
+    <!-- The sprint name leads; the header bar already names the product, so the
+         project needs no label above it. The source badge sits on the heading's
+         line as the board's status. -->
     <header>
-      <div class="flex items-center gap-2">
-        <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-          {{ store.workspace.project.name }}
-        </p>
+      <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <h1 class="text-lg font-semibold">
+          {{ store.activeSprint?.name ?? 'No active sprint' }}
+        </h1>
         <Badge variant="secondary" data-testid="workspace-source">
           {{ store.source === 'api' ? 'live' : 'offline' }}
         </Badge>
       </div>
-      <h1 class="text-lg font-semibold">
-        {{ store.activeSprint?.name ?? 'No active sprint' }}
-      </h1>
       <p class="text-muted-foreground text-sm">{{ store.activeSprint?.goal }}</p>
     </header>
     <SprintStatsCards :stats="store.stats" />

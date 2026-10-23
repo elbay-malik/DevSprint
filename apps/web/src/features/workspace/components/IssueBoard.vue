@@ -24,7 +24,7 @@ const handleById = computed(() => new Map(props.users.map((user) => [user.id, `@
 
 <template>
   <div class="flex min-h-0 flex-col gap-4">
-    <div class="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-5">
+    <div class="grid grid-cols-2 gap-3 @2xl:grid-cols-3 @4xl:grid-cols-5">
       <div
         v-for="column in columns"
         :key="column.status"
@@ -41,6 +41,9 @@ const handleById = computed(() => new Map(props.users.map((user) => [user.id, `@
           :issue="issue"
           :assignee-handle="issue.assigneeId ? handleById.get(issue.assigneeId) : undefined"
         />
+        <p v-if="column.issues.length === 0" class="text-muted-foreground px-1 text-xs">
+          No issues
+        </p>
       </div>
     </div>
     <div v-if="backlog.length > 0" data-testid="board-backlog" class="flex flex-col gap-2">
@@ -48,7 +51,7 @@ const handleById = computed(() => new Map(props.users.map((user) => [user.id, `@
         <h2 class="text-muted-foreground text-sm font-medium">Backlog</h2>
         <Badge variant="secondary">{{ backlog.length }}</Badge>
       </div>
-      <div class="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-5">
+      <div class="grid grid-cols-2 gap-3 @2xl:grid-cols-3 @4xl:grid-cols-5">
         <!-- Backlog issues sit outside the sprint's columns, so their status
              has to be on the card or a move made elsewhere (S-F) is invisible. -->
         <IssueCard

@@ -13,7 +13,7 @@ const cards = [
 </script>
 
 <template>
-  <div class="grid grid-cols-2 gap-3 xl:grid-cols-4">
+  <div class="grid grid-cols-2 gap-3 @2xl:grid-cols-4">
     <Card v-for="card in cards" :key="card.label" class="gap-1 py-4">
       <CardContent class="px-4">
         <CardDescription>{{ card.label }}</CardDescription>
