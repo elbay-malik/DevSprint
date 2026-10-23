@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-22T20:40:54+00:00",
+  "generatedAt": "2026-10-23T09:14:00+00:00",
   "title": "Design System: DevSprint Copilot",
   "extensions": {
     "colorMeta": {
@@ -152,7 +152,8 @@
           "oklch(74% 0.2 27.325)",
           "oklch(85% 0.2 27.325)",
           "oklch(95% 0.2 27.325)"
-        ]
+        ],
+        "token": "--destructive"
       },
       "stop-red-dark": {
         "role": "signal",
@@ -182,7 +183,8 @@
           "oklch(74% 0.118 165.612)",
           "oklch(85% 0.118 165.612)",
           "oklch(95% 0.118 165.612)"
-        ]
+        ],
+        "token": "--success"
       },
       "go-green-dark": {
         "role": "signal",
@@ -212,7 +214,8 @@
           "oklch(74% 0.15 255)",
           "oklch(85% 0.15 255)",
           "oklch(95% 0.15 255)"
-        ]
+        ],
+        "token": "--chart-1"
       },
       "trace-blue-dark": {
         "role": "signal",
@@ -253,7 +256,7 @@
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Uppercase project eyebrow; badges at the same size without uppercase."
+        "purpose": "Badges, counts and statuses. Never uppercase, never above a heading."
       },
       "mono": {
         "displayName": "Mono",
@@ -284,14 +287,14 @@
         "purpose": "Deployment progress bar advancing a whole stage."
       },
       {
-        "name": "liveness-pulse",
-        "value": "animate-pulse, staggered 150ms / 300ms",
-        "purpose": "Typing dots and a running tool. Must gain a prefers-reduced-motion fallback."
-      },
-      {
         "name": "press",
         "value": "translateY(1px)",
         "purpose": "Button press feedback."
+      },
+      {
+        "name": "liveness-pulse",
+        "value": "animate-pulse, staggered 150ms / 300ms; static under prefers-reduced-motion",
+        "purpose": "Typing dots and a running tool."
       }
     ],
     "breakpoints": [
@@ -433,14 +436,16 @@
       "Do set identifiers in monospace and numbers in tabular figures.",
       "Do separate surfaces with a 1px ring at 10% or a tonal step, and keep 14px corners for board cards and 8px for chat cards.",
       "Do spend the Ink-filled button once per region, on the affirmative action, and use outline for everything secondary or abortive.",
-      "Do check every change in both themes at WCAG 2.2 AA."
+      "Do check every change in both themes at WCAG 2.2 AA.",
+      "Do theme the browser's own surfaces: `color-scheme` per theme, an ink-tint selection, Rule-coloured scrollbars, and the theme applied before first paint."
     ],
     "donts": [
       "Don't put a drop shadow on a surface at rest.",
       "Don't add hue for decoration or branding until a single brand accent has been chosen deliberately.",
-      "Don't hard-code new colours. The Go Green pair and Trace Blue are literals today, and new work should tokenize them rather than add more.",
-      "Don't wrap an OKLCH token in `hsl()`. The toast wrapper does this today, and it produces an invalid colour.",
-      "Don't add motion that ignores `prefers-reduced-motion`. The existing pulse dots and progress transition don't honour it yet.",
+      "Don't hard-code a colour. Every signal is a token (`--success`, `--destructive`, `--chart-1`), and a new colour arrives as a token in both themes or not at all.",
+      "Don't wrap an OKLCH token in `hsl()`. Mix with `color-mix(in oklch, …)`.",
+      "Don't add motion without a `prefers-reduced-motion` fallback. Pulses stop and the progress fill jumps (`motion-reduce:`), and the state word still carries the meaning.",
+      "Don't put a label or eyebrow above a heading.",
       "Don't render model text as HTML or links. Chat text uses the safe subset only."
     ]
   }

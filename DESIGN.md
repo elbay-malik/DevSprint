@@ -49,7 +49,6 @@ typography:
     fontSize: '0.75rem'
     fontWeight: 500
     lineHeight: 1.333
-    letterSpacing: '0.025em'
   mono:
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace'
     fontSize: '0.75rem'
@@ -197,13 +196,12 @@ An achromatic ink-and-paper ramp, with three signal hues that each carry a meani
 
 - **Stop Red** (oklch(0.577 0.245 27.325); dark oklch(0.704 0.191 22.216)): failure. Error codes,
   failed stages and removed sections. On the error card it is tinted (a 40% border on a 40% Paper
-  Tint fill), so an error reads as information, not an alarm. It is the only signal that is a
-  token (`--destructive`).
+  Tint fill), so an error reads as information, not an alarm. Token: `--destructive`.
 - **Go Green** (oklch(0.508 0.118 165.612); dark oklch(0.765 0.177 163.223)): success and
-  completion. Succeeded stages and runs, added sections, and "ok" tool states. It is currently the
-  Tailwind pair `emerald-700` / `emerald-400`, repeated in four components rather than tokenized.
+  completion. Succeeded stages and runs, added sections, and "ok" tool states. Token: `--success`
+  (`text-success`).
 - **Trace Blue** (#2a78d6; dark #3987e5): the measured data line. Used only for the "Remaining"
-  series of the burndown chart, as a literal in that one component.
+  series of the burndown chart. Token: `--chart-1`.
 
 **Brand accent: open.** No brand colour exists today, and none is to be invented. A single brand
 accent may be introduced later, by decision. Until then, hue on chrome is off-system.
@@ -232,8 +230,8 @@ instrument readout: wherever something can be copied, matched or referenced, it 
 - **Body** (400, 14px, 20px line): chat messages, issue titles (at 500), and the sprint goal.
 - **Caption** (400, 12px, 16px line): chat card bodies, meta lines and assignees. Graphite when
   secondary.
-- **Label** (500, 12px, 0.025em tracking, uppercase): the project eyebrow. A one-off overline;
-  badges use the same size and weight without uppercase.
+- **Label** (500, 12px): badges, counts and statuses. Nothing in the system is uppercase or
+  tracked, and no label sits above a heading: the heading carries its own weight.
 - **Mono** (400, 12px): issue keys, tool names, versions, environments, stage names, error codes,
   log lines and inline code (at 0.85em).
 - Chart axis labels are 10px tabular, the one size below Caption.
@@ -245,20 +243,25 @@ stat, it uses tabular figures.
 
 ## Layout
 
-The app fills the viewport as a fixed grid: a header row above a body that splits into a fluid
-workspace and a 360 to 440px chat column, with each pane scrolling on its own. Below the large
-breakpoint the panes stack, chat under the board, divided by a hairline.
+From the large breakpoint up, the app fills the viewport as a fixed grid: a header row above a
+body that splits into a fluid workspace and a 360 to 440px chat column, with each pane scrolling on
+its own. Below it the panes stack and the page scrolls: the board flows at its natural height, and
+the copilot follows, divided by a hairline, with a full screen of its own.
 
 - **Gutters:** 16px, and 24px from the large breakpoint, repeated on the header, chat header,
   message list, composer and workspace.
 - **Rhythm:** a 4px base. Stacks inside cards use 4 to 8px gaps. Grids and chat messages use
   12px. Page sections use 16px.
-- **Board:** 2 columns, then 3 from medium, then all 5 statuses from 2xl, with 12px gaps and the
-  backlog below as its own grid. Stats are 2 across, then 4 from xl.
-- **Chat:** bubbles span at most 85% of the column. The user's bubble aligns to the end and the
-  assistant's to the start, and cards nest inside the assistant bubble.
+- **Board and stats follow the pane, not the window.** The workspace is a size container. Below
+  42rem of pane the board has 2 columns, from 42rem 3, and from 56rem all 5 statuses sit in one
+  row. Stats go from 2 across to 4 at 42rem. Gaps are 12px, and the backlog sits below as its own
+  grid.
+- **Chat:** a text-only bubble spans at most 85% of the column, so the two speakers stay distinct.
+  An assistant bubble that holds cards spans the full column, because tables, charts and approval
+  controls need the width. The user's bubble aligns to the end and the assistant's to the start.
 
-Breakpoints are Tailwind's defaults (md, lg, xl, 2xl). None are customised.
+Viewport breakpoints are Tailwind's defaults; the workspace uses container sizes instead (42rem,
+56rem).
 
 ## Elevation & Depth
 
@@ -375,16 +378,18 @@ over Rule gridlines and 10px tabular axis labels. Hovering moves the readout to 
 - **Do** spend the Ink-filled button once per region, on the affirmative action, and use outline
   for everything secondary or abortive.
 - **Do** check every change in both themes at WCAG 2.2 AA.
+- **Do** theme the browser's own surfaces: `color-scheme` per theme, an ink-tint selection, Rule-coloured
+  scrollbars, and the theme applied before first paint.
 
 ### Don't:
 
 - **Don't** put a drop shadow on a surface at rest.
 - **Don't** add hue for decoration or branding until a single brand accent has been chosen
   deliberately.
-- **Don't** hard-code new colours. The Go Green pair and Trace Blue are literals today, and new
-  work should tokenize them rather than add more.
-- **Don't** wrap an OKLCH token in `hsl()`. The toast wrapper does this today, and it produces an
-  invalid colour.
-- **Don't** add motion that ignores `prefers-reduced-motion`. The existing pulse dots and progress
-  transition don't honour it yet.
+- **Don't** hard-code a colour. Every signal is a token (`--success`, `--destructive`,
+  `--chart-1`), and a new colour arrives as a token in both themes or not at all.
+- **Don't** wrap an OKLCH token in `hsl()`. Mix with `color-mix(in oklch, …)`.
+- **Don't** add motion without a `prefers-reduced-motion` fallback. Pulses stop and the progress
+  fill jumps (`motion-reduce:`), and the state word still carries the meaning.
+- **Don't** put a label or eyebrow above a heading.
 - **Don't** render model text as HTML or links. Chat text uses the safe subset only.
