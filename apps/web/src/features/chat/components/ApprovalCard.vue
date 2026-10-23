@@ -169,7 +169,11 @@ function respond(approved: boolean) {
     </div>
 
     <details>
-      <summary class="text-muted-foreground cursor-pointer select-none">Raw arguments</summary>
+      <summary
+        class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 cursor-pointer rounded-sm outline-none focus-visible:ring-3 select-none"
+      >
+        Raw arguments
+      </summary>
       <pre class="mt-1 max-h-48 overflow-auto font-mono text-xs">{{ argumentsJson }}</pre>
     </details>
 
@@ -177,15 +181,30 @@ function respond(approved: boolean) {
       <Input
         v-model="reason"
         data-testid="approval-reason"
-        class="h-8 flex-1 text-xs"
+        class="h-7 flex-1 text-xs md:text-xs"
         :aria-label="`Reason (optional), for denying: ${summary.headline}`"
         placeholder="Reason (optional)"
         autocomplete="off"
       />
-      <Button data-testid="approval-deny" size="sm" variant="outline" @click="respond(false)">
+      <!-- Five cards can be pending at once; each button names its change so a
+           screen reader's list of buttons is not "Deny, Approve" five times. -->
+      <Button
+        data-testid="approval-deny"
+        size="sm"
+        variant="outline"
+        :aria-label="`Deny: ${summary.headline}`"
+        @click="respond(false)"
+      >
         Deny
       </Button>
-      <Button data-testid="approval-approve" size="sm" @click="respond(true)">Approve</Button>
+      <Button
+        data-testid="approval-approve"
+        size="sm"
+        :aria-label="`Approve: ${summary.headline}`"
+        @click="respond(true)"
+      >
+        Approve
+      </Button>
     </div>
 
     <p

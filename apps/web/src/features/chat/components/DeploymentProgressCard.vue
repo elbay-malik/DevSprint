@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { Deployment, StageStatus } from '@devsprint/shared'
+import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
 import { deploymentCancelEndpoint } from '@/lib/api'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -35,7 +36,7 @@ const shown = computed(() => {
 const STAGE_TONES: Record<StageStatus, string> = {
   pending: 'text-muted-foreground',
   running: 'text-foreground',
-  succeeded: 'text-emerald-700 dark:text-emerald-400',
+  succeeded: 'text-success',
   failed: 'text-destructive',
   skipped: 'text-muted-foreground',
 }
@@ -71,7 +72,7 @@ const progressPct = computed(() => {
 
 const STATUS_TONES: Record<string, string> = {
   running: 'text-foreground',
-  succeeded: 'text-emerald-700 dark:text-emerald-400',
+  succeeded: 'text-success',
   failed: 'text-destructive',
   cancelled: 'text-muted-foreground',
   queued: 'text-muted-foreground',
@@ -123,9 +124,15 @@ const cancelling = ref(false)
 async function cancel(): Promise<void> {
   cancelling.value = true
   try {
-    await fetch(deploymentCancelEndpoint(props.deployment.id), { method: 'POST' })
+    // fetch() only throws on a network failure; a refused cancel arrives as a
+    // response, and treating it as success would leave the run going silently.
+    const res = await fetch(deploymentCancelEndpoint(props.deployment.id), { method: 'POST' })
+    if (!res.ok) throw new Error(`cancel answered ${res.status}`)
   } catch (error) {
     console.warn('[deployment] cancel failed:', error)
+    toast.error("Couldn't cancel the deployment", {
+      description: 'It is still running. Try again in a moment.',
+    })
   } finally {
     cancelling.value = false
     void workspace.hydrate()
@@ -143,7 +150,7 @@ const canCancel = computed(() => props.live === true && !settled.value)
   >
     <div class="flex flex-wrap items-center justify-between gap-2">
       <span class="font-medium">
-        {{ shown.version }} →
+        <span class="font-mono">{{ shown.version }}</span> →
         <span class="font-mono">{{ shown.environment }}</span>
       </span>
       <span class="flex items-center gap-2">
@@ -163,7 +170,7 @@ const canCancel = computed(() => props.live === true && !settled.value)
           :aria-label="`Cancel deploying ${shown.version} to ${shown.environment}`"
           @click="cancel()"
         >
-          Cancel
+          {{ cancelling ? 'Cancelling…' : 'Cancel' }}
         </Button>
       </span>
     </div>
@@ -184,7 +191,7 @@ const canCancel = computed(() => props.live === true && !settled.value)
       :aria-valuetext="progressLabel"
     >
       <div
-        class="bg-foreground h-full transition-[width] duration-300"
+        class="bg-foreground h-full transition-[width] duration-300 motion-reduce:transition-none"
         :style="{ width: `${progressPct}%` }"
       />
     </div>

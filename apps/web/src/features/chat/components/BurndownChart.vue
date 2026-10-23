@@ -99,9 +99,11 @@ function shortDate(date: string): string {
 </script>
 
 <template>
-  <figure data-testid="burndown-chart" class="bg-background m-0 rounded-md border p-3">
+  <figure data-testid="burndown-chart" class="bg-background m-0 rounded-md border px-3 py-2">
     <figcaption class="flex flex-wrap items-baseline justify-between gap-2">
-      <span class="text-sm font-medium">Burndown — {{ data.sprintId }}</span>
+      <span class="font-medium"
+        >Burndown — <span class="font-mono">{{ data.sprintId }}</span></span
+      >
       <span v-if="active" class="text-muted-foreground text-xs tabular-nums">
         {{ shortDate(active.date) }} · {{ active.remaining }} of {{ data.committedPoints }}
         {{ data.unit }} left · ideal {{ active.ideal }}
@@ -111,7 +113,7 @@ function shortDate(date: string): string {
     <!-- Identity never rests on colour alone: the key repeats the line style. -->
     <ul class="text-muted-foreground mt-1 flex gap-4 text-xs" aria-hidden="true">
       <li class="flex items-center gap-1.5">
-        <svg width="16" height="8" viewBox="0 0 16 8" class="text-[#2a78d6] dark:text-[#3987e5]">
+        <svg width="16" height="8" viewBox="0 0 16 8" class="text-chart-1">
           <line x1="0" y1="4" x2="16" y2="4" stroke="currentColor" stroke-width="2" />
         </svg>
         Remaining
@@ -197,7 +199,7 @@ function shortDate(date: string): string {
         stroke-width="2"
         stroke-linejoin="round"
         stroke-linecap="round"
-        class="text-[#2a78d6] dark:text-[#3987e5]"
+        class="text-chart-1"
       />
 
       <!-- Values at the line ends rather than a number on every point. -->
@@ -205,7 +207,7 @@ function shortDate(date: string): string {
         <text
           :x="WIDTH - PAD.right + 6"
           :y="y(days.at(-1)?.remaining ?? 0) + 3"
-          class="fill-[#2a78d6] dark:fill-[#3987e5]"
+          class="fill-chart-1"
         >
           {{ days.at(-1)?.remaining ?? 0 }}
         </text>
@@ -224,7 +226,7 @@ function shortDate(date: string): string {
         :cx="x(activeIndex)"
         :cy="y(active.remaining)"
         r="4"
-        class="fill-[#2a78d6] stroke-background dark:fill-[#3987e5]"
+        class="fill-chart-1 stroke-background"
         stroke-width="2"
       />
 
@@ -240,7 +242,11 @@ function shortDate(date: string): string {
     </svg>
 
     <details class="mt-1">
-      <summary class="text-muted-foreground cursor-pointer text-xs select-none">Series</summary>
+      <summary
+        class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 cursor-pointer rounded-sm outline-none focus-visible:ring-3 text-xs select-none"
+      >
+        Series
+      </summary>
       <table class="mt-1 w-full text-xs tabular-nums">
         <thead class="text-muted-foreground text-left">
           <tr>

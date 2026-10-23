@@ -34,7 +34,7 @@ interface ChipStatus {
 
 const TONE_CLASSES: Record<Tone, string> = {
   pending: 'text-muted-foreground',
-  success: 'text-emerald-700 dark:text-emerald-400',
+  success: 'text-success',
   error: 'text-destructive',
   muted: 'text-muted-foreground',
 }
@@ -92,7 +92,7 @@ const outputJson = computed(() =>
   <div
     data-testid="tool-call-chip"
     :data-state="part.state"
-    class="bg-background flex min-w-0 flex-col gap-1 rounded-md border px-2 py-1.5 text-xs"
+    class="bg-background flex min-w-0 flex-col gap-1 rounded-md border px-3 py-2 text-xs"
   >
     <div class="flex flex-wrap items-center gap-2">
       <Badge variant="outline" class="font-mono">{{ toolName }}</Badge>
@@ -100,18 +100,26 @@ const outputJson = computed(() =>
         <span
           v-if="status.tone === 'pending'"
           aria-hidden="true"
-          class="bg-muted-foreground/60 inline-block size-2 animate-pulse rounded-full"
+          class="bg-muted-foreground/60 inline-block size-2 animate-pulse rounded-full motion-reduce:animate-none"
         />
         <span data-testid="tool-call-state">{{ status.label }}</span>
       </span>
       <span v-if="errorText" class="text-destructive min-w-0 truncate">{{ errorText }}</span>
     </div>
     <details>
-      <summary class="text-muted-foreground cursor-pointer py-1 select-none">Arguments</summary>
+      <summary
+        class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 cursor-pointer rounded-sm outline-none focus-visible:ring-3 py-1 select-none"
+      >
+        Arguments
+      </summary>
       <pre class="mt-1 max-h-64 overflow-auto font-mono text-xs">{{ inputJson }}</pre>
     </details>
     <details v-if="outputJson !== undefined">
-      <summary class="text-muted-foreground cursor-pointer py-1 select-none">Result</summary>
+      <summary
+        class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 cursor-pointer rounded-sm outline-none focus-visible:ring-3 py-1 select-none"
+      >
+        Result
+      </summary>
       <pre class="mt-1 max-h-64 overflow-auto font-mono text-xs">{{ outputJson }}</pre>
     </details>
   </div>

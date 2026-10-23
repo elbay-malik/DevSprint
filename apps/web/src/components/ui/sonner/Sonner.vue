@@ -24,7 +24,7 @@ const props = defineProps<ToasterProps>()
       '--normal-text': 'var(--popover-foreground)',
       '--normal-border': 'var(--border)',
       '--border-radius': 'var(--radius)',
-      '--gray2': 'hsl(var(--popover) / 0.9)',
+      '--gray2': 'color-mix(in oklch, var(--popover) 90%, transparent)',
       '--gray3': 'var(--border)',
       '--gray4': 'var(--border)',
       '--gray5': 'var(--border)',
@@ -32,7 +32,7 @@ const props = defineProps<ToasterProps>()
     }"
     :toast-options="{
       classes: {
-        toast: 'rounded-2xl',
+        toast: 'rounded-xl',
       },
       ...props.toastOptions,
     }"

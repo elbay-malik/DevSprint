@@ -37,12 +37,12 @@ const blocks = computed(() => parseChatText(props.text))
       </ul>
       <div v-else-if="block.kind === 'table'" class="overflow-x-auto">
         <table class="w-full border-collapse text-xs">
-          <thead>
+          <thead class="text-muted-foreground">
             <tr class="border-b">
               <th
                 v-for="(cell, cellIndex) in block.header"
                 :key="cellIndex"
-                class="px-2 py-1 text-left font-medium"
+                class="px-3 py-1.5 text-left font-normal"
               >
                 <ChatInline :parts="cell" />
               </th>
@@ -54,7 +54,7 @@ const blocks = computed(() => parseChatText(props.text))
               :key="rowIndex"
               class="border-b last:border-0"
             >
-              <td v-for="(cell, cellIndex) in row" :key="cellIndex" class="px-2 py-1 align-top">
+              <td v-for="(cell, cellIndex) in row" :key="cellIndex" class="px-3 py-1.5 align-top">
                 <ChatInline :parts="cell" />
               </td>
             </tr>

@@ -8,7 +8,19 @@
       name="description"
       content="An AI copilot over a demo sprint workspace: it answers from the board, drafts release notes and runs deployments, and asks before it changes anything."
     />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a" />
     <title>DevSprint Copilot</title>
+    <!-- Applied before first paint, mirroring src/lib/theme.ts, so a dark
+         preference never shows a white page while the app loads. -->
+    <script>
+      try {
+        var t = localStorage.getItem('devsprint-theme')
+        if (t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark')
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="app"></div>
