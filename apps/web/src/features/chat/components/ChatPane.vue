@@ -101,8 +101,7 @@ watch(
     <header class="px-4 py-3 lg:px-6">
       <h2 class="text-sm font-semibold">Copilot</h2>
       <p data-testid="chat-subtitle" class="text-muted-foreground text-xs">
-        Answers are grounded in the workspace by real tool calls. Every write asks you to approve it
-        first.
+        Answers come straight from the board. Nothing changes until you approve it.
       </p>
     </header>
     <Separator />

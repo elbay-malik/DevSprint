@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useDevSprintChat } from '../composables/useDevSprintChat'
+import { statusLabel } from '@/features/workspace/lib/status-labels'
 
 /**
  * The gate in front of every write (docs/wireframes.md §3, ADR-0003). It shows
@@ -44,16 +45,16 @@ const outcome = computed(() => {
  */
 const summary = computed((): { headline: string; detail?: string } => {
   const input = props.part.input as Record<string, unknown> | undefined
-  if (input === undefined) return { headline: 'Pending arguments…' }
+  if (input === undefined) return { headline: 'Preparing the change…' }
 
   if (toolName.value === 'update_issue_status' && typeof input.issueKey === 'string') {
     const issue = workspace.workspace.issues.find((candidate) => candidate.key === input.issueKey)
     // The "from" status is read live, so it is only truthful while the change is
     // still pending. Once the board catches up an executed write, keeping it
     // would rewrite this record into a nonsense "done → done".
-    const from = issue && !decided.value ? `${issue.status} → ` : ''
+    const from = issue && !decided.value ? `${statusLabel(issue.status)} → ` : ''
     return {
-      headline: `${input.issueKey}: ${from}${String(input.status)}`,
+      headline: `${input.issueKey}: ${from}${statusLabel(input.status)}`,
       ...(issue ? { detail: issue.title } : {}),
     }
   }
@@ -65,6 +66,13 @@ const summary = computed((): { headline: string; detail?: string } => {
   if (toolName.value === 'create_release_notes' && typeof input.version === 'string') {
     return { headline: `Save ${input.version} release notes as a draft` }
   }
+  if (
+    toolName.value === 'run_deployment' &&
+    typeof input.version === 'string' &&
+    typeof input.environment === 'string'
+  ) {
+    return { headline: `Deploy ${input.version} to ${input.environment}` }
+  }
   return { headline: `Run ${toolName.value}` }
 })
 
@@ -75,33 +83,46 @@ const argumentsJson = computed(() => JSON.stringify(props.part.input ?? {}, null
  * A failure has to show as a failure: reporting only "Approved by you" would
  * present a write that never landed as one that did.
  */
-const result = computed((): string | undefined => {
-  if (props.part.state === 'output-error') return props.part.errorText || 'failed'
+interface Outcome {
+  failed: boolean
+  /** Reads after "Approved by you —" or "…but it failed:". */
+  text: string
+  code?: string
+}
+
+const result = computed((): Outcome | undefined => {
+  if (props.part.state === 'output-error') {
+    return { failed: true, text: props.part.errorText || 'the change did not go through' }
+  }
   if (props.part.state !== 'output-available') return undefined
   const output: unknown = props.part.output
-  if (typeof output !== 'object' || output === null || !('ok' in output)) return 'done'
+  if (typeof output !== 'object' || output === null || !('ok' in output)) {
+    return { failed: false, text: 'done' }
+  }
   const envelope = output as {
     ok: boolean
     error?: { code: string; message?: string }
     data?: unknown
   }
   if (!envelope.ok) {
-    // The code alone ("ISSUE_NOT_FOUND") says a write failed without saying
-    // why, and every envelope in this codebase carries a message written to be
-    // read. Dropping it left the one card that reports a failed write as the
-    // least informative thing on screen.
+    // Every envelope carries a message written to be read, so it leads; the
+    // code ("ISSUE_NOT_FOUND") follows as detail for whoever is debugging.
     const { code, message } = envelope.error ?? {}
-    if (code === undefined) return 'failed'
-    return message === undefined || message.length === 0 ? code : `${code} — ${message}`
+    return {
+      failed: true,
+      text: message !== undefined && message.length > 0 ? message : 'the change did not go through',
+      ...(code === undefined ? {} : { code }),
+    }
   }
 
   // A deployment reaches `output-available` on its first frame and stays there
   // for the whole run, so "applied" would be premature while it is going and
   // wrong afterwards for a run that was cancelled. Its own status is the truth.
+  // A cancelled run is not a failure: the user asked for it.
   const status = deploymentStatus(envelope.data)
-  if (status !== undefined) return status === 'running' ? 'running' : status
+  if (status !== undefined) return { failed: status === 'failed', text: `deployment ${status}` }
 
-  return 'applied'
+  return { failed: false, text: 'applied' }
 })
 
 /** The deployment inside a run_deployment result, if this is one. */
@@ -114,17 +135,7 @@ function deploymentStatus(data: unknown): string | undefined {
   return typeof deployment.status === 'string' ? deployment.status : undefined
 }
 
-/**
- * Outcomes that are not failures. A cancelled deployment is in here on purpose:
- * the user asked for it, so styling it as an error would blame them for it.
- */
-const SETTLED_WELL = new Set(['applied', 'done', 'running', 'queued', 'succeeded', 'cancelled'])
-
-const failed = computed(
-  () =>
-    props.part.state === 'output-error' ||
-    (result.value !== undefined && !SETTLED_WELL.has(result.value)),
-)
+const failed = computed(() => result.value?.failed === true)
 
 function respond(approved: boolean) {
   const id = approval.value?.id
@@ -167,7 +178,7 @@ function respond(approved: boolean) {
         v-model="reason"
         data-testid="approval-reason"
         class="h-8 flex-1 text-xs"
-        :aria-label="`Reason for denying ${toolName}`"
+        :aria-label="`Reason (optional), for denying: ${summary.headline}`"
         placeholder="Reason (optional)"
         autocomplete="off"
       />
@@ -182,8 +193,14 @@ function respond(approved: boolean) {
       data-testid="approval-outcome"
       :class="failed ? 'text-destructive' : 'text-muted-foreground'"
     >
-      <template v-if="outcome?.approved">
-        Approved by you<template v-if="result"> — {{ result }}</template
+      <template v-if="outcome?.approved && result?.failed">
+        Approved by you, but it failed: {{ result.text }}
+        <span v-if="result.code" data-testid="approval-error-code" class="font-mono"
+          >({{ result.code }})</span
+        >
+      </template>
+      <template v-else-if="outcome?.approved">
+        Approved by you<template v-if="result"> — {{ result.text }}</template
         >.
       </template>
       <template v-else>

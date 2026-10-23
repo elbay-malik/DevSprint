@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ISSUE_STATUSES, type Issue, type IssueStatus, type User } from '@devsprint/shared'
+import { ISSUE_STATUSES, type Issue, type User } from '@devsprint/shared'
 import { Badge } from '@/components/ui/badge'
 import IssueCard from './IssueCard.vue'
+import { ISSUE_STATUS_LABELS } from '../lib/status-labels'
 
 const props = defineProps<{
   issues: Issue[]
@@ -10,18 +11,10 @@ const props = defineProps<{
   users: User[]
 }>()
 
-const STATUS_LABELS: Record<IssueStatus, string> = {
-  todo: 'Todo',
-  in_progress: 'In progress',
-  in_review: 'In review',
-  blocked: 'Blocked',
-  done: 'Done',
-}
-
 const columns = computed(() =>
   ISSUE_STATUSES.map((status) => ({
     status,
-    label: STATUS_LABELS[status],
+    label: ISSUE_STATUS_LABELS[status],
     issues: props.issues.filter((issue) => issue.status === status),
   })),
 )
@@ -62,7 +55,7 @@ const handleById = computed(() => new Map(props.users.map((user) => [user.id, `@
           v-for="issue in backlog"
           :key="issue.id"
           :issue="issue"
-          :status-label="STATUS_LABELS[issue.status]"
+          :status-label="ISSUE_STATUS_LABELS[issue.status]"
         />
       </div>
     </div>

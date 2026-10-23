@@ -164,7 +164,7 @@ describe('POST /api/chat — spend controls', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('x-devsprint-limit')).toBe('rate')
     const answer = textOf(parseChunks(await res.text()))
-    expect(answer).toContain('lot of requests')
+    expect(answer).toContain('Too many requests')
     // The model was never reached, which is the point of checking first.
     expect(answer).not.toContain('23 of 31 points remaining')
   })

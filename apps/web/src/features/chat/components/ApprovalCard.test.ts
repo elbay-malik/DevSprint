@@ -35,7 +35,7 @@ describe('ApprovalCard', () => {
 
     // The board is already on screen, so the card can name the move and title
     // rather than making the reader parse JSON.
-    expect(wrapper.get('[data-testid="approval-headline"]').text()).toBe('DS-7: in_review → done')
+    expect(wrapper.get('[data-testid="approval-headline"]').text()).toBe('DS-7: In review → Done')
     expect(wrapper.text()).toContain('Billing export CSV download')
     expect(wrapper.text()).toContain('update_issue_status')
   })
@@ -147,7 +147,7 @@ describe('ApprovalCard', () => {
       output: { ok: true, data: {} },
       approval: { id: 'approval-1', approved: true, signature: 'sig' },
     })
-    expect(resolved.get('[data-testid="approval-headline"]').text()).toBe('DS-7: done')
+    expect(resolved.get('[data-testid="approval-headline"]').text()).toBe('DS-7: Done')
   })
 
   it('shows a write that errored as failed, not as approved and fine', () => {
@@ -162,11 +162,39 @@ describe('ApprovalCard', () => {
     )
   })
 
-  it('gives the denial reason input an accessible name', () => {
+  it('gives the denial reason input an accessible name that starts with its label', () => {
+    // The name opens with what the field shows ("Reason (optional)") and says
+    // which change it is about, without the raw tool name.
     const wrapper = mountCard(requested({ issueKey: 'DS-7', status: 'done' }))
-    expect(wrapper.get('[data-testid="approval-reason"]').attributes('aria-label')).toContain(
-      'Reason for denying',
+    const name = wrapper.get('[data-testid="approval-reason"]').attributes('aria-label')
+    expect(name).toMatch(/^Reason \(optional\)/)
+    expect(name).toContain('DS-7: In review → Done')
+  })
+
+  it('names a deployment it gates by version and environment', () => {
+    const wrapper = mountCard(
+      requested({ environment: 'staging', version: 'v1.5.0-rc.1' }, 'run_deployment'),
     )
+    expect(wrapper.get('[data-testid="approval-headline"]').text()).toBe(
+      'Deploy v1.5.0-rc.1 to staging',
+    )
+  })
+
+  it('leads a failed write with what went wrong, and keeps the code as detail', () => {
+    const wrapper = mountCard({
+      ...requested({ issueKey: 'DS-42', status: 'done' }),
+      state: 'output-available',
+      output: {
+        ok: false,
+        error: { code: 'ISSUE_NOT_FOUND', message: "No issue with key 'DS-42'." },
+      },
+      approval: { id: 'approval-1', approved: true, signature: 'sig' },
+    })
+    const outcome = wrapper.get('[data-testid="approval-outcome"]').text()
+    expect(outcome).toMatch(/^Approved by you, but it failed: No issue with key 'DS-42'\./)
+    expect(wrapper.get('[data-testid="approval-error-code"]').text()).toBe('(ISSUE_NOT_FOUND)')
+    // Separated by a space: the template once ran them together as "….(CODE)".
+    expect(outcome).toContain("'DS-42'. (ISSUE_NOT_FOUND)")
   })
 
   it('reports a deployment by its own status, not as applied', () => {
@@ -202,7 +230,8 @@ describe('ApprovalCard', () => {
         ok: false,
         error: {
           code: 'ISSUE_NOT_FOUND',
-          message: "No issue with key 'DS-42'. Use search_issues to find the issue you meant.",
+          message:
+            "No issue with key 'DS-42'. Search by title to find the issue you meant (search_issues).",
         },
       },
       approval: { id: 'approval-1', approved: true, signature: 'sig' },
@@ -210,7 +239,7 @@ describe('ApprovalCard', () => {
 
     const outcome = wrapper.get('[data-testid="approval-outcome"]').text()
     expect(outcome).toContain('ISSUE_NOT_FOUND')
-    expect(outcome).toContain('search_issues to find the issue you meant')
+    expect(outcome).toContain('Search by title to find the issue you meant')
   })
 
   it('surfaces a failed write rather than implying it worked', () => {

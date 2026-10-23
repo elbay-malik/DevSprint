@@ -28,7 +28,7 @@ its answers its own way, and may take a slightly different route than described 
 | `Mark DS-42 as done — the billing export shipped this morning.`, then `Yes, that one.`   | A typed `ISSUE_NOT_FOUND` error, a search for what you meant, and a fresh approval for the fix                |
 | _In Claude Desktop or Cursor_: add the MCP server above, then ask it to create an issue  | The write lands on the same board. Reload the demo to see it in the backlog                                   |
 
-The board is shared by every visitor and resets itself at midnight UTC. **Reset demo** in the
+The board is shared by every visitor and resets itself at midnight UTC. **Reset board** in the
 header restores it at any time.
 
 ## How it works

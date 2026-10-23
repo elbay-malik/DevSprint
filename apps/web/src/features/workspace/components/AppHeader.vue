@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
 import { WORKSPACE_RESET_ENDPOINT } from '@/lib/api'
 import { nextTheme, resolvedTheme, setTheme, theme } from '@/lib/theme'
@@ -36,9 +37,13 @@ const themeGlyph = computed(() =>
 async function reset(): Promise<void> {
   resetting.value = true
   try {
-    await fetch(WORKSPACE_RESET_ENDPOINT, { method: 'POST' })
+    // fetch() only throws on a network failure, so a 500 has to be read off
+    // the response, or a failed reset would look like it worked.
+    const res = await fetch(WORKSPACE_RESET_ENDPOINT, { method: 'POST' })
+    if (!res.ok) throw new Error(`reset answered ${res.status}`)
   } catch (error) {
     console.warn('[workspace] reset failed:', error)
+    toast.error("Couldn't reset the board", { description: 'Try again in a moment.' })
   } finally {
     resetting.value = false
     await workspace.hydrate()
@@ -61,7 +66,7 @@ async function reset(): Promise<void> {
         :disabled="resetting"
         @click="reset()"
       >
-        {{ resetting ? 'Resetting…' : 'Reset demo' }}
+        {{ resetting ? 'Resetting…' : 'Reset board' }}
       </Button>
       <Button
         data-testid="theme-toggle"

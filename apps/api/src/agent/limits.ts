@@ -56,13 +56,11 @@ export function rateLimitKey(request: Request): string | undefined {
  * error: the transcript stays readable and the SPA needs no special case.
  */
 export const BUDGET_REACHED_MESSAGE =
-  "This demo has reached its model budget for today, so I can't answer right now — " +
-  'it resets at UTC midnight. Everything else still works: the board is live, and the ' +
-  'scripted scenarios in the docs show what a full turn looks like.'
+  'The copilot has used its model budget for today and is back at midnight UTC. ' +
+  'The board stays live in the meantime.'
 
 export const RATE_LIMITED_MESSAGE =
-  'That was a lot of requests in a short time, so this one was skipped. ' +
-  'Give it a few seconds and ask again.'
+  'Too many requests in a short time, so this one was skipped. Ask again in a few seconds.'
 
 /**
  * A complete assistant turn carrying one message, streamed the same way a real

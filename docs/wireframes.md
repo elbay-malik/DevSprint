@@ -10,7 +10,7 @@ Section 5 are the canonical names for Phase 7; the board contents below are the 
 
 ```
 +---------------------------------------------------------------------------------------------------+
-| DevSprint Copilot     [Sprint 12 — Notifications & billing v]      [Reset demo] [Theme]           |
+| DevSprint Copilot     [Sprint 12 — Notifications & billing v]      [Reset board] [Theme]           |
 +-------------------------------------------------+-------------------------------------------------+
 | WORKSPACE                                       | COPILOT                                         |
 | [ Board ] [ Sprint ] [ Deploys ]                |                                                 |

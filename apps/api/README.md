@@ -31,7 +31,7 @@ something the copilot can reach: it is absent from the tool set, so no prompt ca
 call it, and the worst it can do is put the mock workspace back to a known board.
 
 It is deliberately left open rather than restricted to dev, because
-[wireframes.md](../../docs/wireframes.md) §1 puts a Reset demo button in the live demo's header and
+[wireframes.md](../../docs/wireframes.md) §1 puts a Reset board button in the live demo's header and
 a dev-only guard would remove it exactly where it is useful. Protecting it from abuse belongs with
 the per-IP rate limits in Phase 11; the board also resets itself once a day regardless
 ([ADR-0014](../../docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).

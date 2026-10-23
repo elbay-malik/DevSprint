@@ -23,7 +23,7 @@ function rootCause(error: unknown): unknown {
 export function toClientErrorMessage(error: unknown): string {
   const cause = rootCause(error)
   if (APICallError.isInstance(cause) && cause.statusCode === 429) {
-    return "The demo's model quota is exhausted right now — please try again in a minute."
+    return 'The model quota is exhausted for now. Try again in a minute.'
   }
   // An approval the server would not accept is not a model failure, and
   // "please try again" is advice that cannot work — the same request carries
@@ -32,9 +32,9 @@ export function toClientErrorMessage(error: unknown): string {
     InvalidToolApprovalSignatureError.isInstance(cause) ||
     InvalidToolApprovalError.isInstance(cause)
   ) {
-    return 'That approval could not be verified, so nothing was run. Ask again to get a fresh one.'
+    return "That approval couldn't be verified, so nothing ran. Ask again for a fresh approval card."
   }
-  return 'The copilot hit a model error. Please try again.'
+  return "The copilot hit a model error and couldn't finish. Send your message again."
 }
 
 /** Server-log shape: name, message and status — no URL, headers or bodies. */

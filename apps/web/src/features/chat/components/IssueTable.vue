@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { IssueSummary, SearchIssuesMatch } from '@devsprint/shared/tools'
 import { Badge } from '@/components/ui/badge'
+import { statusLabel } from '@/features/workspace/lib/status-labels'
 
 /**
  * Issues as a table rather than raw JSON (docs/wireframes.md §5).
@@ -36,14 +37,6 @@ const rows = computed(() =>
 const caption = computed(
   () => `${rows.value.length} ${rows.value.length === 1 ? 'issue' : 'issues'}`,
 )
-
-const STATUS_LABELS: Record<string, string> = {
-  todo: 'Todo',
-  in_progress: 'In progress',
-  in_review: 'In review',
-  blocked: 'Blocked',
-  done: 'Done',
-}
 </script>
 
 <template>
@@ -79,7 +72,7 @@ const STATUS_LABELS: Record<string, string> = {
           </td>
           <td class="px-3 py-1.5">
             <Badge variant="secondary" class="font-normal">
-              {{ STATUS_LABELS[row.status] ?? row.status }}
+              {{ statusLabel(row.status) }}
             </Badge>
           </td>
           <td class="px-3 py-1.5 text-right tabular-nums">{{ row.trailing }}</td>

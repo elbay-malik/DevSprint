@@ -41,7 +41,7 @@ watch(
           {{ store.workspace.project.name }}
         </p>
         <Badge variant="secondary" data-testid="workspace-source">
-          {{ store.source === 'api' ? 'live' : 'seed data' }}
+          {{ store.source === 'api' ? 'live' : 'offline' }}
         </Badge>
       </div>
       <h1 class="text-lg font-semibold">

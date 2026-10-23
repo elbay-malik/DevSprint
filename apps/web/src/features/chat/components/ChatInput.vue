@@ -26,7 +26,9 @@ watch(
   () => chat.error,
   (error) => {
     if (error) {
-      toast.error('Chat request failed', { description: error.message })
+      toast.error("The copilot couldn't reply", {
+        description: error.message || 'Check your connection, then send your message again.',
+      })
       chat.clearError()
     }
   },
@@ -45,7 +47,10 @@ function onSubmit() {
     <Input
       v-model="text"
       data-testid="chat-input"
-      :placeholder="awaitingApproval ? 'Approve or deny above to continue…' : 'Ask the copilot…'"
+      aria-label="Message the copilot"
+      :placeholder="
+        awaitingApproval ? 'Approve or deny the change above to continue…' : 'Ask the copilot…'
+      "
       :disabled="busy"
       autocomplete="off"
     />

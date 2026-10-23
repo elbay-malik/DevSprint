@@ -122,7 +122,7 @@ export function updateIssueStatus(
   if (!issue) {
     return fail(
       'ISSUE_NOT_FOUND',
-      `No issue with key '${input.issueKey}'. Use search_issues to find the issue you meant.`,
+      `No issue with key '${input.issueKey}'. Search by title to find the issue you meant (search_issues).`,
     )
   }
 

@@ -23,7 +23,7 @@ linked from the README.
 
 - [ ] Open https://devsprint-web.eleo-666.workers.dev in a clean browser profile, so there are no
       extensions or bookmarks bar in shot. A 1920×1080 window at 100% zoom works well.
-- [ ] Click **Reset demo** in the header. Check the board reads **Committed 31 / Completed 8**.
+- [ ] Click **Reset board** in the header. Check the board reads **Committed 31 / Completed 8**.
 - [ ] Light theme to start. You switch to dark once, in shot 4.
 - [ ] Copy this file's prompts somewhere you can paste them from. Typing live is fine too: the
       mock matches on keywords, but pasting avoids typos on camera.
@@ -93,7 +93,7 @@ Optionally, run it a second time and click **Cancel** during `test`.
 
 ### 6. Recovering from a mistake: S-E (2:35–3:00)
 
-**Screen:** click **Reset demo** first, so DS-7 is back in review. That also shows the reset.
+**Screen:** click **Reset board** first, so DS-7 is back in review. That also shows the reset.
 
 **Prompt:** `Mark DS-42 as done — the billing export shipped this morning.`
 
@@ -146,6 +146,6 @@ reload: **DS-14** is in the backlog.
 - Trim dead air. Keep each answer on screen long enough to read, about 2 seconds after the stream
   ends.
 - Export H.264 MP4 at 1080p, ideally under 100 MB.
-- Click **Reset demo** on the live site, so the next visitor starts clean.
+- Click **Reset board** on the live site, so the next visitor starts clean.
 - Hand the file over, or put it in the repo root as `devsprint-demo.mp4` (gitignored). The release
   step attaches it to `v1.0.0`.

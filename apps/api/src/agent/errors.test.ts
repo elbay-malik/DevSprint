@@ -35,13 +35,13 @@ describe('toClientErrorMessage', () => {
 
   it('falls back to the generic message for other failures', () => {
     expect(toClientErrorMessage(apiError(401))).toBe(
-      'The copilot hit a model error. Please try again.',
+      "The copilot hit a model error and couldn't finish. Send your message again.",
     )
     expect(toClientErrorMessage(retryWrapped(apiError(500)))).toBe(
-      'The copilot hit a model error. Please try again.',
+      "The copilot hit a model error and couldn't finish. Send your message again.",
     )
     expect(toClientErrorMessage(new Error('boom'))).toBe(
-      'The copilot hit a model error. Please try again.',
+      "The copilot hit a model error and couldn't finish. Send your message again.",
     )
   })
 

@@ -55,7 +55,8 @@ function isFailedWrite(part: { state?: string; output?: unknown }): boolean {
 <template>
   <div class="flex flex-col gap-3 p-4 lg:px-6">
     <p v-if="chat.messages.length === 0" class="text-muted-foreground text-sm">
-      Ask about the sprint — try “How many open issues are in the current sprint?”
+      Ask how the sprint is going, or tell the copilot what to change. Try “How many open issues are
+      in the current sprint?”
     </p>
     <div
       v-for="message in chat.messages"
@@ -107,11 +108,18 @@ function isFailedWrite(part: { state?: string; output?: unknown }): boolean {
       data-testid="thinking-indicator"
       class="flex gap-1 self-start px-1"
     >
-      <span class="bg-muted-foreground/60 inline-block size-2 animate-pulse rounded-full" />
+      <!-- The dots are for sighted readers; the status line is what gets announced. -->
+      <span role="status" class="sr-only">The copilot is working on your request…</span>
       <span
+        aria-hidden="true"
+        class="bg-muted-foreground/60 inline-block size-2 animate-pulse rounded-full"
+      />
+      <span
+        aria-hidden="true"
         class="bg-muted-foreground/60 inline-block size-2 animate-pulse rounded-full [animation-delay:150ms]"
       />
       <span
+        aria-hidden="true"
         class="bg-muted-foreground/60 inline-block size-2 animate-pulse rounded-full [animation-delay:300ms]"
       />
     </div>
