@@ -1,0 +1,447 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-22T20:40:54+00:00",
+  "title": "Design System: DevSprint Copilot",
+  "extensions": {
+    "colorMeta": {
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "oklch(1 0 0)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(37% 0 0)",
+          "oklch(50% 0 0)",
+          "oklch(62% 0 0)",
+          "oklch(74% 0 0)",
+          "oklch(85% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "paper-tint": {
+        "role": "neutral",
+        "displayName": "Paper Tint",
+        "canonical": "oklch(0.97 0 0)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(37% 0 0)",
+          "oklch(50% 0 0)",
+          "oklch(62% 0 0)",
+          "oklch(74% 0 0)",
+          "oklch(85% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Rule",
+        "canonical": "oklch(0.922 0 0)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(37% 0 0)",
+          "oklch(50% 0 0)",
+          "oklch(62% 0 0)",
+          "oklch(74% 0 0)",
+          "oklch(85% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "pencil": {
+        "role": "neutral",
+        "displayName": "Pencil",
+        "canonical": "oklch(0.708 0 0)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(37% 0 0)",
+          "oklch(50% 0 0)",
+          "oklch(62% 0 0)",
+          "oklch(74% 0 0)",
+          "oklch(85% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "graphite": {
+        "role": "neutral",
+        "displayName": "Graphite",
+        "canonical": "oklch(0.556 0 0)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(37% 0 0)",
+          "oklch(50% 0 0)",
+          "oklch(62% 0 0)",
+          "oklch(74% 0 0)",
+          "oklch(85% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "charcoal": {
+        "role": "neutral",
+        "displayName": "Charcoal",
+        "canonical": "oklch(0.269 0 0)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(37% 0 0)",
+          "oklch(50% 0 0)",
+          "oklch(62% 0 0)",
+          "oklch(74% 0 0)",
+          "oklch(85% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "ink": {
+        "role": "primary",
+        "displayName": "Ink",
+        "canonical": "oklch(0.205 0 0)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(37% 0 0)",
+          "oklch(50% 0 0)",
+          "oklch(62% 0 0)",
+          "oklch(74% 0 0)",
+          "oklch(85% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "deep-ink": {
+        "role": "neutral",
+        "displayName": "Deep Ink",
+        "canonical": "oklch(0.145 0 0)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(37% 0 0)",
+          "oklch(50% 0 0)",
+          "oklch(62% 0 0)",
+          "oklch(74% 0 0)",
+          "oklch(85% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "bright-paper": {
+        "role": "neutral",
+        "displayName": "Bright Paper",
+        "canonical": "oklch(0.985 0 0)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(37% 0 0)",
+          "oklch(50% 0 0)",
+          "oklch(62% 0 0)",
+          "oklch(74% 0 0)",
+          "oklch(85% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "stop-red": {
+        "role": "signal",
+        "displayName": "Stop Red",
+        "canonical": "oklch(0.577 0.245 27.325)",
+        "tonalRamp": [
+          "oklch(15% 0.2 27.325)",
+          "oklch(25% 0.2 27.325)",
+          "oklch(37% 0.2 27.325)",
+          "oklch(50% 0.2 27.325)",
+          "oklch(62% 0.2 27.325)",
+          "oklch(74% 0.2 27.325)",
+          "oklch(85% 0.2 27.325)",
+          "oklch(95% 0.2 27.325)"
+        ]
+      },
+      "stop-red-dark": {
+        "role": "signal",
+        "displayName": "Stop Red (dark)",
+        "canonical": "oklch(0.704 0.191 22.216)",
+        "tonalRamp": [
+          "oklch(15% 0.17 22.216)",
+          "oklch(25% 0.17 22.216)",
+          "oklch(37% 0.17 22.216)",
+          "oklch(50% 0.17 22.216)",
+          "oklch(62% 0.17 22.216)",
+          "oklch(74% 0.17 22.216)",
+          "oklch(85% 0.17 22.216)",
+          "oklch(95% 0.17 22.216)"
+        ]
+      },
+      "go-green": {
+        "role": "signal",
+        "displayName": "Go Green",
+        "canonical": "oklch(50.8% 0.118 165.612)",
+        "tonalRamp": [
+          "oklch(15% 0.118 165.612)",
+          "oklch(25% 0.118 165.612)",
+          "oklch(37% 0.118 165.612)",
+          "oklch(50% 0.118 165.612)",
+          "oklch(62% 0.118 165.612)",
+          "oklch(74% 0.118 165.612)",
+          "oklch(85% 0.118 165.612)",
+          "oklch(95% 0.118 165.612)"
+        ]
+      },
+      "go-green-dark": {
+        "role": "signal",
+        "displayName": "Go Green (dark)",
+        "canonical": "oklch(76.5% 0.177 163.223)",
+        "tonalRamp": [
+          "oklch(15% 0.15 163.223)",
+          "oklch(25% 0.15 163.223)",
+          "oklch(37% 0.15 163.223)",
+          "oklch(50% 0.15 163.223)",
+          "oklch(62% 0.15 163.223)",
+          "oklch(74% 0.15 163.223)",
+          "oklch(85% 0.15 163.223)",
+          "oklch(95% 0.15 163.223)"
+        ]
+      },
+      "trace-blue": {
+        "role": "signal",
+        "displayName": "Trace Blue",
+        "canonical": "#2a78d6",
+        "tonalRamp": [
+          "oklch(15% 0.15 255)",
+          "oklch(25% 0.15 255)",
+          "oklch(37% 0.15 255)",
+          "oklch(50% 0.15 255)",
+          "oklch(62% 0.15 255)",
+          "oklch(74% 0.15 255)",
+          "oklch(85% 0.15 255)",
+          "oklch(95% 0.15 255)"
+        ]
+      },
+      "trace-blue-dark": {
+        "role": "signal",
+        "displayName": "Trace Blue (dark)",
+        "canonical": "#3987e5",
+        "tonalRamp": [
+          "oklch(15% 0.15 255)",
+          "oklch(25% 0.15 255)",
+          "oklch(37% 0.15 255)",
+          "oklch(50% 0.15 255)",
+          "oklch(62% 0.15 255)",
+          "oklch(74% 0.15 255)",
+          "oklch(85% 0.15 255)",
+          "oklch(95% 0.15 255)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The sprint name; the only h1 in the main view."
+      },
+      "stat": {
+        "displayName": "Stat",
+        "purpose": "The four sprint numbers, in tabular figures."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Wordmark and pane headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Chat messages, issue titles (at 500), sprint goal."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Chat card bodies and meta lines; Graphite when secondary."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase project eyebrow; badges at the same size without uppercase."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Identifiers: issue keys, tool names, versions, stages, error codes, logs."
+      }
+    },
+    "shadows": [
+      {
+        "name": "surface-ring",
+        "value": "0 0 0 1px color-mix(in oklch, var(--foreground) 10%, transparent)",
+        "purpose": "Hairline that separates board cards, stat cards and dialogs instead of a border or shadow."
+      },
+      {
+        "name": "focus-ring",
+        "value": "0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent)",
+        "purpose": "Keyboard focus on buttons, inputs, badges, the chat scroll viewport; inset on the board pane."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-transition",
+        "value": "150ms default easing",
+        "purpose": "Colour, background and ring changes on buttons, badges and inputs."
+      },
+      {
+        "name": "progress-fill",
+        "value": "width 300ms default easing",
+        "purpose": "Deployment progress bar advancing a whole stage."
+      },
+      {
+        "name": "liveness-pulse",
+        "value": "animate-pulse, staggered 150ms / 300ms",
+        "purpose": "Typing dots and a running tool. Must gain a prefers-reduced-motion fallback."
+      },
+      {
+        "name": "press",
+        "value": "translateY(1px)",
+        "purpose": "Button press feedback."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      },
+      {
+        "name": "2xl",
+        "value": "1536px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single affirmative action in a region: Send, Approve.",
+      "html": "<button class=\"ds-btn-primary\">Approve</button>",
+      "css": ".ds-btn-primary { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; display: inline-flex; align-items: center; height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 10px; background: var(--primary, oklch(0.205 0 0)); color: var(--primary-foreground, oklch(0.985 0 0)); font-size: 14px; font-weight: 500; cursor: pointer; transition: all 150ms; } .ds-btn-primary:hover { background: color-mix(in oklch, var(--primary, oklch(0.205 0 0)) 80%, transparent); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.708 0 0)) 50%, transparent); border-color: var(--ring, oklch(0.708 0 0)); } .ds-btn-primary:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Secondary or abortive actions: Reset board, Stop, Deny, Cancel deploy.",
+      "html": "<button class=\"ds-btn-outline\">Deny</button>",
+      "css": ".ds-btn-outline { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border: 1px solid var(--border, oklch(0.922 0 0)); border-radius: 8px; background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); font-size: 12.8px; font-weight: 500; cursor: pointer; transition: all 150ms; } .ds-btn-outline:hover { background: var(--muted, oklch(0.97 0 0)); } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.708 0 0)) 50%, transparent); border-color: var(--ring, oklch(0.708 0 0)); } .ds-btn-outline:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Toggle Pair (Secondary / Ghost)",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "aria-pressed toggle: secondary when on, ghost when off (Published / Draft).",
+      "html": "<div class=\"ds-toggle\" role=\"group\"><button class=\"ds-toggle-btn\" aria-pressed=\"false\">Published</button><button class=\"ds-toggle-btn\" aria-pressed=\"true\">Draft</button></div>",
+      "css": ".ds-toggle { display: inline-flex; gap: 4px; } .ds-toggle-btn { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; height: 28px; padding: 0 10px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--foreground, oklch(0.145 0 0)); font-size: 12.8px; font-weight: 500; cursor: pointer; } .ds-toggle-btn:hover { background: var(--muted, oklch(0.97 0 0)); } .ds-toggle-btn[aria-pressed=\"true\"] { background: var(--secondary, oklch(0.97 0 0)); } .ds-toggle-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.708 0 0)) 50%, transparent); }"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "The composer and the deny-reason field.",
+      "html": "<input class=\"ds-input\" placeholder=\"Ask the copilot…\" />",
+      "css": ".ds-input { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; height: 32px; width: 280px; padding: 4px 10px; border: 1px solid var(--input, oklch(0.922 0 0)); border-radius: 10px; background: transparent; color: var(--foreground, oklch(0.145 0 0)); font-size: 14px; transition: border-color 150ms, box-shadow 150ms; } .ds-input::placeholder { color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-input:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.708 0 0)) 50%, transparent); border-color: var(--ring, oklch(0.708 0 0)); }"
+    },
+    {
+      "name": "Badges",
+      "kind": "chip",
+      "refersTo": "badge-secondary",
+      "description": "Secondary for counts and statuses, outline for points, tool names and change types.",
+      "html": "<span class=\"ds-badge ds-badge-secondary\">In review</span> <span class=\"ds-badge ds-badge-outline ds-mono\">update_issue_status</span>",
+      "css": ".ds-badge { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; display: inline-flex; align-items: center; height: 20px; padding: 2px 8px; border-radius: 2rem; font-size: 12px; font-weight: 500; border: 1px solid transparent; } .ds-badge-secondary { background: var(--secondary, oklch(0.97 0 0)); color: var(--secondary-foreground, oklch(0.205 0 0)); } .ds-badge-outline { border-color: var(--border, oklch(0.922 0 0)); color: var(--foreground, oklch(0.145 0 0)); } .ds-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }"
+    },
+    {
+      "name": "Board Card",
+      "kind": "card",
+      "refersTo": "board-card",
+      "description": "An issue on the board: mono key, outline points badge, medium title, assignee.",
+      "html": "<div class=\"ds-board-card\"><div class=\"ds-row\"><span class=\"ds-key\">DS-7</span><span class=\"ds-pts\">5</span></div><p class=\"ds-title\">Billing export CSV download</p><p class=\"ds-meta\">@ben</p></div>",
+      "css": ".ds-board-card { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 260px; padding: 12px; border-radius: 14px; background: var(--card, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground, oklch(0.145 0 0)) 10%, transparent); display: flex; flex-direction: column; gap: 6px; } .ds-row { display: flex; justify-content: space-between; align-items: center; } .ds-key { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-pts { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 2rem; border: 1px solid var(--border, oklch(0.922 0 0)); font-variant-numeric: tabular-nums; } .ds-title { margin: 0; font-size: 14px; font-weight: 500; line-height: 1.375; } .ds-meta { margin: 0; font-size: 12px; color: var(--muted-foreground, oklch(0.556 0 0)); }"
+    },
+    {
+      "name": "Approval Card",
+      "kind": "custom",
+      "refersTo": "chat-card",
+      "description": "The record of a decision: eyebrow, 14px headline, reason, Deny and Approve.",
+      "html": "<div class=\"ds-approval\"><p class=\"ds-eyebrow\">Approval required: <span class=\"ds-mono\">update_issue_status</span></p><p class=\"ds-headline\">DS-7: in_review → done</p><div class=\"ds-actions\"><input class=\"ds-reason\" placeholder=\"Reason (optional)\" /><button class=\"ds-deny\">Deny</button><button class=\"ds-approve\">Approve</button></div></div>",
+      "css": ".ds-approval { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 360px; padding: 8px 12px; border: 1px solid var(--border, oklch(0.922 0 0)); border-radius: 8px; background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); font-size: 12px; display: flex; flex-direction: column; gap: 8px; } .ds-eyebrow { margin: 0; color: var(--muted-foreground, oklch(0.556 0 0)); font-weight: 500; } .ds-mono { font-family: ui-monospace, monospace; } .ds-headline { margin: 0; font-size: 14px; font-weight: 500; } .ds-actions { display: flex; gap: 8px; align-items: center; } .ds-reason { flex: 1; height: 28px; padding: 0 10px; border: 1px solid var(--input, oklch(0.922 0 0)); border-radius: 10px; background: transparent; color: inherit; font-size: 12px; } .ds-deny, .ds-approve { height: 28px; padding: 0 10px; border-radius: 8px; font-size: 12.8px; font-weight: 500; cursor: pointer; } .ds-deny { border: 1px solid var(--border, oklch(0.922 0 0)); background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); } .ds-approve { border: 1px solid transparent; background: var(--primary, oklch(0.205 0 0)); color: var(--primary-foreground, oklch(0.985 0 0)); } .ds-deny:hover { background: var(--muted, oklch(0.97 0 0)); } .ds-approve:hover { background: color-mix(in oklch, var(--primary, oklch(0.205 0 0)) 80%, transparent); } .ds-deny:focus-visible, .ds-approve:focus-visible, .ds-reason:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.708 0 0)) 50%, transparent); }"
+    },
+    {
+      "name": "Deployment Progress",
+      "kind": "custom",
+      "refersTo": "chat-card",
+      "description": "Stage list with glyph + tone, and a round progress track filled in Ink by whole stages.",
+      "html": "<div class=\"ds-deploy\"><p class=\"ds-deploy-head\">v1.5.0-rc.1 → <span class=\"ds-mono\">staging</span> <span class=\"ds-run\">running</span></p><div class=\"ds-track\"><div class=\"ds-fill\"></div></div><ul class=\"ds-stages\"><li class=\"ds-ok\">● build</li><li>◐ test</li><li class=\"ds-wait\">○ migrate</li><li class=\"ds-wait\">○ release</li></ul></div>",
+      "css": ".ds-deploy { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 360px; padding: 8px 12px; border: 1px solid var(--border, oklch(0.922 0 0)); border-radius: 8px; background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); font-size: 12px; } .ds-deploy-head { margin: 0; font-weight: 500; } .ds-mono { font-family: ui-monospace, monospace; } .ds-track { margin-top: 8px; height: 4px; border-radius: 9999px; background: var(--muted, oklch(0.97 0 0)); overflow: hidden; } .ds-fill { width: 25%; height: 100%; background: var(--foreground, oklch(0.145 0 0)); transition: width 300ms; } .ds-stages { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-family: ui-monospace, monospace; } .ds-ok { color: oklch(50.8% 0.118 165.612); } .ds-wait { color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-run { color: inherit; }"
+    },
+    {
+      "name": "Error Card",
+      "kind": "custom",
+      "refersTo": "chat-card",
+      "description": "A typed tool error: information, not an alarm.",
+      "html": "<div class=\"ds-error\"><span class=\"ds-tool\">update_issue_status</span> <span class=\"ds-code\">ISSUE_NOT_FOUND</span><p class=\"ds-msg\">No issue with key 'DS-42'.</p></div>",
+      "css": ".ds-error { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 360px; padding: 8px 12px; border: 1px solid color-mix(in oklch, var(--destructive, oklch(0.577 0.245 27.325)) 40%, transparent); border-radius: 8px; background: color-mix(in oklch, var(--muted, oklch(0.97 0 0)) 40%, transparent); font-size: 12px; } .ds-tool { font-family: ui-monospace, monospace; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-code { font-family: ui-monospace, monospace; font-weight: 500; color: var(--destructive, oklch(0.577 0.245 27.325)); } .ds-msg { margin: 4px 0 0; color: var(--muted-foreground, oklch(0.556 0 0)); }"
+    },
+    {
+      "name": "Chat Bubbles",
+      "kind": "custom",
+      "refersTo": "bubble-assistant",
+      "description": "User in Ink at the end, assistant in Paper Tint at the start, cards inset inside.",
+      "html": "<div class=\"ds-chat\"><div class=\"ds-bubble ds-user\">How many open issues are in the current sprint?</div><div class=\"ds-bubble ds-assistant\">Sprint 12: <strong>5 open issues</strong>, 23 of 31 points remaining.</div></div>",
+      "css": ".ds-chat { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 400px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; } .ds-bubble { max-width: 85%; padding: 8px 12px; border-radius: 10px; line-height: 1.43; } .ds-user { align-self: flex-end; background: var(--primary, oklch(0.205 0 0)); color: var(--primary-foreground, oklch(0.985 0 0)); } .ds-assistant { align-self: flex-start; background: var(--muted, oklch(0.97 0 0)); color: var(--foreground, oklch(0.145 0 0)); } .ds-assistant strong { font-weight: 600; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Control Room",
+    "overview": "DevSprint is a quiet control room for a sprint. Two panes sit side by side with no chrome between\nthem but a hairline: the board on the left and the copilot on the right, so cause and effect are\nalways in the same view. The room is drawn in ink and paper. Every surface, word and divider is a\nstep on one zero-chroma ramp, so the eye rests until something needs it. Colour is a signal, not a\nmood. It appears where a stage succeeds, a write fails, or a data line traces the sprint, and\nnowhere else.\n\nDensity is calm, not cramped. Workspace chrome sits at 14px and chat cards at 12px, with one\ntypeface throughout. Monospace marks anything that is an identifier, and tabular figures keep\nevery number in its column. Surfaces are flat. They are separated by 1px rings at 10% opacity and\nby tonal steps, never by drop shadows at rest. Corners are gently rounded, from 8px on chat cards\nto 14px on board cards, and the system is meant to feel soft and approachable, not clinical: the\nnext layer of work warms the interactions rather than adding ornament.\n\nThe system is fully themed. Light is paper with ink, and dark is ink with paper. Both are tokens\non `:root` and `.dark`, toggled by a class on `<html>`, and both must hold WCAG 2.2 AA.\n\n- One neutral ramp at zero chroma carries the whole interface; hue appears only as a signal.\n- Flat surfaces: hairline rings and tonal steps, no shadows at rest.\n- One typeface (Geist), with monospace for identifiers and tabular figures for numbers.\n- State is always a word, code or glyph first, and a colour second.\n- Gently rounded, soft forms (6 to 14px, and pills for badges).",
+    "keyCharacteristics": [
+      "One neutral ramp at zero chroma carries the whole interface; hue appears only as a signal.",
+      "Flat surfaces: hairline rings and tonal steps, no shadows at rest.",
+      "One typeface (Geist), with monospace for identifiers and tabular figures for numbers.",
+      "State is always a word, code or glyph first, and a colour second.",
+      "Gently rounded, soft forms (6 to 14px, and pills for badges)."
+    ],
+    "rules": [
+      {
+        "name": "The Signal-Only Rule",
+        "body": "Hue means something happened: success, failure, or measured data. Chrome, layout and decoration stay on the ink-and-paper ramp.",
+        "section": "colors"
+      },
+      {
+        "name": "The Word-First Rule",
+        "body": "Every state is legible in greyscale. Colour sits on a label (\"failed\", \"awaiting approval\"), an error code, or a stage glyph (○ ◐ ● ✕ –), never on its own.",
+        "section": "colors"
+      },
+      {
+        "name": "The Readout Rule",
+        "body": "If it is an identifier, it is monospace. If it is a number in a list or a stat, it uses tabular figures.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-at-Rest Rule",
+        "body": "At rest, a surface is separated by a ring or a tone, never by a shadow. A shadow, if it ever appears, is a reaction to a pointer or keyboard state.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep chrome on the ink-and-paper ramp, and reach for Go Green, Stop Red or Trace Blue only when a result or a measurement is being shown.",
+      "Do pair every state with a word, code or glyph, so it reads in greyscale.",
+      "Do set identifiers in monospace and numbers in tabular figures.",
+      "Do separate surfaces with a 1px ring at 10% or a tonal step, and keep 14px corners for board cards and 8px for chat cards.",
+      "Do spend the Ink-filled button once per region, on the affirmative action, and use outline for everything secondary or abortive.",
+      "Do check every change in both themes at WCAG 2.2 AA."
+    ],
+    "donts": [
+      "Don't put a drop shadow on a surface at rest.",
+      "Don't add hue for decoration or branding until a single brand accent has been chosen deliberately.",
+      "Don't hard-code new colours. The Go Green pair and Trace Blue are literals today, and new work should tokenize them rather than add more.",
+      "Don't wrap an OKLCH token in `hsl()`. The toast wrapper does this today, and it produces an invalid colour.",
+      "Don't add motion that ignores `prefers-reduced-motion`. The existing pulse dots and progress transition don't honour it yet.",
+      "Don't render model text as HTML or links. Chat text uses the safe subset only."
+    ]
+  }
+}
