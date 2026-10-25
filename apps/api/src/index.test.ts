@@ -168,6 +168,11 @@ describe('POST /api/workspace/undo', () => {
   it('refuses a change from before a reset', async () => {
     const changeId = await applied()
     await app.request('/api/workspace/reset', { method: 'POST' }, env)
+    expect(workspace.store.changes()).toEqual([])
+    // Put DS-7 back where the forgotten record left it, untracked, so only the
+    // cleared journal can be what refuses.
+    const { updateIssueStatus } = await import('./workspace/mutations')
+    updateIssueStatus(workspace.store.get(), { issueKey: 'DS-7', status: 'done' })
 
     const res = await undo({ changeId })
 
@@ -206,7 +211,10 @@ describe('POST /api/workspace/undo', () => {
     ]) {
       const res = await undo(body)
       expect(res.status, JSON.stringify(body)).toBe(400)
-      await expect(res.json()).resolves.toMatchObject({ error: { code: 'INVALID_INPUT' } })
+      await expect(res.json()).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'INVALID_INPUT' },
+      })
     }
   })
 })

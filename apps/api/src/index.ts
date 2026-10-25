@@ -120,8 +120,8 @@ app.post(API_ROUTES.workspaceReset, async (c) => c.json(await workspaceOf(c.env)
  * write's own result carried. What to put back comes from the workspace's
  * record of that write, taken when it landed (workspace/changes.ts), so a
  * client cannot use this to write arbitrary state — at most it can reverse a
- * write that really happened, once, while the issue still reads what that
- * write left. Open for the same reason reset is (see the README): it is a
+ * write that really happened, once, while it is still the latest standing
+ * write to that issue. Open for the same reason reset is (see the README): it is a
  * person's action on the shared demo board, not something the agent can reach.
  *
  * The copilot's transcript never hears about it. That is fine, because the
@@ -132,11 +132,11 @@ app.post(API_ROUTES.workspaceUndo, async (c) => {
   try {
     body = await c.req.json()
   } catch {
-    return invalidInput(c, 'Request body must be JSON.')
+    return undoInvalid(c, 'Request body must be JSON.')
   }
   const changeId =
     typeof body === 'object' && body !== null && 'changeId' in body ? body.changeId : undefined
-  if (typeof changeId !== 'string') return invalidInput(c, '`changeId` must be a string.')
+  if (typeof changeId !== 'string') return undoInvalid(c, '`changeId` must be a string.')
 
   const result = await workspaceOf(c.env).undoChange({ changeId })
   if (!result.ok) {
@@ -176,6 +176,14 @@ app.post(API_ROUTES.deploymentCancel, async (c) => {
   // here would tell the user their cancel landed when the release had shipped.
   return c.json(result, result.error.code === 'DEPLOY_ALREADY_SETTLED' ? 409 : 404)
 })
+
+/**
+ * The undo route answers in the `ToolResult` envelope the SPA reads every
+ * outcome through, so a refused body still carries `ok: false` and its code.
+ */
+function undoInvalid(c: Context<{ Bindings: AppEnv }>, message: string) {
+  return c.json({ ok: false as const, error: { code: 'INVALID_INPUT', message } }, 400)
+}
 
 function invalidInput(c: Context<{ Bindings: AppEnv }>, message: string) {
   return c.json({ error: { code: 'INVALID_INPUT', message } }, 400)

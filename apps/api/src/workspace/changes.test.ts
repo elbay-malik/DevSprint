@@ -219,6 +219,70 @@ describe('undoing a recorded write', () => {
     expect(issue(workspace, 'DS-7')!.status).toBe(seeded)
   })
 
+  it('refuses while a later recorded write to the issue still stands, even if the fields match', () => {
+    // A→B→A→B: the issue reads what change 1 left, but change 3 is what put it there.
+    const workspace = createWorkspaceSeed()
+    let changes: BoardChange[] = []
+    for (const [changeId, status] of [
+      ['c-1', 'done'],
+      ['c-2', 'in_review'],
+      ['c-3', 'done'],
+    ] as const) {
+      changes = updateIssueStatusTracked(
+        workspace,
+        { issueKey: 'DS-7', status },
+        { changes, changeId, at: AT },
+      ).changes!
+    }
+
+    expect(errorCode(undoChange(workspace, changes, 'c-1', AT).result)).toBe('UNDO_CONFLICT')
+    expect(issue(workspace, 'DS-7')!.status).toBe('done')
+    // The latest one is still undoable.
+    expect(undoChange(workspace, changes, 'c-3', AT).result.ok).toBe(true)
+  })
+
+  it('never lands on a new issue that reuses a removed key', () => {
+    const workspace = createWorkspaceSeed()
+    const input = {
+      title: 'Flaky login test',
+      type: 'bug',
+      priority: 'high',
+      sprintId: null,
+    } as const
+    let changes = createIssueTracked(workspace, input, {
+      changes: [],
+      changeId: 'c-1',
+      at: AT,
+    }).changes!
+    const key = changes[0]!.issueKey
+    changes = updateIssueStatusTracked(
+      workspace,
+      { issueKey: key, status: 'in_progress' },
+      { changes, changeId: 'c-2', at: AT },
+    ).changes!
+    changes = updateIssueStatusTracked(
+      workspace,
+      { issueKey: key, status: 'todo' },
+      { changes, changeId: 'c-3', at: AT },
+    ).changes!
+    // The create cannot be undone over its own later history...
+    expect(errorCode(undoChange(workspace, changes, 'c-1', AT).result)).toBe('UNDO_CONFLICT')
+    // ...and once it is unwound and the key is minted again, the old records stay dead.
+    for (const id of ['c-3', 'c-2', 'c-1'])
+      changes = undoChange(workspace, changes, id, AT).changes!
+    const reused = createIssueTracked(
+      workspace,
+      { ...input, title: 'Unrelated' },
+      { changes, changeId: 'c-4', at: AT },
+    )
+    expect(reused.result.ok && reused.result.data.issue.key).toBe(key)
+    changes = reused.changes!
+    for (const id of ['c-1', 'c-2', 'c-3']) {
+      expect(errorCode(undoChange(workspace, changes, id, AT).result), id).toBe('UNDO_CONFLICT')
+    }
+    expect(issue(workspace, key)).toMatchObject({ title: 'Unrelated', status: 'todo' })
+  })
+
   it('refuses an id it has no record of', () => {
     const { workspace, changes } = statusChange()
     expect(errorCode(undoChange(workspace, changes, 'c-unknown', AT).result)).toBe('UNDO_CONFLICT')

@@ -162,12 +162,16 @@ export function updateIssueStatusTracked(
 /**
  * Applies the inverse of one recorded change, or refuses.
  *
- * Refused, rather than forced, whenever the issue no longer reads exactly what
- * the write left: an undo is "put back what that approval did", and once
- * something else has changed the issue since, putting back the old fields would
- * silently overwrite that later change. Undoing the later change first brings
- * the issue back to what the earlier one left, so a chain still unwinds in
- * order.
+ * Refused, rather than forced, whenever something has changed the issue since:
+ * an undo is "put back what that approval did", and putting back the old fields
+ * over a later change would silently overwrite it. Two checks, because neither
+ * is enough alone. A later recorded write to the same key that is still
+ * standing refuses outright — field equality cannot see A→B→A→B, and a key
+ * freed by undoing a create is minted again for the next one (`nextIssueKey`),
+ * so a record could otherwise land on an unrelated issue. And the issue must
+ * still read exactly what the write left, which catches a write the journal
+ * never saw. Undoing the later change first clears both, so a chain still
+ * unwinds in order.
  */
 export function undoChange(
   workspace: Workspace,
@@ -193,8 +197,12 @@ export function undoChange(
   }
   if (change.undoneAt !== null) return fail(`That change to ${change.issueKey} was already undone.`)
 
+  const key = change.issueKey.toLowerCase()
+  const superseded = changes
+    .slice(index + 1)
+    .some((later) => later.undoneAt === null && later.issueKey.toLowerCase() === key)
   const issue = findIssue(workspace, change.issueKey)
-  if (!issue || !sameFields(fieldsOf(issue), change.after)) {
+  if (superseded || !issue || !sameFields(fieldsOf(issue), change.after)) {
     return fail(`${change.issueKey} has changed since, so that change was not undone.`)
   }
 

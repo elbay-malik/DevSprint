@@ -53,8 +53,10 @@ the board has moved on.
   created issue removed. The fields recorded and compared are status, assignee, blocked reason and
   completion time.
 - It is one-shot and conflict-safe. It refuses with `409 UNDO_CONFLICT` when the issue no longer
-  reads exactly what the write left, when the change was already undone, or when there is no
-  record of it (a reset clears them all). A malformed or oversized id (over 64 characters, the
+  reads exactly what the write left, when a later recorded write to the same issue still stands
+  (field equality alone misses A→B→A→B, and a key freed by undoing a create is minted again for
+  the next one), when the change was already undone, or when there is no record of it (a reset
+  clears them all). A malformed or oversized id (over 64 characters, the
   same bound as `MAX_APPROVAL_ID_LENGTH`) is a `400 INVALID_INPUT`. Undoing the later change first
   brings the issue back to what the earlier one left, so a chain still unwinds in order.
 - The journal is saved in the same storage `put` as the board, so the two cannot disagree, and it
@@ -78,7 +80,7 @@ failure shows a toast, as other failed board requests do, and keeps the Undo for
   approval and its own record line, so the audit trail reads the same as before.
 - Positive: an approved mistake can be taken back without resetting the board for everyone, and
   the undo cannot be used to write arbitrary state: at most it reverses a write that really
-  happened, once, while the issue still reads what that write left.
+  happened, once, while it is still the latest standing write to that issue.
 - Positive: the before-state is recorded for writes from outside MCP hosts too, so the record is
   complete whichever client wrote, even though only the SPA offers the button.
 - Negative: principle 2 is no longer "one decision per change". PRODUCT.md now says what still
