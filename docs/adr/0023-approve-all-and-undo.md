@@ -119,3 +119,24 @@ failure shows a toast, as other failed board requests do, and keeps the Undo for
 - `apps/web/src/features/chat/lib/approvals.ts`, `apps/web/src/features/chat/lib/undo.ts`.
 - The design critique of 2026-10-25 (`.impeccable/critique/`), Persona Red Flags and heuristics 3
   and 7.
+
+## Status note — 2026-10-25 (`assign_issue`)
+
+The negative consequence above about `assign_issue` is resolved. It became tool 11, a gated write
+served from `apps/mcp-issues` beside `update_issue_status` (tool-inventory §2), and it records
+itself through the same journal as the other two board writes:
+
+- `assignIssueTracked` in `apps/api/src/workspace/changes.ts` snapshots the same four fields before
+  and after, and its result carries a `changeId`. `assign_issue` is in `UNDOABLE_TOOL_NAMES`, and
+  its inverse hands the issue back to whoever held it, nobody included ("↶ Undone by you at 14:05
+  — DS-12 back to unassigned.").
+- The conflict rules did not change. A reassignment refuses to undo over a later status change, and
+  a status change over a later reassignment, because every record compares all four fields and a
+  later standing write to the key still wins.
+- "Approve all" covers it when the board holds the key, the assignee is on the roster or is nobody,
+  and the assignee would actually change. Any other assignment is named under the header and keeps
+  its own decision, as a missing key does.
+- An unknown id is refused with `USER_NOT_FOUND`, and assigning the current assignee with
+  `INVALID_INPUT`, so neither writes nor records anything.
+
+`create_release_notes` and `run_deployment` still have no inverse.
