@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { ToolErrorCode } from '@devsprint/shared'
-import { toolErrorCopy } from './error-copy'
+import { errorCopyText, toolErrorCopy as copyParts } from './error-copy'
+
+/** The copy as the reader sees it, identifiers and all. */
+const toolErrorCopy = (...args: Parameters<typeof copyParts>) => errorCopyText(copyParts(...args))
 
 describe('toolErrorCopy', () => {
   it('names the issue the board does not hold, as the board spells keys (S-E)', () => {
@@ -62,6 +65,34 @@ describe('toolErrorCopy', () => {
     ).toBe('v1.4.2 is already live in production.')
     expect(toolErrorCopy('create_release_notes', 'VERSION_EXISTS', { version: 'v1.4.2' })).toBe(
       'Release notes for v1.4.2 already exist.',
+    )
+  })
+
+  it('marks each identifier it names, so the card can set it in mono', () => {
+    expect(copyParts('update_issue_status', 'ISSUE_NOT_FOUND', { issueKey: 'ds-42' })).toEqual([
+      'No issue ',
+      { id: 'DS-42' },
+      ' on the board.',
+    ])
+    const identifiers = (copy: ReturnType<typeof copyParts>) =>
+      copy.flatMap((part) => (typeof part === 'string' ? [] : [part.id]))
+    expect(
+      identifiers(
+        copyParts('run_deployment', 'VERSION_EXISTS', {
+          version: 'v1.4.2',
+          environment: 'production',
+        }),
+      ),
+    ).toEqual(['v1.4.2', 'production'])
+    expect(
+      identifiers(copyParts('get_burndown', 'SPRINT_NOT_FOUND', { sprintId: 'sprint-99' })),
+    ).toEqual(['sprint-99'])
+    expect(identifiers(copyParts('list_issues', 'WORKSPACE_FULL'))).toEqual([])
+  })
+
+  it('reads whole without a version to name', () => {
+    expect(toolErrorCopy('create_release_notes', 'VERSION_EXISTS', {})).toBe(
+      'Release notes for that version already exist.',
     )
   })
 

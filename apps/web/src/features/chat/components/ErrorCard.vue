@@ -28,7 +28,13 @@ const message = computed(() => toolErrorCopy(props.toolName, props.error.code, p
   >
     <!-- What failed, in words, leads; the code follows for whoever is debugging.
          The code stays a visible label, so the state survives greyscale. -->
-    <p data-testid="error-message" class="text-foreground">{{ message }}</p>
+    <!-- Identifiers in mono, as in the approval card's warning (the Readout Rule). -->
+    <p data-testid="error-message" class="text-foreground">
+      <template v-for="(part, index) in message" :key="index"
+        ><span v-if="typeof part !== 'string'" class="font-mono">{{ part.id }}</span
+        ><template v-else>{{ part }}</template></template
+      >
+    </p>
     <p class="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 font-mono">
       <span>{{ toolName }}</span>
       <span data-testid="error-code" class="text-destructive font-medium">{{ error.code }}</span>

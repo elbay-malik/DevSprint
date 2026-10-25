@@ -90,6 +90,19 @@ onBeforeUnmount(() => {
   observer?.disconnect()
 })
 
+/**
+ * A new request follows again, whether the reader sent it or answering the last
+ * approval card did. Each decision brings its card to the top and releases the
+ * anchor, so without this the reply to the last one streamed in below the fold
+ * and stayed there, half a line showing, with focus already in the composer.
+ */
+watch(
+  () => chat.status,
+  (status) => {
+    if (status === 'submitted') following.value = true
+  },
+)
+
 watch(
   () => [chat.messages.length, chat.status, JSON.stringify(chat.messages.at(-1)?.parts ?? [])],
   () => void nextTick(toBottom),

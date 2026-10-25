@@ -186,26 +186,26 @@ describe('BurndownChart', () => {
     expect(wrapper.html()).not.toContain('NaN')
   })
 
-  it('keeps its gridlines when the rounded tick labels repeat', async () => {
-    // A one-point scale rounds its four tick labels to 0, 0, 1, 1. The keys are
-    // the index rather than the label so they stay unique; I could not get Vue
-    // to actually drop a line with duplicate keys here, so this guards the count
-    // across re-renders rather than claiming to reproduce that.
-    const tiny = burndown({
-      committedPoints: 1,
-      days: [
-        { date: '2026-07-01', remaining: 1, ideal: 1 },
-        { date: '2026-07-05', remaining: 0, ideal: 0 },
-      ],
+  it('labels the value axis in round steps from zero', async () => {
+    // Thirds of 31 read 0 / 10 / 21 / 31, steps nobody can count in.
+    const wrapper = mount(BurndownChart, { props: { data: burndown() } })
+    const labels = () =>
+      wrapper.findAll('svg[role="img"] text[text-anchor="end"]').map((label) => label.text())
+    expect(labels()).toEqual(['0', '10', '20', '30'])
+    expect(wrapper.findAll('g.text-border line')).toHaveLength(4)
+
+    // A one-point sprint gets its two lines, not four labelled 0, 0, 1, 1.
+    await wrapper.setProps({
+      data: burndown({
+        committedPoints: 1,
+        days: [
+          { date: '2026-07-01', remaining: 1, ideal: 1 },
+          { date: '2026-07-05', remaining: 0, ideal: 0 },
+        ],
+      }),
     })
-    const wrapper = mount(BurndownChart, { props: { data: tiny } })
-    expect(wrapper.findAll('g.text-border line')).toHaveLength(4)
-
-    await wrapper.setProps({ data: burndown() })
-    expect(wrapper.findAll('g.text-border line')).toHaveLength(4)
-
-    await wrapper.setProps({ data: tiny })
-    expect(wrapper.findAll('g.text-border line')).toHaveLength(4)
+    expect(labels()).toEqual(['0', '1'])
+    expect(wrapper.findAll('g.text-border line')).toHaveLength(2)
   })
 
   it('draws in CSS pixels, so its labels are not scaled down in a narrow column', async () => {

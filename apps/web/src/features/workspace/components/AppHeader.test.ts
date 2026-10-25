@@ -54,7 +54,8 @@ describe('AppHeader', () => {
     it('says what it would do, before and while it asks', async () => {
       const wrapper = mount(AppHeader, { attachTo: document.body })
       const button = wrapper.get('[data-testid="reset-demo"]')
-      expect(button.attributes('title')).toBe('Restores the seed board for every visitor')
+      // The title and the description are one sentence, full stop and all.
+      expect(button.attributes('title')).toBe('Restores the seed board for every visitor.')
       const hint = document.getElementById(button.attributes('aria-describedby')!)
       expect(hint?.textContent).toBe('Restores the seed board for every visitor.')
 
@@ -143,15 +144,16 @@ describe('AppHeader', () => {
       wrapper.unmount()
     })
 
-    it('backs out after four seconds without an answer', async () => {
+    it('waits for an answer as long as it takes', async () => {
+      // It used to back out after 4s, even with focus on Confirm, which is
+      // about how long a screen reader takes to read Confirm and its
+      // description (WCAG 2.2.1).
       vi.useFakeTimers()
       const wrapper = await ask()
-      vi.advanceTimersByTime(3_999)
+      vi.advanceTimersByTime(60_000)
       await flushPromises()
       expect(wrapper.find('[data-testid="reset-demo-question"]').exists()).toBe(true)
-      vi.advanceTimersByTime(1)
-      await flushPromises()
-      expect(wrapper.find('[data-testid="reset-demo-question"]').exists()).toBe(false)
+      expect(document.activeElement?.getAttribute('data-testid')).toBe('reset-demo-confirm')
       expect(fetchMock).not.toHaveBeenCalled()
       wrapper.unmount()
     })

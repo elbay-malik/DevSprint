@@ -29,7 +29,10 @@ useReadOnReturn({
   lastReadAt: () => store.readAt,
 })
 
-/** "Updated 2 min ago", refreshed every 30s; only while the board is the Worker's. */
+/**
+ * "Updated 2 min ago", refreshed every 30s, whenever the board is a Worker read,
+ * including the last good one kept while offline.
+ */
 const now = useNow({ interval: 30_000 })
 const updated = computed(() =>
   store.source === 'api' && store.readAt !== undefined
@@ -79,9 +82,10 @@ watch(
           {{ store.activeSprint?.name ?? 'No active sprint' }}
         </h1>
         <!-- Connection status, not the sprint's: the board is read from the
-             Worker, or it is the offline seed. -->
+             Worker, or it is the seed or the last good read while the Worker
+             does not answer, and the time beside it says how old that is. -->
         <Badge variant="secondary" data-testid="workspace-source">
-          {{ store.source === 'api' ? 'Live board' : 'Offline' }}
+          {{ store.source === 'api' && !store.offline ? 'Live board' : 'Offline' }}
         </Badge>
         <time
           v-if="updated"

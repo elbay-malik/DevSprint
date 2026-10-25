@@ -247,18 +247,19 @@ function respond(approved: boolean) {
       data-testid="approval-outcome"
       :class="outcome.failed ? 'text-destructive' : 'text-muted-foreground'"
     >
-      <!-- The glyph is drawn, not read: the words already say how it went. -->
+      <!-- The glyph is drawn, not read: the words already say how it went. Mono,
+           because Geist has none of the glyphs and the fallback drew ● at half
+           the height of ◐. -->
       <span
         aria-hidden="true"
         data-testid="approval-outcome-mark"
+        class="font-mono"
         :class="OUTCOME_MARK_TONES[outcome.mark]"
         >{{ outcome.mark }}</span
       >
-      {{ outcome.text }}
-      <template v-if="outcome.code"
-        ><span data-testid="approval-error-code" class="font-mono">({{ outcome.code }})</span
-        >.</template
-      >
+      <!-- A typed error's code is the ErrorCard's, right below, in Stop Red;
+           repeated here it pushed the line onto a second one at 1440. -->
+      {{ outcome.text }}{{ outcome.code === undefined ? '' : '.' }}
     </p>
   </div>
 </template>

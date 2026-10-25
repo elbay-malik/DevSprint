@@ -617,7 +617,7 @@ describe('ChatMessageList approval groups', () => {
         'Draft release notes',
         'Close out the sprint',
         'Deploy to staging',
-        'Fix a typo’d issue key',
+        'Mark DS-42 as done',
       ])
       // Within the four-to-six a first look can take in.
       expect(chips.length).toBeLessThanOrEqual(6)
@@ -667,6 +667,9 @@ describe('ChatMessageList approval groups', () => {
       const wrapper = mount(ChatMessageList)
       const line = wrapper.get('[data-testid="mcp-endpoint"]')
       expect(line.get('code').text()).toBe(MCP_URL)
+      // Copy sits on the sentence's line, not after an address that fills the column.
+      expect(line.get('p').find('code').exists()).toBe(false)
+      expect(line.get('p').find('[data-testid="mcp-endpoint-copy"]').exists()).toBe(true)
 
       const copy = wrapper.get('[data-testid="mcp-endpoint-copy"]')
       expect(copy.attributes('aria-label')).toBe('Copy MCP address')
@@ -675,6 +678,8 @@ describe('ChatMessageList approval groups', () => {
 
       expect(writeText).toHaveBeenCalledWith(MCP_URL)
       expect(copy.text()).toBe('Copied')
+      // Said once, by the status line; the button's name holds still.
+      expect(copy.attributes('aria-label')).toBe('Copy MCP address')
       expect(wrapper.get('[data-testid="chat-status"]').text()).toBe('MCP address copied.')
       vi.unstubAllGlobals()
     })

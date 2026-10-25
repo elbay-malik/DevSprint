@@ -205,7 +205,8 @@ const canCancel = computed(() => props.live === true && !settled.value)
         class="flex items-center gap-2"
         :class="STAGE_TONES[stage.status]"
       >
-        <span aria-hidden="true">{{ STAGE_MARKS[stage.status] }}</span>
+        <!-- Mono: Geist has no ○ ◐ ● ✕, and the fallback sizes them unevenly. -->
+        <span aria-hidden="true" class="font-mono">{{ STAGE_MARKS[stage.status] }}</span>
         <span class="font-mono">{{ stage.name }}</span>
         <span class="text-muted-foreground">{{ stage.status }}</span>
       </li>

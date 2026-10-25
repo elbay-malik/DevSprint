@@ -63,6 +63,30 @@ describe('WorkspacePane', () => {
     expect(wrapper.find('[data-testid="workspace-updated"]').exists()).toBe(false)
   })
 
+  it('keeps the last board on a failed re-read, and says it is offline', async () => {
+    // A laptop wakes and the tab turns visible before the network is back.
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const moved = createWorkspaceSeed()
+    moved.issues.find((issue) => issue.key === 'DS-7')!.status = 'done'
+    fetchMock
+      .mockImplementationOnce(() => Promise.resolve(respond(moved)))
+      .mockImplementationOnce(() => Promise.reject(new TypeError('Failed to fetch')))
+    const wrapper = mount(WorkspacePane)
+    await flushPromises()
+
+    vi.advanceTimersByTime(3 * 60_000)
+    focusWindow()
+    await flushPromises()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+
+    // Not the seed: DS-7 stays where the last good read had it.
+    expect(wrapper.find('[data-testid="board-column-done"] [data-issue-key="DS-7"]').exists()).toBe(
+      true,
+    )
+    expect(wrapper.get('[data-testid="workspace-source"]').text()).toBe('Offline')
+    expect(wrapper.get('[data-testid="workspace-updated"]').text()).toBe('Updated 3 min ago')
+  })
+
   it('re-reads the board when the reader comes back, and marks what moved', async () => {
     // An MCP host moved DS-7 while the tab was in the background (S-F).
     const moved = createWorkspaceSeed()

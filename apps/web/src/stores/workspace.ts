@@ -28,11 +28,18 @@ export function changedStatusKeys(previous: Workspace, next: Workspace): Set<str
  * from this SPA or from an external MCP host. The pane hydrates when a turn
  * settles and when the reader comes back to the tab (useReadOnReturn); it
  * does not poll.
+ *
+ * A failed read after a good one keeps the board it had and says it is
+ * offline. A laptop waking fires `visibilitychange` before the network is
+ * back, and swapping the live board for the seed then would turn an open
+ * card for an issue made over MCP into "DS-14 isn't on the board".
  */
 export const useWorkspaceStore = defineStore('workspace', () => {
   const workspace = ref<Workspace>(createWorkspaceSeed())
   const source = ref<WorkspaceSource>('seed')
   const hydrating = ref(false)
+  /** The last read failed; the board shown is the seed or the last good read. */
+  const offline = ref(false)
   /** When the Worker last answered a read (epoch ms); undefined until it has. */
   const readAt = ref<number>()
   /**
@@ -41,6 +48,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
    */
   const recentlyChanged = ref<ReadonlySet<string>>(new Set())
   let warned = false
+  /** Reads can overlap (a return, then a turn settling); only the latest may land. */
+  let latestRead = 0
   let clearChanged: ReturnType<typeof setTimeout> | undefined
 
   function markChanged(keys: ReadonlySet<string>): void {
@@ -55,31 +64,35 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   async function hydrate(): Promise<void> {
+    const read = ++latestRead
     hydrating.value = true
     try {
       const response = await fetch(WORKSPACE_ENDPOINT)
       if (!response.ok) throw new Error(`GET ${WORKSPACE_ENDPOINT} responded ${response.status}`)
       const next = (await response.json()) as Workspace
+      // An older read answering last would put back a board the newer one
+      // already replaced, and mark the moves it undid as changes.
+      if (read !== latestRead) return
       // Only a change between two reads of the Worker is news. The first read
       // replaces the seed, and whatever differs there was never shown as live.
       if (source.value === 'api') markChanged(changedStatusKeys(workspace.value, next))
       workspace.value = next
       source.value = 'api'
+      offline.value = false
       readAt.value = Date.now()
     } catch (error) {
-      // Expected whenever the Worker is not running locally: fall back to the
-      // seed and warn once instead of toasting on every retry. The reset is
-      // what keeps `source` honest — the pane re-hydrates on every mount, so a
-      // refresh that fails after an earlier success would otherwise leave the
-      // board showing the Worker's data under a "seed data" badge.
-      workspace.value = createWorkspaceSeed()
-      source.value = 'seed'
+      if (read !== latestRead) return
+      // Expected whenever the Worker is not running locally: warn once instead
+      // of toasting on every retry. Without a good read yet, the board is the
+      // seed. After one, it stays as last read, which `source` and `readAt`
+      // still describe, and `offline` says the read behind it is not current.
+      offline.value = true
       if (!warned) {
         warned = true
         console.warn('[workspace] api unreachable, showing seed data:', error)
       }
     } finally {
-      hydrating.value = false
+      if (read === latestRead) hydrating.value = false
     }
   }
 
@@ -100,6 +113,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   return {
     workspace,
     source,
+    offline,
     hydrating,
     readAt,
     hydrate,

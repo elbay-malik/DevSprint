@@ -89,26 +89,95 @@ describe('useWorkspaceStore', () => {
     expect(console.warn).toHaveBeenCalledTimes(1)
   })
 
-  it('hydrate() falls back to the seed when a later refresh fails', async () => {
-    // The pane hydrates on every mount, so this is one route change away.
+  it('hydrate() keeps the last good board when a later read fails', async () => {
+    // A return to the tab can read before the network is back. Swapping in the
+    // seed then would make an open card for an issue made over MCP say it is
+    // not on the board.
     const remote = createWorkspaceSeed()
     remote.project.name = 'DevSprint (from api)'
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response(JSON.stringify(remote), { status: 200 }))
       .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+      .mockResolvedValueOnce(new Response(JSON.stringify(remote), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 
     const store = useWorkspaceStore()
     await store.hydrate()
-    expect(store.source).toBe('api')
+    const readAt = store.readAt
+    expect(store.offline).toBe(false)
 
     await store.hydrate()
+    // Still the Worker's board, and still dated by the read that produced it.
+    expect(store.source).toBe('api')
+    expect(store.offline).toBe(true)
+    expect(store.workspace.project.name).toBe('DevSprint (from api)')
+    expect(store.readAt).toBe(readAt)
 
-    // The badge must never claim 'seed' while the board still shows api data.
+    await store.hydrate()
+    expect(store.offline).toBe(false)
+  })
+
+  it('says offline while it has never read the Worker', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('ECONNREFUSED'))),
+    )
+    const store = useWorkspaceStore()
+    await store.hydrate()
     expect(store.source).toBe('seed')
-    expect(store.workspace).toEqual(createWorkspaceSeed())
-    expect(store.workspace.project.name).toBe('DevSprint')
+    expect(store.offline).toBe(true)
+  })
+
+  it('lets only the latest of two overlapping reads land', async () => {
+    // A return read still in flight when a turn settles and reads again: if
+    // the older answer came back last, it would undo the newer board and mark
+    // the moves it undid.
+    const older = createWorkspaceSeed()
+    const newer = createWorkspaceSeed()
+    newer.issues.find((issue) => issue.key === 'DS-7')!.status = 'done'
+    const respond = (body: unknown) => new Response(JSON.stringify(body), { status: 200 })
+    let answerOlder: (response: Response) => void = () => undefined
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(respond(createWorkspaceSeed()))
+        .mockReturnValueOnce(new Promise<Response>((resolve) => (answerOlder = resolve)))
+        .mockResolvedValueOnce(respond(newer)),
+    )
+
+    const store = useWorkspaceStore()
+    await store.hydrate()
+    const first = store.hydrate()
+    const second = store.hydrate()
+    await second
+    expect(store.workspace.issues.find((issue) => issue.key === 'DS-7')?.status).toBe('done')
+    expect(store.hydrating).toBe(false)
+
+    answerOlder(respond(older))
+    await first
+    expect(store.workspace.issues.find((issue) => issue.key === 'DS-7')?.status).toBe('done')
+    expect([...store.recentlyChanged]).toEqual(['DS-7'])
+  })
+
+  it('stays hydrating until the latest read answers', async () => {
+    let answerLatest: (response: Response) => void = () => undefined
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify(createWorkspaceSeed())))
+        .mockReturnValueOnce(new Promise<Response>((resolve) => (answerLatest = resolve))),
+    )
+    const store = useWorkspaceStore()
+    const first = store.hydrate()
+    const second = store.hydrate()
+    await first
+    expect(store.hydrating).toBe(true)
+    answerLatest(new Response(JSON.stringify(createWorkspaceSeed())))
+    await second
+    expect(store.hydrating).toBe(false)
   })
 
   it('hydrate() treats a non-2xx response as a failure', async () => {

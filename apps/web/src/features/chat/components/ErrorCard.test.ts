@@ -21,6 +21,12 @@ describe('ErrorCard', () => {
     expect(wrapper.text()).toContain('update_issue_status')
   })
 
+  it('sets the identifier in its message in mono, as the approval card does', () => {
+    const message = mount(ErrorCard, { props }).get('[data-testid="error-message"]')
+    const mono = message.findAll('.font-mono')
+    expect(mono.map((part) => part.text())).toEqual(['DS-42'])
+  })
+
   it('never shows the api’s model-facing message', () => {
     // That text tells the model which tool to call next; to a person in the
     // chat it is a debug console.

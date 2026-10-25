@@ -180,7 +180,14 @@ test.describe('S-B — batch write with per-issue approval gates', () => {
     await expect(answer).toContainText(
       '4 of the 5 issues are now Done. DS-11 was not approved (Still blocked on vendor sandbox), so nothing changed.',
     )
-    await expect(answer).not.toContainText(/5 issues (were )?(closed|done)/i)
+    // Each decision brought its card to the top; the reply to the last one
+    // still has to land in view, not half under the composer.
+    await expect(answer.getByText('4 of the 5 issues are now Done.')).toBeInViewport({ ratio: 1 })
+    // The api eval's CLAIMS_ALL_FIVE_DONE, "are now" included: the mock says "All
+    // 5 issues are now Done." when every change applies. "of the 5" is the tally.
+    await expect(answer).not.toContainText(
+      /(?<!\bof (the )?)\b(all (5|five)|5|five) issues (were |are |have been )?(now )?(closed|done|completed)\b/i,
+    )
 
     // The board and the store agree: four moved, DS-11 never left Blocked.
     const done = page.getByTestId('board-column-done')
@@ -366,9 +373,14 @@ test.describe('S-E — error recovery', () => {
     // ErrorCard explains without the api's model-facing hint.
     await expect(page.getByTestId('error-card')).toContainText('No issue DS-42 on the board.')
     await expect(page.getByTestId('error-card')).not.toContainText('search_issues')
-    await expect(cards.first().getByTestId('approval-outcome')).toContainText(
-      /Approved by you at \d\d.\d\d — not applied \(ISSUE_NOT_FOUND\)\./,
+    // The code is the ErrorCard's alone; repeated on the card it wrapped the line.
+    await expect(cards.first().getByTestId('approval-outcome')).toHaveText(
+      /^✕ Approved by you at \d\d.\d\d — not applied\.$/,
     )
+    // The key in the ErrorCard's sentence is an identifier, so it is mono.
+    await expect(
+      page.getByTestId('error-message').locator('.font-mono', { hasText: 'DS-42' }),
+    ).toBeVisible()
 
     // Step 4: a search for what was meant, best match first.
     const table = page.getByTestId('issue-table')
@@ -379,7 +391,7 @@ test.describe('S-E — error recovery', () => {
     await turnSettled(page)
     // One sentence on the failure, then the question that offers the fix.
     await expect(assistantText(page).last()).toContainText(
-      "DS-42 isn't on the board, so nothing changed. Did you mean DS-7, “Billing export CSV download”?",
+      'DS-42 isn’t on the board, so nothing changed. Did you mean DS-7, “Billing export CSV download”?',
     )
 
     // Steps 6–8: confirming raises a second card; the first is not reused.

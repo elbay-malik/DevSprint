@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
@@ -23,9 +23,6 @@ import { useWorkspaceStore } from '@/stores/workspace'
 const workspace = useWorkspaceStore()
 const resetting = ref(false)
 
-/** How long "Reset for everyone?" waits for a Confirm before backing out. */
-const RESET_CONFIRM_MS = 4000
-
 const themeLabel = computed(() =>
   theme.value === 'system'
     ? `System (${resolvedTheme('system')})`
@@ -42,13 +39,13 @@ const themeGlyph = computed(() =>
  * Reset is two steps, inline rather than a modal: the board is shared, so one
  * click would discard every other visitor's work. The first click asks "Reset
  * for everyone?" and moves focus to Confirm; Esc, Cancel, focus leaving the
- * question, a press elsewhere or RESET_CONFIRM_MS without an answer all back
- * out.
+ * question or a press elsewhere back out. It does not time out: a screen
+ * reader can take seconds just to read Confirm and its description, and a
+ * control that vanished under it would fail WCAG 2.2.1.
  */
 const confirming = ref(false)
 const header = ref<HTMLElement>()
 const confirmGroup = ref<HTMLElement>()
-let backOut: ReturnType<typeof setTimeout> | undefined
 
 function focusResetButton(): void {
   header.value?.querySelector<HTMLElement>('[data-testid="reset-demo"]')?.focus()
@@ -57,15 +54,12 @@ function focusResetButton(): void {
 async function askToReset(): Promise<void> {
   if (resetting.value) return
   confirming.value = true
-  clearTimeout(backOut)
-  backOut = setTimeout(() => cancelReset(), RESET_CONFIRM_MS)
   await nextTick()
   confirmGroup.value?.querySelector<HTMLElement>('[data-testid="reset-demo-confirm"]')?.focus()
 }
 
 /** Backs out. Focus returns to Reset only if it was inside the question, never pulled from elsewhere. */
 async function cancelReset(): Promise<void> {
-  clearTimeout(backOut)
   if (!confirming.value) return
   const hadFocus = confirmGroup.value?.contains(document.activeElement) ?? false
   confirming.value = false
@@ -92,14 +86,11 @@ useEventListener(document, 'pointerdown', (event: PointerEvent) => {
 })
 
 async function confirmReset(): Promise<void> {
-  clearTimeout(backOut)
   confirming.value = false
   await nextTick()
   focusResetButton()
   await reset()
 }
-
-onBeforeUnmount(() => clearTimeout(backOut))
 
 /**
  * Below lg the copilot sits under the whole board, about 1,200px down on a
@@ -183,7 +174,7 @@ async function reset(): Promise<void> {
         data-testid="reset-demo"
         size="sm"
         variant="outline"
-        title="Restores the seed board for every visitor"
+        title="Restores the seed board for every visitor."
         aria-describedby="reset-demo-hint"
         :aria-disabled="resetting ? 'true' : undefined"
         class="aria-disabled:opacity-50"
@@ -200,7 +191,8 @@ async function reset(): Promise<void> {
         :title="`Theme: ${themeLabel}`"
         @click="setTheme(nextTheme(theme))"
       >
-        <span aria-hidden="true">{{ themeGlyph }}</span>
+        <!-- Mono, like every state glyph: the fallback sizes ○ ● ◐ unevenly. -->
+        <span aria-hidden="true" class="font-mono">{{ themeGlyph }}</span>
         <span class="sr-only">{{ themeLabel }}</span>
       </Button>
     </div>

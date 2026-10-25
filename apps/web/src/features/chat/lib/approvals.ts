@@ -17,7 +17,10 @@ export interface ApprovalOutcome {
   mark: OutcomeMark
   /** The sentence, up to the error code when there is one. */
   text: string
-  /** The envelope's code ("ISSUE_NOT_FOUND"), kept as detail after the text. */
+  /**
+   * The envelope's code ("ISSUE_NOT_FOUND"). The card leaves it to the ErrorCard
+   * below it; the status line, which does not read that card, says it.
+   */
   code?: string
 }
 
@@ -114,8 +117,8 @@ function deploymentStatus(data: unknown): string | undefined {
  * time the person decided, when this session saw it; without it the line
  * simply has no time. A failure has to read as one: reporting only "Approved
  * by you" would present a write that never landed as one that did. A typed
- * error is shown in full by the ErrorCard below the card, so the line here
- * stays short ("— not applied (ISSUE_NOT_FOUND).") rather than saying it twice.
+ * error is shown in full by the ErrorCard below the card, so the line there
+ * stays short ("— not applied.") rather than saying it twice.
  */
 export function approvalOutcome(part: ApprovalPartLike, at?: string): ApprovalOutcome | undefined {
   if (part.state === 'approval-requested') return undefined
@@ -150,7 +153,10 @@ export function approvalOutcome(part: ApprovalPartLike, at?: string): ApprovalOu
   }
 }
 
-/** The outcome as one line, code included, for a screen reader to hear. */
+/**
+ * The outcome as one line, code included, for a screen reader to hear: the
+ * status line does not read the ErrorCard that shows the code on screen.
+ */
 export function approvalOutcomeLine(outcome: ApprovalOutcome): string {
   return outcome.code === undefined ? outcome.text : `${outcome.text} (${outcome.code}).`
 }

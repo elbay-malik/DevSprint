@@ -113,6 +113,8 @@ describe('ApprovalCard', () => {
     const mark = applied.get('[data-testid="approval-outcome-mark"]')
     expect(mark.attributes('aria-hidden')).toBe('true')
     expect(mark.classes()).toContain('text-success')
+    // One glyph set at one size: Geist has none of them.
+    expect(mark.classes()).toContain('font-mono')
 
     vi.setSystemTime(new Date(2026, 9, 25, 14, 3))
     clearApprovalRecords()
@@ -142,10 +144,11 @@ describe('ApprovalCard', () => {
       },
     })
     const outcome = failed.get('[data-testid="approval-outcome"]')
-    expect(outcome.text()).toBe('✕ Approved by you at 14:02 — not applied (ISSUE_NOT_FOUND).')
+    // The code is the ErrorCard's, right below; here it wrapped the line at 1440.
+    expect(outcome.text()).toBe('✕ Approved by you at 14:02 — not applied.')
     expect(outcome.classes()).toContain('text-destructive')
     expect(outcome.text()).not.toContain('search_issues')
-    expect(failed.get('[data-testid="approval-error-code"]').text()).toBe('(ISSUE_NOT_FOUND)')
+    expect(outcome.text()).not.toContain('ISSUE_NOT_FOUND')
     // No board status to keep for an issue the board never held.
     expect(failed.get('[data-testid="approval-headline"]').text()).toBe('DS-42: Done')
   })
@@ -319,7 +322,9 @@ describe('ApprovalCard', () => {
       output: { ok: false, error: { code: 'ISSUE_NOT_FOUND', message: 'no' } },
       approval: { id: 'approval-1', approved: true, signature: 'sig' },
     })
-    expect(wrapper.get('[data-testid="approval-outcome"]').text()).toContain('ISSUE_NOT_FOUND')
+    const outcome = wrapper.get('[data-testid="approval-outcome"]')
+    expect(outcome.text()).toContain('not applied')
+    expect(outcome.classes()).toContain('text-destructive')
   })
 
   it('records an approval as soon as it is given', () => {

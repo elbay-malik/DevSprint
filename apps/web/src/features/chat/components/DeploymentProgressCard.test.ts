@@ -199,5 +199,9 @@ describe('DeploymentProgressCard', () => {
     // Colour alone would not survive greyscale or colour blindness.
     expect(wrapper.get('[data-stage="build"]').text()).toContain('●')
     expect(wrapper.get('[data-stage="test"]').text()).toContain('–')
+    // In mono, so ● and ◐ are drawn at one size: Geist has neither.
+    expect(wrapper.get('[data-stage="build"] [aria-hidden="true"]').classes()).toContain(
+      'font-mono',
+    )
   })
 })

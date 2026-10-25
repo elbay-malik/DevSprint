@@ -4,6 +4,7 @@ import { useResizeObserver } from '@vueuse/core'
 import type { BurndownData } from '@devsprint/shared/tools'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { dateTickIndices } from '../lib/date-ticks'
+import { valueTicks } from '../lib/value-ticks'
 
 /**
  * Remaining work against the ideal line, drawn as inline SVG.
@@ -87,18 +88,13 @@ const remainingPath = computed(() => path((day) => day.remaining))
 const idealPath = computed(() => path((day) => day.ideal))
 
 /**
- * Four ticks is enough to read the scale without crowding the plot. Labels are
- * rounded, so a small maximum can repeat one — hence the index as the key, or a
- * one-point sprint silently loses gridlines.
+ * Round steps from zero (0 / 10 / 20 / 30 for the seeded sprint), so the axis
+ * can be counted; the scale still runs to the maximum. Values are whole and
+ * distinct, so each is its own key.
  */
-const yTicks = computed(() => {
-  const step = maxY.value / 3
-  return [0, step, step * 2, maxY.value].map((value, index) => ({
-    key: index,
-    label: Math.round(value),
-    y: y(value),
-  }))
-})
+const yTicks = computed(() =>
+  valueTicks(maxY.value).map((value) => ({ key: value, label: value, y: y(value) })),
+)
 
 /** Dates under the plot, as many as fit without touching at the drawn width. */
 const dateTicks = computed(() => dateTickIndices(days.value.length, plotWidth.value))

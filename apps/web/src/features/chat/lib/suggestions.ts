@@ -38,7 +38,9 @@ export const SUGGESTIONS: readonly Suggestion[] = [
   },
   {
     scenario: 'S-E',
-    label: 'Fix a typo’d issue key',
+    // What the visitor asks for, not the twist: that DS-42 does not exist is
+    // the copilot's to find.
+    label: 'Mark DS-42 as done',
     prompt: 'Mark DS-42 as done — the billing export shipped this morning.',
   },
 ]

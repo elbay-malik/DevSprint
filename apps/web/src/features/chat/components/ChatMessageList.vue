@@ -357,24 +357,26 @@ watch(
         <p>Every visitor shares this board. It resets at 00:00 UTC.</p>
         <!-- Product chrome, not model text, so ADR-0022's no-links rule is not
              in play; a copy suits an address meant for an MCP client anyway. -->
-        <p
-          v-if="MCP_ENDPOINT"
-          data-testid="mcp-endpoint"
-          class="flex flex-wrap items-center gap-x-2"
-        >
-          <span>Any MCP client can work on it too:</span>
+        <!-- Copy rides on the sentence, and the address gets a line of its own:
+             the live address alone nearly fills the 440px column, so a Copy
+             after it always wrapped onto a line by itself. -->
+        <div v-if="MCP_ENDPOINT" data-testid="mcp-endpoint" class="flex flex-col">
+          <p class="flex flex-wrap items-center gap-x-2">
+            <span>Any MCP client can work on it too:</span>
+            <!-- The name holds still; the status line says it was copied. -->
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              data-testid="mcp-endpoint-copy"
+              aria-label="Copy MCP address"
+              @click="copyMcpEndpoint"
+            >
+              {{ copied ? 'Copied' : 'Copy' }}
+            </Button>
+          </p>
           <code class="text-foreground font-mono break-all">{{ MCP_ENDPOINT }}</code>
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            data-testid="mcp-endpoint-copy"
-            :aria-label="copied ? 'MCP address copied' : 'Copy MCP address'"
-            @click="copyMcpEndpoint"
-          >
-            {{ copied ? 'Copied' : 'Copy' }}
-          </Button>
-        </p>
+        </div>
       </div>
     </div>
     <!-- A log so the transcript can be navigated as one, but not a live one:

@@ -28,6 +28,15 @@ describe('SUGGESTIONS', () => {
     expect(SUGGESTIONS.length).toBeLessThanOrEqual(6)
   })
 
+  it('labels S-E by what it asks for, not by the missing key it is about to hit', () => {
+    // "Fix a typo'd issue key" gave the twist away, and the message it sent
+    // ("Mark DS-42 as done…") did not match the chip that was clicked.
+    const s_e = SUGGESTIONS.find((suggestion) => suggestion.scenario === 'S-E')
+    expect(s_e?.label).toBe('Mark DS-42 as done')
+    expect(s_e?.prompt.startsWith(s_e.label)).toBe(true)
+    expect(s_e?.label).not.toMatch(/typo/i)
+  })
+
   it('labels each by its outcome in a few words', () => {
     for (const { label } of SUGGESTIONS) expect(label.split(' ').length).toBeLessThanOrEqual(5)
   })
