@@ -77,7 +77,7 @@ const card = computed(() => {
 </script>
 
 <template>
-  <ErrorCard v-if="failure" :tool-name="toolName" :error="failure" />
+  <ErrorCard v-if="failure" :tool-name="toolName" :error="failure" :input="part.input" />
   <IssueTable v-else-if="card === 'issues' && listData" :issues="listData.issues" />
   <IssueTable v-else-if="card === 'matches' && searchData" :matches="searchData.matches" />
   <BurndownChart v-else-if="card === 'burndown' && burndownData" :data="burndownData" />

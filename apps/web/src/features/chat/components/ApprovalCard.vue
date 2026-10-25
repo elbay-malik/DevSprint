@@ -9,6 +9,7 @@ import { useDevSprintChat } from '../composables/useDevSprintChat'
 import { findIssueByKey } from '@/features/workspace/lib/issue-key'
 import { statusLabel } from '@/features/workspace/lib/status-labels'
 import { approvalOutcome } from '../lib/approvals'
+import { approvalRecord, formatDecisionTime, recordDecision } from '../lib/approval-records'
 
 /**
  * The gate in front of every write (docs/wireframes.md §3, ADR-0003). It shows
@@ -44,10 +45,28 @@ const approval = computed((): { id: string; approved?: boolean; reason?: string 
 const decided = computed(() => props.part.state !== 'approval-requested')
 
 /**
+ * The board as it stood, and the time, when the person answered. Taken in
+ * `respond`, while the change is still pending, and kept outside the card: the
+ * transcript remounts it on every state change.
+ */
+const record = computed(() => approvalRecord(approval.value?.id))
+
+/**
  * Once answered, the card says how it went — the chip no longer does. The words
  * come from one place so the status announcement repeats them exactly.
  */
-const outcome = computed(() => approvalOutcome(props.part))
+const outcome = computed(() => {
+  const decidedAt = record.value?.decidedAt
+  return approvalOutcome(
+    props.part,
+    decidedAt === undefined ? undefined : formatDecisionTime(decidedAt),
+  )
+})
+
+/** The glyph's tone; the line's own colour already says failed or settled. */
+const OUTCOME_MARK_TONES: Record<string, string> = {
+  '●': 'text-success',
+}
 
 const toolInput = computed(() => props.part.input as Record<string, unknown> | undefined)
 
@@ -96,10 +115,11 @@ const summary = computed((): { headline: string; detail?: string } => {
 
   if (toolName.value === 'update_issue_status' && typeof input.issueKey === 'string') {
     const issue = targetIssue.value
-    // The "from" status is read live, so it is only truthful while the change is
-    // still pending. Once the board catches up an executed write, keeping it
+    // While pending, the "from" status is the board's. Once decided it is the one
+    // captured at the decision: read live, the board catching up an executed write
     // would rewrite this record into a nonsense "done → done".
-    const from = issue && !decided.value ? `${statusLabel(issue.status)} → ` : ''
+    const fromStatus = decided.value ? record.value?.from : issue?.status
+    const from = fromStatus === undefined ? '' : `${statusLabel(fromStatus)} → `
     // Named as the board spells it, so the card and the board agree on "DS-7".
     return {
       headline: `${issue?.key ?? input.issueKey}: ${from}${statusLabel(input.status)}`,
@@ -130,6 +150,10 @@ function respond(approved: boolean) {
   const id = approval.value?.id
   // Without an id there is nothing to answer, and the SDK would no-op silently.
   if (id === undefined) return
+  recordDecision(id, {
+    decidedAt: new Date(),
+    ...(targetIssue.value ? { from: targetIssue.value.status } : {}),
+  })
   const trimmed = reason.value.trim()
   chat.addToolApprovalResponse({
     id,
@@ -146,10 +170,8 @@ function respond(approved: boolean) {
     :data-tool="toolName"
     class="bg-background flex min-w-0 scroll-mt-3 flex-col gap-2 rounded-md border px-3 py-2 text-xs"
   >
-    <p class="text-muted-foreground font-medium">
-      Approval required: <span class="font-mono">{{ toolName }}</span>
-    </p>
-
+    <!-- No label above the headline: it would say "Approval required" on a
+         card that is long decided. The tool sits in a quiet meta line below. -->
     <div>
       <p data-testid="approval-headline" class="text-foreground text-sm font-medium">
         {{ summary.headline }}
@@ -163,6 +185,7 @@ function respond(approved: boolean) {
       >
         <span class="font-mono">{{ missingIssueKey }}</span> isn’t on the board.
       </p>
+      <p data-testid="approval-tool" class="text-muted-foreground font-mono">{{ toolName }}</p>
     </div>
 
     <details>
@@ -224,9 +247,17 @@ function respond(approved: boolean) {
       data-testid="approval-outcome"
       :class="outcome.failed ? 'text-destructive' : 'text-muted-foreground'"
     >
+      <!-- The glyph is drawn, not read: the words already say how it went. -->
+      <span
+        aria-hidden="true"
+        data-testid="approval-outcome-mark"
+        :class="OUTCOME_MARK_TONES[outcome.mark]"
+        >{{ outcome.mark }}</span
+      >
       {{ outcome.text }}
-      <span v-if="outcome.code" data-testid="approval-error-code" class="font-mono"
-        >({{ outcome.code }})</span
+      <template v-if="outcome.code"
+        ><span data-testid="approval-error-code" class="font-mono">({{ outcome.code }})</span
+        >.</template
       >
     </p>
   </div>

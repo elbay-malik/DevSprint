@@ -25,10 +25,15 @@ vi.mock('../composables/useDevSprintChat', () => ({
 }))
 
 const { default: ChatMessageList } = await import('./ChatMessageList.vue')
+const { clearApprovalRecords, recordDecision } = await import('../lib/approval-records')
 
 // Every mounted list watches the shared `chat`; one left mounted would keep
 // reacting to later tests' changes and moving focus in trees no longer shown.
 enableAutoUnmount(afterEach)
+// Decisions are kept by approval id for the session, and every spec reuses ids.
+beforeEach(() => {
+  clearApprovalRecords()
+})
 
 /** An assistant turn holding one tool call that never produced a result. */
 function abandonedTurn(id: string): DevSprintUIMessage {
@@ -411,7 +416,7 @@ describe('ChatMessageList status and focus', () => {
 
     parts[2] = gated('c3', 'DS-11', 'approval-responded', false, 'Blocked')
     await nextTick()
-    expect(status(wrapper)).toBe('Denied: “Blocked”. 1 change needs your approval.')
+    expect(status(wrapper)).toBe('Denied by you: “Blocked”. 1 change needs your approval.')
     expect(document.activeElement).toBe(
       wrapper.get('[data-call-id="c1"] [data-approval-focus]').element,
     )
@@ -426,6 +431,19 @@ describe('ChatMessageList status and focus', () => {
     chat.status = 'submitted'
     await nextTick()
     expect(status(wrapper)).toBe('Approved by you. The copilot is working on your request…')
+  })
+
+  it('announces the time a decision was made, as the card records it', async () => {
+    chat.messages = [...chat.messages, turnWith([gated('c1', 'DS-7'), gated('c2', 'DS-9')])]
+    const wrapper = mount(ChatMessageList)
+    const parts = chat.messages.at(-1)!.parts as unknown as ReturnType<typeof gated>[]
+
+    // The card records the decision before it answers the SDK.
+    recordDecision('a-c1', { decidedAt: new Date(2026, 9, 25, 14, 2), from: 'in_review' })
+    parts[0] = gated('c1', 'DS-7', 'approval-responded', true)
+    await nextTick()
+
+    expect(status(wrapper)).toBe('Approved by you at 14:02. 1 change needs your approval.')
   })
 
   it('says how each approved write went before the reply, failures first', async () => {
@@ -458,8 +476,7 @@ describe('ChatMessageList status and focus', () => {
 
     // One update, so a screen reader hears the failure the card shows.
     expect(status(wrapper)).toBe(
-      'Approved by you, but it failed: No issue with key DS-42. (ISSUE_NOT_FOUND) ' +
-        'Approved by you — applied. Copilot replied.',
+      'Approved by you — not applied (ISSUE_NOT_FOUND). Approved by you — applied. Copilot replied.',
     )
 
     // A later turn does not repeat what an earlier one already said.

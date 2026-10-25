@@ -1,9 +1,10 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import { beforeEach, describe, expect, it } from 'vitest'
 import ToolResultCard from './ToolResultCard.vue'
 
-function part(type: string, output: unknown, state = 'output-available') {
-  return { type, toolCallId: 'c1', state, input: {}, output }
+function part(type: string, output: unknown, state = 'output-available', input = {}) {
+  return { type, toolCallId: 'c1', state, input, output }
 }
 
 function mountCard(value: unknown) {
@@ -22,6 +23,11 @@ const BURNDOWN = {
 }
 
 describe('ToolResultCard', () => {
+  // The burndown names its sprint from the workspace store.
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
   it('gives each tool the card the registry assigns it', () => {
     const cards: [string, unknown, string][] = [
       ['tool-list_issues', { ok: true, data: { issues: [] } }, 'issue-table'],
@@ -49,17 +55,25 @@ describe('ToolResultCard', () => {
 
   it('shows a failed call as an error, whatever tool it came from', () => {
     const wrapper = mountCard(
-      part('tool-list_issues', {
-        ok: false,
-        error: { code: 'SPRINT_NOT_FOUND', message: "No sprint with id 'sprint-99'." },
-      }),
+      part(
+        'tool-list_issues',
+        {
+          ok: false,
+          error: { code: 'SPRINT_NOT_FOUND', message: "No sprint with id 'sprint-99'." },
+        },
+        'output-available',
+        { sprintId: 'sprint-99' },
+      ),
     )
 
     // The error wins over the tool's own card: an empty table would say the
     // sprint exists and has no issues, which is a different claim.
     expect(wrapper.find('[data-testid="issue-table"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="error-code"]').text()).toBe('SPRINT_NOT_FOUND')
-    expect(wrapper.text()).toContain('sprint-99')
+    // Named from the call's own arguments, in the board's words.
+    expect(wrapper.get('[data-testid="error-message"]').text()).toBe(
+      'No sprint with the id sprint-99.',
+    )
   })
 
   it('falls back to the chip until the call has a result', () => {

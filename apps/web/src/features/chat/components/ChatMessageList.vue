@@ -15,6 +15,7 @@ import {
   pendingStatusMoves,
   type ApprovalPartLike,
 } from '../lib/approvals'
+import { decisionTimeOf } from '../lib/approval-records'
 import { findIssueByKey } from '@/features/workspace/lib/issue-key'
 import ApprovalCard from './ApprovalCard.vue'
 import ChatText from './ChatText.vue'
@@ -123,9 +124,10 @@ let decisionToCarry = ''
 
 /**
  * Gated calls that had already run when this turn started. An approved write
- * runs on the request its approval triggers, so the card's final line ("…but it
- * failed: …") arrives mid-turn, after "Approved by you." was said. Whatever
- * settles during the turn is said when it ends, or a failure would be silent.
+ * runs on the request its approval triggers, so the card's final line ("… — not
+ * applied (ISSUE_NOT_FOUND).") arrives mid-turn, after "Approved by you." was
+ * said. Whatever settles during the turn is said when it ends, or a failure
+ * would be silent.
  */
 let settledBefore = settledCallIds()
 
@@ -148,7 +150,7 @@ function settledThisTurn(parts: readonly object[]): string {
         isSettledApproval(part) &&
         !settledBefore.has(part.toolCallId),
     )
-    .map((part) => approvalOutcome(part))
+    .map((part) => approvalOutcome(part, decisionTimeOf(part)))
     .filter((outcome) => outcome !== undefined)
   return [...outcomes.filter((o) => o.failed), ...outcomes.filter((o) => !o.failed)]
     .map(approvalOutcomeLine)
@@ -262,8 +264,10 @@ watch(
     if (decidedId === undefined) return
 
     const parts = chat.messages.at(-1)?.parts ?? []
-    const part = (parts as ToolPartLike[]).find((candidate) => candidate.toolCallId === decidedId)
-    const outcome = part ? approvalOutcome(part) : undefined
+    const part = (parts as (ToolPartLike & ApprovalPartLike)[]).find(
+      (candidate) => candidate.toolCallId === decidedId,
+    )
+    const outcome = part ? approvalOutcome(part, decisionTimeOf(part)) : undefined
     const said = outcome ? approvalOutcomeLine(outcome) : ''
     const pending = pendingCallIds()
 

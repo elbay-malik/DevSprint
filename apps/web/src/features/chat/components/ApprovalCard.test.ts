@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useWorkspaceStore } from '@/stores/workspace'
 
 const addToolApprovalResponse = vi.fn()
 
@@ -9,6 +10,7 @@ vi.mock('../composables/useDevSprintChat', () => ({
 }))
 
 const { default: ApprovalCard } = await import('./ApprovalCard.vue')
+const { clearApprovalRecords } = await import('../lib/approval-records')
 
 function requested(input: Record<string, unknown>, toolName = 'update_issue_status') {
   return {
@@ -32,7 +34,29 @@ describe('ApprovalCard', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     addToolApprovalResponse.mockClear()
+    clearApprovalRecords()
+    vi.useRealTimers()
   })
+
+  /**
+   * Answers a pending card the way the transcript sees it: the card records the
+   * decision, then the SDK's next state remounts it (the list keys parts by state).
+   */
+  async function decide(
+    input: Record<string, unknown>,
+    approved: boolean,
+    next: Record<string, unknown>,
+    toolName?: string,
+  ) {
+    const pending = mountCard(requested(input, toolName))
+    await pending.get(`[data-testid="approval-${approved ? 'approve' : 'deny'}"]`).trigger('click')
+    pending.unmount()
+    return mountCard({
+      ...requested(input, toolName),
+      approval: { id: 'approval-1', approved, signature: 'sig' },
+      ...next,
+    })
+  }
 
   it('says what the write would change, in the reader’s terms', () => {
     const wrapper = mountCard(requested({ issueKey: 'DS-7', status: 'done' }))
@@ -42,6 +66,88 @@ describe('ApprovalCard', () => {
     expect(wrapper.get('[data-testid="approval-headline"]').text()).toBe('DS-7: In review → Done')
     expect(wrapper.text()).toContain('Billing export CSV download')
     expect(wrapper.text()).toContain('update_issue_status')
+  })
+
+  it('puts no label above the headline, and the tool in a quiet line below it', () => {
+    // "Approval required:" over a decided card was untrue, and an eyebrow over
+    // a heading is off-system either way.
+    const wrapper = mountCard(requested({ issueKey: 'DS-7', status: 'done' }))
+    expect(wrapper.text()).not.toContain('Approval required')
+
+    const headline = wrapper.get('[data-testid="approval-headline"]').element
+    const tool = wrapper.get('[data-testid="approval-tool"]')
+    expect(tool.text()).toBe('update_issue_status')
+    expect(tool.classes()).toEqual(expect.arrayContaining(['font-mono', 'text-muted-foreground']))
+    expect(headline.compareDocumentPosition(tool.element)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+  })
+
+  it('keeps the from-status after the decision, so the record reads as the change', async () => {
+    const resolved = await decide({ issueKey: 'DS-9', status: 'done' }, true, {
+      state: 'output-available',
+      output: { ok: true, data: {} },
+    })
+    expect(resolved.get('[data-testid="approval-headline"]').text()).toBe(
+      'DS-9: In progress → Done',
+    )
+
+    // The board catching up the write must not change it: it is the record.
+    const board = useWorkspaceStore()
+    board.workspace.issues.find((issue) => issue.key === 'DS-9')!.status = 'done'
+    await resolved.vm.$nextTick()
+    expect(resolved.get('[data-testid="approval-headline"]').text()).toBe(
+      'DS-9: In progress → Done',
+    )
+  })
+
+  it('records when the decision was made, on a 24-hour clock', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 25, 14, 2))
+
+    const applied = await decide({ issueKey: 'DS-7', status: 'done' }, true, {
+      state: 'output-available',
+      output: { ok: true, data: {} },
+    })
+    const outcome = applied.get('[data-testid="approval-outcome"]')
+    expect(outcome.text()).toBe('● Approved by you at 14:02 — applied.')
+    // The glyph is drawn, not read, and only the applied mark takes a hue.
+    const mark = applied.get('[data-testid="approval-outcome-mark"]')
+    expect(mark.attributes('aria-hidden')).toBe('true')
+    expect(mark.classes()).toContain('text-success')
+
+    vi.setSystemTime(new Date(2026, 9, 25, 14, 3))
+    clearApprovalRecords()
+    const denied = await decide({ issueKey: 'DS-11', status: 'done' }, false, {
+      state: 'output-denied',
+    })
+    expect(denied.get('[data-testid="approval-outcome"]').text()).toBe('– Denied by you at 14:03.')
+    expect(denied.get('[data-testid="approval-outcome-mark"]').classes()).not.toContain(
+      'text-success',
+    )
+  })
+
+  it('records a typed failure in one short line, leaving the ErrorCard to explain', async () => {
+    // S-E said the failure three times: the card, the ErrorCard and the reply.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 25, 14, 2))
+
+    const failed = await decide({ issueKey: 'DS-42', status: 'done' }, true, {
+      state: 'output-available',
+      output: {
+        ok: false,
+        error: {
+          code: 'ISSUE_NOT_FOUND',
+          message:
+            "No issue with key 'DS-42'. Search by title to find the issue you meant (search_issues).",
+        },
+      },
+    })
+    const outcome = failed.get('[data-testid="approval-outcome"]')
+    expect(outcome.text()).toBe('✕ Approved by you at 14:02 — not applied (ISSUE_NOT_FOUND).')
+    expect(outcome.classes()).toContain('text-destructive')
+    expect(outcome.text()).not.toContain('search_issues')
+    expect(failed.get('[data-testid="approval-error-code"]').text()).toBe('(ISSUE_NOT_FOUND)')
+    // No board status to keep for an issue the board never held.
+    expect(failed.get('[data-testid="approval-headline"]').text()).toBe('DS-42: Done')
   })
 
   it('keeps the raw arguments one click away', () => {
@@ -184,23 +290,6 @@ describe('ApprovalCard', () => {
     )
   })
 
-  it('leads a failed write with what went wrong, and keeps the code as detail', () => {
-    const wrapper = mountCard({
-      ...requested({ issueKey: 'DS-42', status: 'done' }),
-      state: 'output-available',
-      output: {
-        ok: false,
-        error: { code: 'ISSUE_NOT_FOUND', message: "No issue with key 'DS-42'." },
-      },
-      approval: { id: 'approval-1', approved: true, signature: 'sig' },
-    })
-    const outcome = wrapper.get('[data-testid="approval-outcome"]').text()
-    expect(outcome).toMatch(/^Approved by you, but it failed: No issue with key 'DS-42'\./)
-    expect(wrapper.get('[data-testid="approval-error-code"]').text()).toBe('(ISSUE_NOT_FOUND)')
-    // Separated by a space: the template once ran them together as "….(CODE)".
-    expect(outcome).toContain("'DS-42'. (ISSUE_NOT_FOUND)")
-  })
-
   it('reports a deployment by its own status, not as applied', () => {
     // run_deployment reaches output-available on its first frame and stays
     // there for the whole run, so a plain ok:true would read "applied" while
@@ -223,29 +312,6 @@ describe('ApprovalCard', () => {
     expect(outcome.text()).not.toMatch(/failed/i)
   })
 
-  it('says why a write failed, not just which code it failed with', () => {
-    // Every envelope carries a message written to be read; showing only the
-    // code made the one card that reports a failed write the least
-    // informative thing on screen.
-    const wrapper = mountCard({
-      ...requested({ issueKey: 'DS-42', status: 'done' }),
-      state: 'output-available',
-      output: {
-        ok: false,
-        error: {
-          code: 'ISSUE_NOT_FOUND',
-          message:
-            "No issue with key 'DS-42'. Search by title to find the issue you meant (search_issues).",
-        },
-      },
-      approval: { id: 'approval-1', approved: true, signature: 'sig' },
-    })
-
-    const outcome = wrapper.get('[data-testid="approval-outcome"]').text()
-    expect(outcome).toContain('ISSUE_NOT_FOUND')
-    expect(outcome).toContain('Search by title to find the issue you meant')
-  })
-
   it('surfaces a failed write rather than implying it worked', () => {
     const wrapper = mountCard({
       ...requested({ issueKey: 'DS-42', status: 'done' }),
@@ -262,7 +328,7 @@ describe('ApprovalCard', () => {
       state: 'approval-responded',
       approval: { id: 'approval-1', approved: true, signature: 'sig' },
     })
-    expect(wrapper.get('[data-testid="approval-outcome"]').text()).toBe('Approved by you.')
+    expect(wrapper.get('[data-testid="approval-outcome"]').text()).toBe('◐ Approved by you.')
   })
 
   it('offers its decision as a named group the transcript can move focus to', () => {

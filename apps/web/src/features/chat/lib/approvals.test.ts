@@ -41,26 +41,91 @@ describe('approvalOutcome', () => {
     expect(
       approvalOutcome({ state: 'output-denied', approval: { approved: false, reason: 'Blocked' } })
         ?.text,
-    ).toBe('Denied: “Blocked”.')
+    ).toBe('Denied by you: “Blocked”.')
     expect(approvalOutcome({ state: 'output-denied', approval: { approved: false } })?.text).toBe(
-      'Denied.',
+      'Denied by you.',
     )
   })
 
-  it('reads a failed write as failed, with the code as detail', () => {
-    const outcome = approvalOutcome({
-      state: 'output-available',
-      approval: { approved: true },
-      output: { ok: false, error: { code: 'ISSUE_NOT_FOUND', message: 'No such issue.' } },
-    })
+  it('records a typed failure briefly, since the ErrorCard below it explains', () => {
+    // S-E said the failure three times: here, on the ErrorCard and in the reply.
+    const outcome = approvalOutcome(
+      {
+        state: 'output-available',
+        approval: { approved: true },
+        output: { ok: false, error: { code: 'ISSUE_NOT_FOUND', message: 'No such issue.' } },
+      },
+      '14:02',
+    )
     expect(outcome).toEqual({
       failed: true,
-      text: 'Approved by you, but it failed: No such issue.',
+      mark: '✕',
+      text: 'Approved by you at 14:02 — not applied',
       code: 'ISSUE_NOT_FOUND',
     })
     expect(approvalOutcomeLine(outcome!)).toBe(
-      'Approved by you, but it failed: No such issue. (ISSUE_NOT_FOUND)',
+      'Approved by you at 14:02 — not applied (ISSUE_NOT_FOUND).',
     )
+  })
+
+  it('keeps the reason for a call that threw, since no ErrorCard follows it', () => {
+    const outcome = approvalOutcome({
+      state: 'output-error',
+      approval: { approved: true },
+      errorText: 'Tool execution timed out',
+    })
+    expect(outcome).toEqual({
+      failed: true,
+      mark: '✕',
+      text: 'Approved by you, but it failed: Tool execution timed out',
+    })
+  })
+
+  it('adds the time of the decision when it is known', () => {
+    const applied = {
+      state: 'output-available',
+      approval: { approved: true },
+      output: { ok: true, data: {} },
+    }
+    expect(approvalOutcome(applied, '14:02')?.text).toBe('Approved by you at 14:02 — applied.')
+    expect(
+      approvalOutcome({ state: 'approval-responded', approval: { approved: true } }, '09:15')?.text,
+    ).toBe('Approved by you at 09:15.')
+    expect(
+      approvalOutcome(
+        { state: 'output-denied', approval: { approved: false, reason: 'Blocked' } },
+        '14:03',
+      )?.text,
+    ).toBe('Denied by you at 14:03: “Blocked”.')
+  })
+
+  it('leads with a glyph from the deployment card’s language', () => {
+    const deployment = (status: string) => ({
+      state: 'output-available',
+      approval: { approved: true },
+      output: { ok: true, data: { deployment: { status } } },
+    })
+    expect(
+      approvalOutcome({
+        state: 'output-available',
+        approval: { approved: true },
+        output: { ok: true, data: {} },
+      })?.mark,
+    ).toBe('●')
+    expect(
+      approvalOutcome({ state: 'approval-responded', approval: { approved: true } })?.mark,
+    ).toBe('◐')
+    expect(approvalOutcome({ state: 'output-denied', approval: { approved: false } })?.mark).toBe(
+      '–',
+    )
+    expect(approvalOutcome(deployment('running'))?.mark).toBe('◐')
+    expect(approvalOutcome(deployment('succeeded'))?.mark).toBe('●')
+    expect(approvalOutcome(deployment('cancelled'))).toMatchObject({ mark: '–', failed: false })
+    expect(approvalOutcome(deployment('failed'))).toMatchObject({
+      mark: '✕',
+      failed: true,
+      text: 'Approved by you — deployment failed.',
+    })
   })
 })
 

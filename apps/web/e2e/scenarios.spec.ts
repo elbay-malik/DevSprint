@@ -152,10 +152,16 @@ test.describe('S-B — batch write with per-issue approval gates', () => {
     const denied = cards.nth(4)
     await denied.getByTestId('approval-reason').fill('Still blocked on vendor sandbox')
     await denied.getByTestId('approval-deny').click()
+    // The record says who decided, when, and why.
     await expect(denied.getByTestId('approval-outcome')).toContainText(
-      'Denied: “Still blocked on vendor sandbox”',
+      /Denied by you at \d\d.\d\d: “Still blocked on vendor sandbox”\./,
     )
     await turnSettled(page)
+    // Once decided, each card still reads as the change it allowed, from → to,
+    // although the board has since moved the issue.
+    await expect(cards.first().getByTestId('approval-headline')).toHaveText(
+      'DS-7: In review → Done',
+    )
 
     // "The agent's final text mentions the denial" and "does not claim 5
     // issues were closed". The cards show each move, so the answer is the tally.
@@ -345,6 +351,13 @@ test.describe('S-E — error recovery', () => {
     // "The error is a typed envelope (ISSUE_NOT_FOUND) rendered as an
     // ErrorCard, not a crash or silent failure."
     await expect(page.getByTestId('error-card')).toContainText('ISSUE_NOT_FOUND')
+    // Said once, in the board's words: the card records it briefly, and the
+    // ErrorCard explains without the api's model-facing hint.
+    await expect(page.getByTestId('error-card')).toContainText('No issue DS-42 on the board.')
+    await expect(page.getByTestId('error-card')).not.toContainText('search_issues')
+    await expect(cards.first().getByTestId('approval-outcome')).toContainText(
+      /Approved by you at \d\d.\d\d — not applied \(ISSUE_NOT_FOUND\)\./,
+    )
 
     // Step 4: a search for what was meant, best match first.
     const table = page.getByTestId('issue-table')

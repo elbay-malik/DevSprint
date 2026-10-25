@@ -9,16 +9,24 @@ import { findIssueByKey } from '@/features/workspace/lib/issue-key'
 export interface ApprovalOutcome {
   /** True only for an approved write that did not land; drives the red line. */
   failed: boolean
-  /** The whole sentence, without the error code. */
+  /**
+   * The state glyph that leads the line, in the deployment card's language:
+   * ● applied, ◐ still running, – denied or cancelled, ✕ failed. It is drawn,
+   * not read: the words carry the state.
+   */
+  mark: OutcomeMark
+  /** The sentence, up to the error code when there is one. */
   text: string
   /** The envelope's code ("ISSUE_NOT_FOUND"), kept as detail after the text. */
   code?: string
 }
 
+export type OutcomeMark = '●' | '◐' | '–' | '✕'
+
 /** The fields of a tool part the outcome is read from; loose, to fit any tool. */
 export interface ApprovalPartLike {
   state?: string
-  approval?: { approved?: boolean; reason?: string }
+  approval?: { id?: string; approved?: boolean; reason?: string }
   output?: unknown
   errorText?: string
 }
@@ -26,19 +34,37 @@ export interface ApprovalPartLike {
 /** How an approved write went, once it has run; undefined until then. */
 interface Result {
   failed: boolean
+  mark: OutcomeMark
   /** Reads after "Approved by you —" or "…but it failed:". */
   text: string
   code?: string
+  /**
+   * The call threw rather than returning an envelope. No ErrorCard follows it,
+   * so the line has to carry the reason itself. A typed envelope error gets an
+   * ErrorCard right below the card, and the line only records that it did not land.
+   */
+  thrown?: boolean
+}
+
+const DEPLOYMENT_MARKS: Record<string, OutcomeMark> = {
+  succeeded: '●',
+  failed: '✕',
+  cancelled: '–',
 }
 
 function resultOf(part: ApprovalPartLike): Result | undefined {
   if (part.state === 'output-error') {
-    return { failed: true, text: part.errorText || 'the change did not go through' }
+    return {
+      failed: true,
+      mark: '✕',
+      text: part.errorText || 'the change did not go through',
+      thrown: true,
+    }
   }
   if (part.state !== 'output-available') return undefined
   const output = part.output
   if (typeof output !== 'object' || output === null || !('ok' in output)) {
-    return { failed: false, text: 'done' }
+    return { failed: false, mark: '●', text: 'done' }
   }
   const envelope = output as {
     ok: boolean
@@ -46,12 +72,11 @@ function resultOf(part: ApprovalPartLike): Result | undefined {
     data?: unknown
   }
   if (!envelope.ok) {
-    // Every envelope carries a message written to be read, so it leads; the
-    // code ("ISSUE_NOT_FOUND") follows as detail for whoever is debugging.
-    const { code, message } = envelope.error ?? {}
+    const code = envelope.error?.code
     return {
       failed: true,
-      text: message !== undefined && message.length > 0 ? message : 'the change did not go through',
+      mark: '✕',
+      text: 'not applied',
       ...(code === undefined ? {} : { code }),
     }
   }
@@ -61,9 +86,15 @@ function resultOf(part: ApprovalPartLike): Result | undefined {
   // wrong afterwards for a run that was cancelled. Its own status is the truth.
   // A cancelled run is not a failure: the user asked for it.
   const status = deploymentStatus(envelope.data)
-  if (status !== undefined) return { failed: status === 'failed', text: `deployment ${status}` }
+  if (status !== undefined) {
+    return {
+      failed: status === 'failed',
+      mark: DEPLOYMENT_MARKS[status] ?? '◐',
+      text: `deployment ${status}`,
+    }
+  }
 
-  return { failed: false, text: 'applied' }
+  return { failed: false, mark: '●', text: 'applied' }
 }
 
 /** The deployment inside a run_deployment result, if this is one. */
@@ -77,34 +108,51 @@ function deploymentStatus(data: unknown): string | undefined {
 }
 
 /**
- * The recorded decision, from the moment it is answered: "Approved by you." as
- * soon as Approve is pressed, "Approved by you — applied." once the write has
- * run, or "Denied: “reason”.". A failure has to read as one: reporting only
- * "Approved by you" would present a write that never landed as one that did.
+ * The recorded decision, from the moment it is answered: "Approved by you at
+ * 14:02." as soon as Approve is pressed, "Approved by you at 14:02 — applied."
+ * once the write has run, or "Denied by you at 14:02: “reason”.". `at` is the
+ * time the person decided, when this session saw it; without it the line
+ * simply has no time. A failure has to read as one: reporting only "Approved
+ * by you" would present a write that never landed as one that did. A typed
+ * error is shown in full by the ErrorCard below the card, so the line here
+ * stays short ("— not applied (ISSUE_NOT_FOUND).") rather than saying it twice.
  */
-export function approvalOutcome(part: ApprovalPartLike): ApprovalOutcome | undefined {
+export function approvalOutcome(part: ApprovalPartLike, at?: string): ApprovalOutcome | undefined {
   if (part.state === 'approval-requested') return undefined
   const approved = part.approval?.approved
   if (approved === undefined) return undefined
+  const when = at === undefined ? '' : ` at ${at}`
 
   if (!approved) {
     const reason = part.approval?.reason
-    return { failed: false, text: reason ? `Denied: “${reason}”.` : 'Denied.' }
-  }
-  const result = resultOf(part)
-  if (result?.failed) {
     return {
-      failed: true,
-      text: `Approved by you, but it failed: ${result.text}`,
-      ...(result.code === undefined ? {} : { code: result.code }),
+      failed: false,
+      mark: '–',
+      text: reason ? `Denied by you${when}: “${reason}”.` : `Denied by you${when}.`,
     }
   }
-  return { failed: false, text: result ? `Approved by you — ${result.text}.` : 'Approved by you.' }
+  const result = resultOf(part)
+  if (result === undefined) {
+    return { failed: false, mark: '◐', text: `Approved by you${when}.` }
+  }
+  if (result.thrown) {
+    return {
+      failed: true,
+      mark: '✕',
+      text: `Approved by you${when}, but it failed: ${result.text}`,
+    }
+  }
+  const text = `Approved by you${when} — ${result.text}`
+  return {
+    failed: result.failed,
+    mark: result.mark,
+    ...(result.code === undefined ? { text: `${text}.` } : { text, code: result.code }),
+  }
 }
 
 /** The outcome as one line, code included, for a screen reader to hear. */
 export function approvalOutcomeLine(outcome: ApprovalOutcome): string {
-  return outcome.code === undefined ? outcome.text : `${outcome.text} (${outcome.code})`
+  return outcome.code === undefined ? outcome.text : `${outcome.text} (${outcome.code}).`
 }
 
 /**

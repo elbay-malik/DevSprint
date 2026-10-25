@@ -1,0 +1,73 @@
+import { describe, expect, it } from 'vitest'
+import type { ToolErrorCode } from '@devsprint/shared'
+import { toolErrorCopy } from './error-copy'
+
+describe('toolErrorCopy', () => {
+  it('names the issue the board does not hold, as the board spells keys (S-E)', () => {
+    expect(toolErrorCopy('update_issue_status', 'ISSUE_NOT_FOUND', { issueKey: ' ds-42 ' })).toBe(
+      'No issue DS-42 on the board.',
+    )
+    expect(toolErrorCopy('update_issue_status', 'ISSUE_NOT_FOUND')).toBe(
+      'That issue isn’t on the board.',
+    )
+  })
+
+  it('has words for every code in the shared envelope', () => {
+    // A new code must not fall through to the generic line unnoticed.
+    const codes: ToolErrorCode[] = [
+      'ISSUE_NOT_FOUND',
+      'SPRINT_NOT_FOUND',
+      'USER_NOT_FOUND',
+      'VERSION_EXISTS',
+      'DEPLOY_IN_PROGRESS',
+      'DEPLOY_ALREADY_SETTLED',
+      'STAGE_FAILED',
+      'WORKSPACE_FULL',
+      'INVALID_INPUT',
+    ]
+    const fallback = toolErrorCopy('list_issues', 'SOMETHING_NEW')
+    expect(fallback).toBe('That didn’t go through.')
+    for (const code of codes) {
+      const copy = toolErrorCopy('list_issues', code)
+      expect(copy, code).not.toBe(fallback)
+      // Never a tool name, never snake_case, never the code itself.
+      expect(copy, code).not.toMatch(/_/)
+    }
+  })
+
+  it('reads the call’s own arguments where the code is about one of them', () => {
+    expect(toolErrorCopy('get_burndown', 'SPRINT_NOT_FOUND', { sprintId: 'sprint-99' })).toBe(
+      'No sprint with the id sprint-99.',
+    )
+    expect(toolErrorCopy('get_sprint_status', 'SPRINT_NOT_FOUND', {})).toBe(
+      'There is no active sprint.',
+    )
+    expect(toolErrorCopy('list_issues', 'USER_NOT_FOUND', { assigneeId: 'u-zoe' })).toBe(
+      'No one on the team has the id u-zoe.',
+    )
+    expect(
+      toolErrorCopy('run_deployment', 'DEPLOY_IN_PROGRESS', {
+        version: 'v1.5.0',
+        environment: 'staging',
+      }),
+    ).toBe('A deployment to staging is already running.')
+  })
+
+  it('tells a version already released apart from notes already saved', () => {
+    expect(
+      toolErrorCopy('run_deployment', 'VERSION_EXISTS', {
+        version: 'v1.4.2',
+        environment: 'production',
+      }),
+    ).toBe('v1.4.2 is already live in production.')
+    expect(toolErrorCopy('create_release_notes', 'VERSION_EXISTS', { version: 'v1.4.2' })).toBe(
+      'Release notes for v1.4.2 already exist.',
+    )
+  })
+
+  it('names the recovery when there is one', () => {
+    expect(toolErrorCopy('create_issue', 'WORKSPACE_FULL')).toBe(
+      'The board is full. Reset it to carry on.',
+    )
+  })
+})
