@@ -21,7 +21,15 @@ describe('IssueBoard', () => {
 
     const marked = card(wrapper, 'DS-7')
     expect(marked.attributes()).toHaveProperty('data-pending-move')
-    expect(marked.classes()).toEqual(expect.arrayContaining(['outline-dashed', 'outline-ring']))
+    expect(marked.classes()).toEqual(
+      expect.arrayContaining(['outline-dashed', 'outline-ring', 'outline-1']),
+    )
+    // Inside the card's own edge, in place of its hairline: stacked pending
+    // cards never merge, and none overhangs the column.
+    expect(marked.classes()).toEqual(expect.arrayContaining(['-outline-offset-1', 'ring-0']))
+    expect(marked.classes()).not.toContain('ring-1')
+    expect(marked.classes()).not.toContain('outline-offset-2')
+    expect(marked.classes()).not.toContain('outline-2')
     // The destination is a word, so the mark reads without the ring.
     const caption = marked.get('[data-testid="issue-pending-move"]')
     expect(caption.text()).toContain('→')

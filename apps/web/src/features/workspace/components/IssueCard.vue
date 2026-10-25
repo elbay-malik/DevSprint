@@ -17,14 +17,20 @@ defineProps<{
 
 <template>
   <!-- A pending move is a dashed ring, the drawn convention for "proposed",
-       with the destination in words beneath, so it reads in greyscale. -->
+       with the destination in words beneath, so it reads in greyscale. The
+       dashes replace the card's hairline at the same 1px, drawn inside its own
+       edge, so a pending card keeps its footprint, never touches a neighbour
+       and lines up with the column heading. -->
   <Card
     data-testid="issue-card"
     :data-issue-key="issue.key"
     :data-pending-move="pendingStatus === undefined ? undefined : ''"
     :data-board-change="changed ? '' : undefined"
     class="gap-0 py-3"
-    :class="pendingStatus !== undefined && 'outline-ring outline-2 outline-offset-2 outline-dashed'"
+    :class="
+      pendingStatus !== undefined &&
+      'outline-ring ring-0 outline-1 -outline-offset-1 outline-dashed'
+    "
   >
     <CardContent class="flex flex-col gap-1.5 px-3">
       <div class="flex items-center justify-between gap-2">

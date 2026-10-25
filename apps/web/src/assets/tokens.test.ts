@@ -56,3 +56,32 @@ describe.each([':root', '.dark'] as const)('%s tokens', (theme) => {
     },
   )
 })
+
+describe('the changed board card', () => {
+  // From the rule itself to the end of its layer: the base rule, the keyframes
+  // and the reduced-motion fallback.
+  const start = css.indexOf('[data-board-change] {')
+  const rules = css.slice(start, css.indexOf('\n}\n', start))
+
+  it.each([':root', '.dark'] as const)(
+    'draws its Go Green ring at 3:1 on the card in %s',
+    (theme) => {
+      expect(contrast(theme, 'success', 'card')).toBeGreaterThanOrEqual(3)
+    },
+  )
+
+  it('keeps the ring inside the card, in a signal hue, with no tint', () => {
+    expect(start).toBeGreaterThan(-1)
+    // Inside its own edge, so stacked cards never merge into one band.
+    expect(rules).toContain('outline-offset: -1px')
+    // Not the focus ring's colour, so the board never seems to hold focus.
+    expect(rules).toContain('var(--success)')
+    expect(rules).not.toContain('var(--ring)')
+    // A tint drops the muted key and assignee under 4.5:1.
+    expect(rules).not.toMatch(/background/)
+    // The same mark, held still, under reduced motion.
+    expect(rules).toMatch(
+      /prefers-reduced-motion: reduce\)\s*\{\s*\[data-board-change\]\s*\{\s*animation: none;\s*outline-color: var\(--success\);/,
+    )
+  })
+})
