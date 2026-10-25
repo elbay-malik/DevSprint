@@ -10,6 +10,9 @@ describe('useWorkspaceStore', () => {
   })
 
   afterEach(() => {
+    // Here, not at the end of a test body, so a failed assertion cannot leave
+    // fake timers on for the rest of the file.
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })
@@ -147,7 +150,41 @@ describe('useWorkspaceStore', () => {
     expect(store.recentlyChanged.has('DS-7')).toBe(true)
     vi.advanceTimersByTime(1)
     expect(store.recentlyChanged.size).toBe(0)
-    vi.useRealTimers()
+  })
+
+  it('keeps a mark on screen through a read that moved nothing', async () => {
+    vi.useFakeTimers()
+    const first = createWorkspaceSeed()
+    const second = createWorkspaceSeed()
+    const moved = second.issues.find((issue) => issue.key === 'DS-7')
+    if (!moved) throw new Error('seed lost DS-7')
+    moved.status = 'done'
+    const respond = (body: unknown) => new Response(JSON.stringify(body), { status: 200 })
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(respond(first))
+        .mockResolvedValueOnce(respond(second))
+        .mockResolvedValueOnce(respond(second))
+        .mockResolvedValueOnce(new Response('nope', { status: 503 })),
+    )
+
+    const store = useWorkspaceStore()
+    await store.hydrate()
+    await store.hydrate()
+    expect([...store.recentlyChanged]).toEqual(['DS-7'])
+
+    // A turn ending soon after, or a failed read, must not cut the mark short.
+    vi.advanceTimersByTime(500)
+    await store.hydrate()
+    expect(store.recentlyChanged.has('DS-7')).toBe(true)
+    await store.hydrate()
+    expect(store.recentlyChanged.has('DS-7')).toBe(true)
+
+    // It still goes when its own timer says so, not later.
+    vi.advanceTimersByTime(CHANGE_HIGHLIGHT_MS - 500)
+    expect(store.recentlyChanged.size).toBe(0)
   })
 })
 

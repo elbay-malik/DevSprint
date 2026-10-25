@@ -1,5 +1,6 @@
+import { createPinia, setActivePinia } from 'pinia'
 import { reactive } from 'vue'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const chat = reactive({ messages: [] as { id: string; role: string; parts: object[] }[] })
 
@@ -16,6 +17,11 @@ const statusChange = (issueKey: string, state: string) => ({
 })
 
 describe('usePendingMoves', () => {
+  // The moves are keyed against the board, so the store has to exist.
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
   it('follows the last message’s open status changes as they are decided', () => {
     const parts = [statusChange('DS-7', 'approval-requested')]
     chat.messages = [
@@ -28,5 +34,12 @@ describe('usePendingMoves', () => {
 
     chat.messages[1]!.parts[0] = statusChange('DS-7', 'approval-responded')
     expect(moves.value.size).toBe(0)
+  })
+
+  it('names the board’s card for a key the model wrote in lowercase', () => {
+    chat.messages = [
+      { id: 'm1', role: 'assistant', parts: [statusChange('ds-7', 'approval-requested')] },
+    ]
+    expect([...usePendingMoves().value.keys()]).toEqual(['DS-7'])
   })
 })

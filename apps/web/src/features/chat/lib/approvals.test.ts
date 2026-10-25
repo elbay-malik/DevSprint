@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
+import { createWorkspaceSeed } from '@devsprint/shared'
 import {
   approvalOutcome,
   approvalOutcomeLine,
+  approvalStateSignature,
   changesNeedApproval,
   changesToReview,
+  isSettledApproval,
+  parseApprovalStates,
   pendingApprovalCount,
   pendingStatusMoves,
 } from './approvals'
+
+const { issues } = createWorkspaceSeed()
 
 describe('approvalOutcome', () => {
   it('has nothing to say while the card is still asking', () => {
@@ -89,11 +95,14 @@ describe('pendingStatusMoves', () => {
   })
 
   it('maps each open status change to the issue it would move and where', () => {
-    const moves = pendingStatusMoves([
-      { type: 'text', text: 'Closing out.' },
-      statusChange('DS-7', 'done'),
-      statusChange('DS-11', 'done'),
-    ])
+    const moves = pendingStatusMoves(
+      [
+        { type: 'text', text: 'Closing out.' },
+        statusChange('DS-7', 'done'),
+        statusChange('DS-11', 'done'),
+      ],
+      issues,
+    )
     expect([...moves]).toEqual([
       ['DS-7', 'done'],
       ['DS-11', 'done'],
@@ -101,34 +110,101 @@ describe('pendingStatusMoves', () => {
   })
 
   it('drops a change once it is answered, and ignores writes with no card on the board', () => {
-    const moves = pendingStatusMoves([
-      statusChange('DS-7', 'done', 'approval-responded'),
-      {
-        type: 'tool-create_issue',
-        toolCallId: 'c2',
-        state: 'approval-requested',
-        input: { title: 'New one', type: 'feature' },
-        approval: { id: 'a2' },
-      },
-    ])
+    const moves = pendingStatusMoves(
+      [
+        statusChange('DS-7', 'done', 'approval-responded'),
+        {
+          type: 'tool-create_issue',
+          toolCallId: 'c2',
+          state: 'approval-requested',
+          input: { title: 'New one', type: 'feature' },
+          approval: { id: 'a2' },
+        },
+        statusChange('DS-42', 'done'),
+      ],
+      issues,
+    )
     expect(moves.size).toBe(0)
   })
 
-  it('reads a dynamic tool part by its tool name', () => {
-    const moves = pendingStatusMoves([
-      {
-        type: 'dynamic-tool',
-        toolName: 'update_issue_status',
-        toolCallId: 'c1',
-        state: 'approval-requested',
-        input: { issueKey: 'DS-9', status: 'in_review' },
-      },
+  it('keys a lowercase or padded key by the board’s own spelling, as the api finds it', () => {
+    const moves = pendingStatusMoves(
+      [statusChange('ds-7', 'done'), statusChange('  DS-11 ', 'blocked')],
+      issues,
+    )
+    expect([...moves]).toEqual([
+      ['DS-7', 'done'],
+      ['DS-11', 'blocked'],
     ])
+  })
+
+  it('reads a dynamic tool part by its tool name', () => {
+    const moves = pendingStatusMoves(
+      [
+        {
+          type: 'dynamic-tool',
+          toolName: 'update_issue_status',
+          toolCallId: 'c1',
+          state: 'approval-requested',
+          input: { issueKey: 'DS-9', status: 'in_review' },
+        },
+      ],
+      issues,
+    )
     expect(moves.get('DS-9')).toBe('in_review')
   })
 
   it('has nothing pending for a message with no parts', () => {
-    expect(pendingStatusMoves(undefined).size).toBe(0)
+    expect(pendingStatusMoves(undefined, issues).size).toBe(0)
+  })
+})
+
+describe('approvalStateSignature', () => {
+  const gated = (id: string, state: string) => ({
+    type: 'tool-update_issue_status',
+    toolCallId: id,
+    state,
+    approval: { id: `a-${id}` },
+  })
+
+  it('is the same primitive for the same states, so a streamed chunk does not trigger a watcher', () => {
+    const before = approvalStateSignature([gated('c1', 'approval-requested')])
+    const after = approvalStateSignature([
+      gated('c1', 'approval-requested'),
+      { type: 'text', text: 'One more token' },
+      { type: 'tool-get_sprint_status', toolCallId: 'r1', state: 'input-available' },
+    ])
+    expect(typeof before).toBe('string')
+    expect(Object.is(before, after)).toBe(true)
+  })
+
+  it('changes when a state does, and reads back in transcript order', () => {
+    const asked = approvalStateSignature([
+      gated('c1', 'approval-requested'),
+      gated('c2', 'approval-requested'),
+    ])
+    const answered = approvalStateSignature([
+      gated('c1', 'approval-requested'),
+      gated('c2', 'approval-responded'),
+    ])
+    expect(answered).not.toBe(asked)
+    expect([...parseApprovalStates(answered)]).toEqual([
+      ['c1', 'approval-requested'],
+      ['c2', 'approval-responded'],
+    ])
+    expect(parseApprovalStates(approvalStateSignature(undefined)).size).toBe(0)
+  })
+})
+
+describe('isSettledApproval', () => {
+  it('is true only for a gated call that has run, either way', () => {
+    const approval = { id: 'a1', approved: true }
+    expect(isSettledApproval({ state: 'output-available', approval })).toBe(true)
+    expect(isSettledApproval({ state: 'output-error', approval })).toBe(true)
+    expect(isSettledApproval({ state: 'approval-responded', approval })).toBe(false)
+    expect(isSettledApproval({ state: 'output-denied', approval })).toBe(false)
+    // An ungated read has no approval to report.
+    expect(isSettledApproval({ state: 'output-available' })).toBe(false)
   })
 })
 

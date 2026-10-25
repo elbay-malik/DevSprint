@@ -1,3 +1,5 @@
+import { findIssueByKey } from '@/features/workspace/lib/issue-key'
+
 /**
  * What an approval card says once it is decided, as plain data, so the card's
  * outcome line and the transcript's status announcement are the same words. A
@@ -131,9 +133,15 @@ interface StatusMovePartLike {
  * The status changes still waiting on a card, as issue key → requested status,
  * so the board can mark the issues they would move. Only `update_issue_status`
  * targets a card already on the board; a new issue has nowhere to be marked.
- * A later card for the same issue wins, as it would if both were approved.
+ * The model may write "ds-7" or " DS-7"; the api accepts both, so the key is
+ * matched the same way and stored as the board spells it. A key the board does
+ * not hold has no card to mark and is left out. A later card for the same issue
+ * wins, as it would if both were approved.
  */
-export function pendingStatusMoves(parts: readonly object[] | undefined): Map<string, unknown> {
+export function pendingStatusMoves(
+  parts: readonly object[] | undefined,
+  issues: readonly { key: string }[],
+): Map<string, unknown> {
   const moves = new Map<string, unknown>()
   for (const part of (parts ?? []) as StatusMovePartLike[]) {
     if (part.state !== 'approval-requested') continue
@@ -141,9 +149,9 @@ export function pendingStatusMoves(parts: readonly object[] | undefined): Map<st
       part.type === 'tool-update_issue_status' ||
       (part.type === 'dynamic-tool' && part.toolName === 'update_issue_status')
     const input = part.input as { issueKey?: unknown; status?: unknown } | undefined
-    if (isStatusChange && typeof input?.issueKey === 'string') {
-      moves.set(input.issueKey, input.status)
-    }
+    if (!isStatusChange || typeof input?.issueKey !== 'string') continue
+    const issue = findIssueByKey(issues, input.issueKey)
+    if (issue !== undefined) moves.set(issue.key, input.status)
   }
   return moves
 }
@@ -153,4 +161,39 @@ export function changesToReview(count: number, points: number): string {
   const changes = count === 1 ? '1 change to review' : `${count} changes to review`
   if (points <= 0) return changes
   return `${changes} · ${points} ${points === 1 ? 'pt' : 'pts'}`
+}
+
+/** The fields of a gated part its settled state is read from. */
+interface GatedPartLike {
+  toolCallId?: string
+  state?: string
+  approval?: unknown
+}
+
+/**
+ * Each gated call on a message and its state, as one string ("[[id,state],…]").
+ * A watcher on it fires only when a state changes: a Map built afresh on every
+ * streamed chunk is a new value each time, so the watcher ran for every token.
+ */
+export function approvalStateSignature(parts: readonly object[] | undefined): string {
+  const pairs: [string, string][] = []
+  for (const part of (parts ?? []) as GatedPartLike[]) {
+    if (part.approval !== undefined && part.toolCallId !== undefined && part.state) {
+      pairs.push([part.toolCallId, part.state])
+    }
+  }
+  return JSON.stringify(pairs)
+}
+
+/** The signature back as call id → state, in transcript order. */
+export function parseApprovalStates(signature: string): Map<string, string> {
+  return new Map(JSON.parse(signature) as [string, string][])
+}
+
+/** An approved write that has run, either way; its outcome line is now final. */
+export function isSettledApproval(part: { state?: string; approval?: unknown }): boolean {
+  return (
+    part.approval !== undefined &&
+    (part.state === 'output-available' || part.state === 'output-error')
+  )
 }

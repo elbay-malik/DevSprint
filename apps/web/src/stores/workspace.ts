@@ -40,9 +40,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   let clearChanged: ReturnType<typeof setTimeout> | undefined
 
   function markChanged(keys: ReadonlySet<string>): void {
+    // A read that moved nothing is no news, and must not cut short a mark
+    // still on screen from the read before; its own timer lets it go.
+    if (keys.size === 0) return
     clearTimeout(clearChanged)
     recentlyChanged.value = keys
-    if (keys.size === 0) return
     clearChanged = setTimeout(() => {
       recentlyChanged.value = new Set()
     }, CHANGE_HIGHLIGHT_MS)
@@ -67,7 +69,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       // board showing the Worker's data under a "seed data" badge.
       workspace.value = createWorkspaceSeed()
       source.value = 'seed'
-      markChanged(new Set())
       if (!warned) {
         warned = true
         console.warn('[workspace] api unreachable, showing seed data:', error)

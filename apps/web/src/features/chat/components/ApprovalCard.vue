@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useDevSprintChat } from '../composables/useDevSprintChat'
+import { findIssueByKey } from '@/features/workspace/lib/issue-key'
 import { statusLabel } from '@/features/workspace/lib/status-labels'
 import { approvalOutcome } from '../lib/approvals'
 
@@ -50,11 +51,14 @@ const outcome = computed(() => approvalOutcome(props.part))
 
 const toolInput = computed(() => props.part.input as Record<string, unknown> | undefined)
 
-/** The board's copy of the issue a status change targets, if it has one. */
+/**
+ * The board's copy of the issue a status change targets, if it has one, found
+ * the way the api finds it, so "ds-7" is DS-7 here too.
+ */
 const targetIssue = computed(() => {
   const key = toolInput.value?.issueKey
   if (toolName.value !== 'update_issue_status' || typeof key !== 'string') return undefined
-  return workspace.workspace.issues.find((candidate) => candidate.key === key)
+  return findIssueByKey(workspace.workspace.issues, key)
 })
 
 /**
@@ -96,8 +100,9 @@ const summary = computed((): { headline: string; detail?: string } => {
     // still pending. Once the board catches up an executed write, keeping it
     // would rewrite this record into a nonsense "done → done".
     const from = issue && !decided.value ? `${statusLabel(issue.status)} → ` : ''
+    // Named as the board spells it, so the card and the board agree on "DS-7".
     return {
-      headline: `${input.issueKey}: ${from}${statusLabel(input.status)}`,
+      headline: `${issue?.key ?? input.issueKey}: ${from}${statusLabel(input.status)}`,
       ...(issue ? { detail: issue.title } : {}),
     }
   }

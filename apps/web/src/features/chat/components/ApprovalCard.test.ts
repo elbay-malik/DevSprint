@@ -308,6 +308,19 @@ describe('ApprovalCard', () => {
     expect(isInk(wrapper, 'approval-approve')).toBe(false)
   })
 
+  it('finds the issue for a lowercase or padded key, as the api does', () => {
+    // The api trims and case-folds the key, so this change would land; warning
+    // here would push the person to deny a valid write.
+    for (const issueKey of ['ds-7', '  DS-7 ']) {
+      const wrapper = mountCard(requested({ issueKey, status: 'done' }))
+      expect(wrapper.find('[data-testid="approval-warning"]').exists()).toBe(false)
+      expect(wrapper.get('[data-testid="approval-headline"]').text()).toBe('DS-7: In review → Done')
+      expect(wrapper.text()).toContain('Billing export CSV download')
+      expect(isInk(wrapper, 'approval-approve')).toBe(true)
+      expect(isInk(wrapper, 'approval-deny')).toBe(false)
+    }
+  })
+
   it('still lets a change to a missing issue be approved, so its typed error comes back', async () => {
     const wrapper = mountCard(requested({ issueKey: 'DS-42', status: 'done' }))
 

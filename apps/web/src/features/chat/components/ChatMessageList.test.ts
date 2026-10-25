@@ -1,7 +1,8 @@
-import { mount } from '@vue/test-utils'
+import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { defineComponent, h, nextTick, reactive } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createWorkspaceSeed } from '@devsprint/shared'
 import type { DevSprintUIMessage } from '../types'
 
 const DEPLOYMENT = {
@@ -24,6 +25,10 @@ vi.mock('../composables/useDevSprintChat', () => ({
 }))
 
 const { default: ChatMessageList } = await import('./ChatMessageList.vue')
+
+// Every mounted list watches the shared `chat`; one left mounted would keep
+// reacting to later tests' changes and moving focus in trees no longer shown.
+enableAutoUnmount(afterEach)
 
 /** An assistant turn holding one tool call that never produced a result. */
 function abandonedTurn(id: string): DevSprintUIMessage {
@@ -389,6 +394,48 @@ describe('ChatMessageList status and focus', () => {
     expect(status(wrapper)).toBe('Approved by you. The copilot is working on your request…')
   })
 
+  it('says how each approved write went before the reply, failures first', async () => {
+    // Both were approved last step; the writes run on the request that follows.
+    const parts: unknown[] = [
+      gated('c1', 'DS-7', 'approval-responded', true),
+      gated('c2', 'DS-42', 'approval-responded', true),
+    ]
+    chat.messages = [...chat.messages, turnWith(parts)]
+    const wrapper = mount(ChatMessageList)
+
+    chat.status = 'submitted'
+    await nextTick()
+    parts[0] = {
+      ...gated('c1', 'DS-7', 'output-available', true),
+      output: { ok: true, data: {} },
+    }
+    parts[1] = {
+      ...gated('c2', 'DS-42', 'output-available', true),
+      output: {
+        ok: false,
+        error: { code: 'ISSUE_NOT_FOUND', message: 'No issue with key DS-42.' },
+      },
+    }
+    parts.push({ type: 'text', text: 'DS-7 is done; DS-42 does not exist.' })
+    chat.status = 'streaming'
+    await nextTick()
+    chat.status = 'ready'
+    await nextTick()
+
+    // One update, so a screen reader hears the failure the card shows.
+    expect(status(wrapper)).toBe(
+      'Approved by you, but it failed: No issue with key DS-42. (ISSUE_NOT_FOUND) ' +
+        'Approved by you — applied. Copilot replied.',
+    )
+
+    // A later turn does not repeat what an earlier one already said.
+    chat.status = 'submitted'
+    await nextTick()
+    chat.status = 'ready'
+    await nextTick()
+    expect(status(wrapper)).toBe('Copilot replied.')
+  })
+
   it('leaves focus alone when the user is working outside the chat', async () => {
     const board = document.createElement('button')
     document.body.append(board)
@@ -456,6 +503,18 @@ describe('ChatMessageList approval groups', () => {
       '2 changes to review · 5 pts',
     )
     expect(ink(wrapper)).toEqual([true, false])
+  })
+
+  it('counts a lowercase or padded key’s points, as the api would find the issue', () => {
+    const points = (key: string) =>
+      createWorkspaceSeed().issues.find((issue) => issue.key === key)?.points ?? 0
+    chat.messages = [turnWith([gated('c1', 'ds-7'), gated('c2', '  DS-8 ')])]
+    const wrapper = mount(ChatMessageList)
+
+    expect(wrapper.get('[data-testid="approval-group-header"]').text()).toBe(
+      `2 changes to review · ${points('DS-7') + points('DS-8')} pts`,
+    )
+    expect(wrapper.find('[data-testid="approval-warning"]').exists()).toBe(false)
   })
 
   it('needs no header for a single card, which keeps its Ink Approve', () => {

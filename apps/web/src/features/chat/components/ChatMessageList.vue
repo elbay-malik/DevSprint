@@ -6,11 +6,16 @@ import { useDevSprintChat } from '../composables/useDevSprintChat'
 import {
   approvalOutcome,
   approvalOutcomeLine,
+  approvalStateSignature,
   changesNeedApproval,
   changesToReview,
+  isSettledApproval,
+  parseApprovalStates,
   pendingApprovalCount,
   pendingStatusMoves,
+  type ApprovalPartLike,
 } from '../lib/approvals'
+import { findIssueByKey } from '@/features/workspace/lib/issue-key'
 import ApprovalCard from './ApprovalCard.vue'
 import ChatText from './ChatText.vue'
 import ToolResultCard from './ToolResultCard.vue'
@@ -65,9 +70,9 @@ function approvalGroupOf(parts: readonly object[]): ApprovalGroup {
   const group: ApprovalGroup = { leadId: open[0]?.part.toolCallId }
   if (gated.length < 2 || open.length === 0) return group
 
-  const points = [...pendingStatusMoves(parts).keys()].reduce(
-    (sum, key) =>
-      sum + (workspace.workspace.issues.find((issue) => issue.key === key)?.points ?? 0),
+  const issues = workspace.workspace.issues
+  const points = [...pendingStatusMoves(parts, issues).keys()].reduce(
+    (sum, key) => sum + (findIssueByKey(issues, key)?.points ?? 0),
     0,
   )
   return { ...group, headerAt: gated[0]?.index, header: changesToReview(open.length, points) }
@@ -115,6 +120,40 @@ const WORKING = 'The copilot is working on your request…'
 let decisionToCarry = ''
 
 /**
+ * Gated calls that had already run when this turn started. An approved write
+ * runs on the request its approval triggers, so the card's final line ("…but it
+ * failed: …") arrives mid-turn, after "Approved by you." was said. Whatever
+ * settles during the turn is said when it ends, or a failure would be silent.
+ */
+let settledBefore = settledCallIds()
+
+function settledCallIds(): Set<string> {
+  const ids = new Set<string>()
+  for (const message of chat.messages) {
+    for (const part of message.parts as (ToolPartLike & { approval?: unknown })[]) {
+      if (part.toolCallId !== undefined && isSettledApproval(part)) ids.add(part.toolCallId)
+    }
+  }
+  return ids
+}
+
+/** Outcome lines of the writes that ran this turn, failures first. */
+function settledThisTurn(parts: readonly object[]): string {
+  const outcomes = (parts as (ToolPartLike & ApprovalPartLike)[])
+    .filter(
+      (part) =>
+        part.toolCallId !== undefined &&
+        isSettledApproval(part) &&
+        !settledBefore.has(part.toolCallId),
+    )
+    .map((part) => approvalOutcome(part))
+    .filter((outcome) => outcome !== undefined)
+  return [...outcomes.filter((o) => o.failed), ...outcomes.filter((o) => !o.failed)]
+    .map(approvalOutcomeLine)
+    .join(' ')
+}
+
+/**
  * Focus follows the decisions (WCAG 2.4.3), but only for someone already in the
  * chat. Focus on <body> means it was just dropped — a removed Approve button —
  * and a user working on the board is left where they are.
@@ -155,6 +194,7 @@ watch(
     if (status === 'submitted') {
       announcement.value = decisionToCarry ? `${decisionToCarry} ${WORKING}` : WORKING
       decisionToCarry = ''
+      settledBefore = settledCallIds()
       return
     }
     // The composer's toast reports a failed turn; "replied" would be untrue.
@@ -170,33 +210,30 @@ watch(
       announcement.value = ''
       return
     }
+    // One update for the whole turn: what ran, then what the turn ended on.
+    const ran = settledThisTurn(last.parts)
+    const said = (line: string) => (ran ? `${ran} ${line}` : line)
     const pending = pendingApprovalCount(last.parts)
     if (pending === 0) {
-      announcement.value = 'Copilot replied.'
+      announcement.value = said('Copilot replied.')
       return
     }
-    announcement.value = changesNeedApproval(pending)
+    announcement.value = said(changesNeedApproval(pending))
     if (mayMoveFocus()) focusTarget(pendingCallIds()[0])?.focus()
   },
   { flush: 'post' },
 )
 
-/** Each gated call on the last message and its state, to spot a decision. */
-function approvalStates(): Map<string, string> {
-  const states = new Map<string, string>()
-  for (const part of (chat.messages.at(-1)?.parts ?? []) as (ToolPartLike & {
-    approval?: unknown
-  })[]) {
-    if (part.approval !== undefined && part.toolCallId !== undefined && part.state) {
-      states.set(part.toolCallId, part.state)
-    }
-  }
-  return states
-}
-
+/**
+ * Each gated call on the last message and its state, to spot a decision. The
+ * getter returns a string, so streamed chunks that change no state do not run
+ * the callback.
+ */
 watch(
-  approvalStates,
-  (states, previous) => {
+  () => approvalStateSignature(chat.messages.at(-1)?.parts),
+  (signature, previousSignature) => {
+    const states = parseApprovalStates(signature)
+    const previous = parseApprovalStates(previousSignature)
     const decidedId = [...states.keys()].find(
       (id) => previous.get(id) === 'approval-requested' && states.get(id) !== 'approval-requested',
     )
