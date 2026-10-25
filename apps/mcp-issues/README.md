@@ -1,7 +1,7 @@
 # @devsprint/mcp-issues
 
 The public issues MCP server. An external host — Claude Desktop, Cursor — adds this as a remote
-Streamable HTTP server and gets the four issue tools; the same workspace is what the DevSprint SPA
+Streamable HTTP server and gets the five issue tools; the same workspace is what the DevSprint SPA
 shows, so a write made in the host appears on the board (scenario S-F).
 
 ## Endpoints
@@ -13,11 +13,11 @@ shows, so a write made in the host appears on the board (scenario S-F).
 
 ## Tools
 
-`list_issues`, `search_issues`, `create_issue`, `update_issue_status` — the four the tool inventory
-assigns to the issues server. Descriptions and input schemas come from `@devsprint/shared/tools`,
+`list_issues`, `search_issues`, `create_issue`, `update_issue_status`, `assign_issue` — the five
+the tool inventory assigns to the issues server. Descriptions and input schemas come from `@devsprint/shared/tools`,
 the same objects the in-app agent uses, so the two clients cannot drift apart.
 
-Two of those are writes, and they carry no approval flag here. Over MCP the host runs its own
+Three of those are writes, and they carry no approval flag here. Over MCP the host runs its own
 tool-permission prompt, which replaces our ApprovalCard
 ([tool-inventory.md](../../docs/tool-inventory.md) §3.6). What does not change is validation: every
 call is checked against the schema before it reaches the workspace, whatever the host allowed.
@@ -61,7 +61,7 @@ curl -s -H 'Content-Type: application/json' \
 The public endpoint is `https://devsprint-mcp-issues.eleo-666.workers.dev/mcp` (Streamable HTTP,
 stateless). Add it to any MCP host as a remote server. This is scenario S-F's first precondition.
 It deploys with the rest of the topology (`pnpm deploy:all`, see `apps/api/README.md`). The
-deploy's smoke checks confirm it lists exactly the four issue tools and reads the same board as
+deploy's smoke checks confirm it lists exactly the five issue tools and reads the same board as
 the api. It has no preview URLs, because a preview would write to the production board. The public `/mcp`
 endpoint allows 30 requests a minute per client IP. Past that it answers HTTP 429 with a JSON-RPC
 error. The in-app agent uses the `Internal` entrypoint and is not counted (ADR-0020).
