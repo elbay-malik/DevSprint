@@ -1,4 +1,4 @@
-import { enableAutoUnmount, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { defineComponent, h, nextTick, reactive } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -18,10 +18,21 @@ const DEPLOYMENT = {
   stages: [{ name: 'build', status: 'running', startedAt: null, finishedAt: null, logTail: [] }],
 }
 
-const chat = reactive({ messages: [] as DevSprintUIMessage[], status: 'ready' })
+const sendMessage = vi.fn()
+const chat = reactive({ messages: [] as DevSprintUIMessage[], status: 'ready', sendMessage })
 
 vi.mock('../composables/useDevSprintChat', () => ({
   useDevSprintChat: () => chat,
+}))
+
+const { toastError, MCP_URL } = vi.hoisted(() => ({
+  toastError: vi.fn(),
+  MCP_URL: 'https://devsprint-mcp-issues.example.dev/mcp',
+}))
+vi.mock('vue-sonner', () => ({ toast: { error: toastError } }))
+vi.mock('@/lib/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api')>()),
+  MCP_ENDPOINT: MCP_URL,
 }))
 
 const { default: ChatMessageList } = await import('./ChatMessageList.vue')
@@ -585,5 +596,112 @@ describe('ChatMessageList approval groups', () => {
     ]
     const wrapper = mount(ChatMessageList)
     expect(wrapper.find('[data-testid="approval-group-header"]').exists()).toBe(false)
+  })
+
+  describe('the empty transcript', () => {
+    beforeEach(() => {
+      chat.messages = []
+      chat.status = 'ready'
+      sendMessage.mockClear()
+    })
+
+    it('offers the chat scenarios as a labelled group of buttons', () => {
+      const wrapper = mount(ChatMessageList)
+      const group = wrapper.get('[data-testid="chat-suggestions"]')
+
+      expect(group.attributes('role')).toBe('group')
+      expect(group.attributes('aria-label')).toBe('Suggested requests')
+      const chips = group.findAll('button')
+      expect(chips.map((chip) => chip.text())).toEqual([
+        'Is the sprint on track?',
+        'Draft release notes',
+        'Close out the sprint',
+        'Deploy to staging',
+        'Fix a typo’d issue key',
+      ])
+      // Within the four-to-six a first look can take in.
+      expect(chips.length).toBeLessThanOrEqual(6)
+      // What will be sent is one hover away.
+      expect(chips[0]?.attributes('title')).toBe('Is Sprint 12 on track? Show me the burndown.')
+    })
+
+    it('sends a suggestion’s prompt verbatim and hands focus to the composer', async () => {
+      const composer = document.createElement('input')
+      composer.setAttribute('data-chat-composer', '')
+      const pane = document.createElement('section')
+      pane.setAttribute('data-testid', 'chat-pane')
+      const host = document.createElement('div')
+      pane.append(host, composer)
+      document.body.append(pane)
+      const wrapper = mount(ChatMessageList, { attachTo: host })
+
+      await wrapper.get('[data-scenario="S-B"]').trigger('click')
+
+      expect(sendMessage).toHaveBeenCalledWith({
+        text: "We're closing Sprint 12 today — mark every remaining open issue in the sprint as done.",
+      })
+      expect(document.activeElement).toBe(composer)
+      wrapper.unmount()
+      pane.remove()
+    })
+
+    it('goes once the conversation starts', async () => {
+      const wrapper = mount(ChatMessageList)
+      chat.messages = [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }]
+      await nextTick()
+
+      expect(wrapper.find('[data-testid="chat-empty"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="chat-suggestions"]').exists()).toBe(false)
+    })
+
+    it('says the board is shared and when it resets', () => {
+      const wrapper = mount(ChatMessageList)
+      expect(wrapper.get('[data-testid="chat-empty"]').text()).toContain(
+        'Every visitor shares this board. It resets at 00:00 UTC.',
+      )
+    })
+
+    it('names the MCP endpoint and copies it, saying so', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined)
+      vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+      const wrapper = mount(ChatMessageList)
+      const line = wrapper.get('[data-testid="mcp-endpoint"]')
+      expect(line.get('code').text()).toBe(MCP_URL)
+
+      const copy = wrapper.get('[data-testid="mcp-endpoint-copy"]')
+      expect(copy.attributes('aria-label')).toBe('Copy MCP address')
+      await copy.trigger('click')
+      await flushPromises()
+
+      expect(writeText).toHaveBeenCalledWith(MCP_URL)
+      expect(copy.text()).toBe('Copied')
+      expect(wrapper.get('[data-testid="chat-status"]').text()).toBe('MCP address copied.')
+      vi.unstubAllGlobals()
+    })
+
+    it('says so when the clipboard refuses', async () => {
+      const writeText = vi.fn().mockRejectedValue(new Error('denied'))
+      vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+      const wrapper = mount(ChatMessageList)
+      const copy = wrapper.get('[data-testid="mcp-endpoint-copy"]')
+      await copy.trigger('click')
+      await flushPromises()
+
+      expect(copy.text()).toBe('Copy')
+      expect(toastError).toHaveBeenCalledWith("Couldn't copy the address", {
+        description: 'Select it and copy it by hand.',
+      })
+      vi.unstubAllGlobals()
+    })
+  })
+
+  it('gives the user’s bubble its own fill token, not the inverted primary', () => {
+    chat.messages = [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }]
+    chat.status = 'ready'
+    const wrapper = mount(ChatMessageList)
+    const bubble = wrapper.get('[data-role="user"]')
+
+    expect(bubble.classes()).toContain('bg-bubble-user')
+    expect(bubble.classes()).not.toContain('bg-primary')
   })
 })

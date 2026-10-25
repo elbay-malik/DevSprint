@@ -96,6 +96,13 @@ export async function smoke(options: { proveSharedBoard: boolean } = { proveShar
     sources.some((source) => source.includes(URLS.api)),
     `searched ${entry || 'no entry'} and ${chunks.length} chunk(s)`,
   )
+  // The empty transcript names the MCP endpoint for outside clients, and hides
+  // the line in a build without VITE_MCP_URL.
+  check(
+    'SPA bundle names the public MCP endpoint',
+    sources.some((source) => source.includes(`${URLS.mcp}/mcp`)),
+    `searched ${entry || 'no entry'} and ${chunks.length} chunk(s)`,
+  )
   const robots = await fetch(`${URLS.web}/robots.txt`)
   check(
     'robots.txt is a file, not the SPA fallback',

@@ -85,3 +85,24 @@ describe('the changed board card', () => {
     )
   })
 })
+
+describe('the user’s chat bubble', () => {
+  it.each([':root', '.dark'] as const)('keeps its text at 4.5:1 in %s', (theme) => {
+    expect(contrast(theme, 'bubble-user-foreground', 'bubble-user')).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('is not the brightest block on a dark screen', () => {
+    // The inverted primary (Rule) made it so; it now sits darker than the
+    // dark-mode secondary text, well below the primary button's fill.
+    expect(contrast('.dark', 'bubble-user', 'background')).toBeLessThan(
+      contrast('.dark', 'muted-foreground', 'background'),
+    )
+  })
+
+  it.each([':root', '.dark'] as const)(
+    'stays a distinct step from the assistant’s bubble in %s',
+    (theme) => {
+      expect(contrast(theme, 'bubble-user', 'muted')).toBeGreaterThanOrEqual(1.3)
+    },
+  )
+})

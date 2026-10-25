@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { isToolUIPart } from 'ai'
+import { toast } from 'vue-sonner'
+import { Button } from '@/components/ui/button'
+import { MCP_ENDPOINT } from '@/lib/api'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useDevSprintChat } from '../composables/useDevSprintChat'
 import {
@@ -16,6 +19,7 @@ import {
   type ApprovalPartLike,
 } from '../lib/approvals'
 import { decisionTimeOf } from '../lib/approval-records'
+import { SUGGESTIONS } from '../lib/suggestions'
 import { findIssueByKey } from '@/features/workspace/lib/issue-key'
 import ApprovalCard from './ApprovalCard.vue'
 import ChatText from './ChatText.vue'
@@ -203,6 +207,36 @@ function focusComposer(): void {
   pane?.querySelector<HTMLElement>('[data-chat-composer]')?.focus()
 }
 
+/**
+ * A suggestion sends its scenario's prompt as written. Focus goes to the
+ * composer first, because the chip is about to unmount and would otherwise drop
+ * it to <body>.
+ */
+function suggest(prompt: string): void {
+  if (busy.value) return
+  focusComposer()
+  void chat.sendMessage({ text: prompt })
+}
+
+/** "Copied" for a moment after the MCP address reaches the clipboard. */
+const copied = ref(false)
+let copiedTimer: ReturnType<typeof setTimeout> | undefined
+onBeforeUnmount(() => clearTimeout(copiedTimer))
+
+async function copyMcpEndpoint(): Promise<void> {
+  try {
+    // Absent outside a secure context, so the call itself can throw.
+    await navigator.clipboard.writeText(MCP_ENDPOINT)
+  } catch {
+    toast.error("Couldn't copy the address", { description: 'Select it and copy it by hand.' })
+    return
+  }
+  copied.value = true
+  announcement.value = 'MCP address copied.'
+  clearTimeout(copiedTimer)
+  copiedTimer = setTimeout(() => (copied.value = false), 2000)
+}
+
 type ToolPartLike = { toolCallId?: string; state?: string }
 
 /** Open cards on the last message, in transcript order. */
@@ -291,10 +325,58 @@ watch(
 
 <template>
   <div ref="root" class="flex flex-col gap-3 p-4 lg:px-6">
-    <p v-if="chat.messages.length === 0" class="text-muted-foreground text-sm text-pretty">
-      Ask how the sprint is going, or tell the copilot what to change. Try “How many open issues are
-      in the current sprint?”
-    </p>
+    <!-- First run: what to ask, then how the board works. Gone with the first
+         message, so it never competes with a conversation. -->
+    <div v-if="chat.messages.length === 0" data-testid="chat-empty" class="flex flex-col gap-3">
+      <p class="text-muted-foreground text-sm text-pretty">
+        Ask how the sprint is going, or tell the copilot what to change.
+      </p>
+      <!-- The chat scenarios' prompts, verbatim; the title shows what is sent. -->
+      <div
+        role="group"
+        aria-label="Suggested requests"
+        data-testid="chat-suggestions"
+        class="flex flex-wrap gap-2"
+      >
+        <Button
+          v-for="suggestion in SUGGESTIONS"
+          :key="suggestion.scenario"
+          type="button"
+          variant="outline"
+          size="sm"
+          data-testid="chat-suggestion"
+          :data-scenario="suggestion.scenario"
+          :title="suggestion.prompt"
+          class="rounded-full text-xs"
+          @click="suggest(suggestion.prompt)"
+        >
+          {{ suggestion.label }}
+        </Button>
+      </div>
+      <div class="text-muted-foreground flex flex-col gap-1 text-xs text-pretty">
+        <p>Every visitor shares this board. It resets at 00:00 UTC.</p>
+        <!-- Product chrome, not model text, so ADR-0022's no-links rule is not
+             in play; a copy suits an address meant for an MCP client anyway. -->
+        <p
+          v-if="MCP_ENDPOINT"
+          data-testid="mcp-endpoint"
+          class="flex flex-wrap items-center gap-x-2"
+        >
+          <span>Any MCP client can work on it too:</span>
+          <code class="text-foreground font-mono break-all">{{ MCP_ENDPOINT }}</code>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            data-testid="mcp-endpoint-copy"
+            :aria-label="copied ? 'MCP address copied' : 'Copy MCP address'"
+            @click="copyMcpEndpoint"
+          >
+            {{ copied ? 'Copied' : 'Copy' }}
+          </Button>
+        </p>
+      </div>
+    </div>
     <!-- A log so the transcript can be navigated as one, but not a live one:
          the status line below does the announcing, once per milestone. -->
     <div v-else role="log" aria-label="Conversation" aria-live="off" class="flex flex-col gap-3">
@@ -309,7 +391,7 @@ watch(
         class="flex flex-col gap-2 rounded-lg px-3 py-2 text-sm"
         :class="[
           message.role === 'user'
-            ? 'bg-primary text-primary-foreground self-end'
+            ? 'bg-bubble-user text-bubble-user-foreground self-end'
             : 'bg-muted self-start',
           // Cards need the column's width; a text-only bubble keeps the 85% that
           // tells the two speakers apart.

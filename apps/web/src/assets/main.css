@@ -13,6 +13,8 @@
 @theme inline {
   --font-sans: 'Geist Variable', sans-serif;
   --color-chart-1: var(--chart-1);
+  --color-bubble-user: var(--bubble-user);
+  --color-bubble-user-foreground: var(--bubble-user-foreground);
   --color-success: var(--success);
   --color-ring: var(--ring);
   --color-input: var(--input);
@@ -65,6 +67,9 @@
      Trace Blue also sets the chart's small end label, so it holds 4.91:1 on Paper. */
   --chart-1: oklch(0.55 0.163 255.53);
   --success: oklch(0.508 0.118 165.612);
+  /* The user's chat bubble: Ink, the same fill as the primary button. */
+  --bubble-user: oklch(0.205 0 0);
+  --bubble-user-foreground: oklch(0.985 0 0);
   --radius: 0.625rem;
 }
 
@@ -91,6 +96,11 @@
   --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.622 0.161 255.05);
   --success: oklch(0.765 0.177 163.223);
+  /* Lead, not the inverted primary: a Rule-filled bubble was the brightest
+     block on a dark screen. One step above the assistant's Charcoal, so the
+     speakers stay apart (1.45:1), with Bright Paper text at 9.9:1. */
+  --bubble-user: oklch(0.371 0 0);
+  --bubble-user-foreground: oklch(0.985 0 0);
 }
 
 @layer base {

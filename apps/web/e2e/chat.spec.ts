@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { resetBoard } from './support'
+import { MCP, resetBoard, storedWorkspace, turnSettled } from './support'
 
 // Approved writes mutate the Worker's workspace, so every test starts from the
 // seed rather than inheriting whatever an earlier run left behind. The six
@@ -252,4 +252,61 @@ test('a search renders the compact table with how well each issue matched', asyn
   // The compact variant says how well each issue matched instead of points.
   await expect(table).toContainText('Match')
   await expect(table.locator('[data-issue-key="DS-7"]')).toContainText('Strong')
+})
+
+test('the empty transcript runs a scenario in one click, then gives way', async ({ page }) => {
+  await page.goto('/')
+  const suggestions = page.getByRole('group', { name: 'Suggested requests' })
+  await expect(suggestions.getByRole('button')).toHaveCount(5)
+  // The same board, offered to outside clients by its address.
+  await expect(page.getByTestId('mcp-endpoint')).toContainText(`${MCP}/mcp`)
+
+  // By keyboard, as anyone can reach it.
+  await suggestions.getByRole('button', { name: 'Is the sprint on track?' }).focus()
+  await page.keyboard.press('Enter')
+
+  await expect(page.locator('[data-role="user"]')).toHaveText(
+    'Is Sprint 12 on track? Show me the burndown.',
+  )
+  await expect(page.getByTestId('burndown-chart')).toBeVisible()
+  await expect(suggestions).toHaveCount(0)
+  await expect(page.getByTestId('chat-input')).toBeFocused()
+})
+
+test('a draft typed while approvals are open is kept, and sent once they are answered', async ({
+  page,
+  request,
+}) => {
+  await page.goto('/')
+  await page.getByTestId('chat-input').fill('Deploy v1.5.0-rc.1 to staging.')
+  await page.getByTestId('chat-input').press('Enter')
+  const card = page.getByTestId('approval-card')
+  await expect(card).toHaveCount(1)
+
+  const input = page.getByTestId('chat-input')
+  await input.fill('How many open issues are in the current sprint?')
+  // Enter does not send past an open card: it would orphan it.
+  await input.press('Enter')
+  await expect(page.locator('[data-role="user"]')).toHaveCount(1)
+  await expect(page.getByTestId('composer-locked-hint')).toBeVisible()
+
+  await card.getByTestId('approval-deny').click()
+  await turnSettled(page)
+  await expect(input).toHaveValue('How many open issues are in the current sprint?')
+  await input.press('Enter')
+  await expect(page.locator('[data-role="user"]')).toHaveCount(2)
+  // The denied deploy never ran.
+  expect((await storedWorkspace(request)).deployments.map((d) => d.version)).not.toContain(
+    'v1.5.0-rc.1',
+  )
+
+  // Up in the empty composer brings the last prompt back, like a shell.
+  await turnSettled(page)
+  await input.press('ArrowUp')
+  await expect(input).toHaveValue('How many open issues are in the current sprint?')
+  await input.press('ArrowUp')
+  await expect(input).toHaveValue('Deploy v1.5.0-rc.1 to staging.')
+  await input.press('ArrowDown')
+  await input.press('ArrowDown')
+  await expect(input).toHaveValue('')
 })

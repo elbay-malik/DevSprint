@@ -10,3 +10,10 @@ export const WORKSPACE_RESET_ENDPOINT = `${API_BASE_URL}${API_ROUTES.workspaceRe
 /** `POST` here to cancel a running deployment; see the route's own note. */
 export const deploymentCancelEndpoint = (deploymentId: string) =>
   `${API_BASE_URL}${API_ROUTES.deploymentCancel.replace(':id', encodeURIComponent(deploymentId))}`
+
+/**
+ * The public issues MCP server (scenario S-F), which serves this same board to
+ * any outside MCP client. The empty transcript shows it, and hides the line
+ * when a build leaves it unset.
+ */
+export const MCP_ENDPOINT = import.meta.env.VITE_MCP_URL ?? ''

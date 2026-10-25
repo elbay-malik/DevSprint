@@ -147,7 +147,9 @@ test.describe('S-B — batch write with per-issue approval gates', () => {
     for (const [index, key] of OPEN.entries()) {
       await expect(cards.nth(index).getByTestId('approval-headline')).toContainText(key)
     }
-    await expect(page.getByTestId('chat-input')).toBeDisabled()
+    // A draft can be typed meanwhile; only Send waits for the cards.
+    await expect(page.getByTestId('chat-input')).toBeEditable()
+    await expect(page.getByTestId('chat-send')).toBeDisabled()
 
     // "Nothing is written until a card is answered."
     const before = await storedWorkspace(request)
@@ -384,7 +386,7 @@ test.describe('S-E — error recovery', () => {
     await send(page, 'Yes, that one.')
     await expect(cards).toHaveCount(2)
     await expect(cards.nth(1).getByTestId('approval-headline')).toContainText('DS-7')
-    await expect(page.getByTestId('chat-input')).toBeDisabled()
+    await expect(page.getByTestId('chat-send')).toBeDisabled()
     expect(
       (await storedWorkspace(request)).issues.find((issue) => issue.key === 'DS-7')?.status,
     ).toBe('in_review')
