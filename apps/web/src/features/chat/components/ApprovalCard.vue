@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, useId } from 'vue'
+import { computed, nextTick, ref, useId } from 'vue'
 import { getToolName, type DynamicToolUIPart, type ToolUIPart } from 'ai'
+import { toast } from 'vue-sonner'
 import type { DevSprintUITools } from '@devsprint/shared/tools'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +10,15 @@ import { useDevSprintChat } from '../composables/useDevSprintChat'
 import { findIssueByKey } from '@/features/workspace/lib/issue-key'
 import { statusLabel } from '@/features/workspace/lib/status-labels'
 import { approvalOutcome } from '../lib/approvals'
-import { approvalRecord, formatDecisionTime, recordDecision } from '../lib/approval-records'
+import {
+  approvalRecord,
+  formatDecisionTime,
+  recordDecision,
+  recordUndo,
+  undoRecordOf,
+} from '../lib/approval-records'
+import { errorCopyText, toolErrorCopy } from '../lib/error-copy'
+import { requestUndo, undoneCopy, undoTargetOf } from '../lib/undo'
 
 /**
  * The gate in front of every write (docs/wireframes.md §3, ADR-0003). It shows
@@ -23,7 +32,8 @@ const props = withDefaults(
     /**
      * Whether this card holds its region's one Ink button. Five open cards in
      * one message would otherwise be five equal fills, so the transcript gives
-     * it to the first undecided card only and the rest decide in outline.
+     * it to the first undecided card only and the rest decide in outline. While
+     * the group offers "Approve all", that button holds it and no card does.
      */
     lead?: boolean
   }>(),
@@ -146,6 +156,43 @@ const summary = computed((): { headline: string; detail?: string } => {
 
 const argumentsJson = computed(() => JSON.stringify(props.part.input ?? {}, null, 2))
 
+/**
+ * An applied board write the workspace recorded can be put back, once. What it
+ * puts back is the workspace's own record (the route takes only the change id),
+ * so the card never says what the issue was; the reply does.
+ */
+const undoTarget = computed(() => undoTargetOf(props.part))
+const undo = computed(() => undoRecordOf(approval.value?.id))
+const undoing = ref(false)
+const undoLine = ref<HTMLElement>()
+
+async function undoChange(): Promise<void> {
+  const target = undoTarget.value
+  const id = approval.value?.id
+  if (target === undefined || id === undefined || undoing.value) return
+  undoing.value = true
+  try {
+    const result = await requestUndo(target.changeId)
+    const copy = result.ok
+      ? undoneCopy(result.data, formatDecisionTime(new Date(result.data.undoneAt)))
+      : toolErrorCopy('undo', result.error.code, { issueKey: target.issueKey })
+    recordUndo(id, { state: result.ok ? 'undone' : 'refused', copy }, errorCopyText(copy))
+  } catch (error) {
+    // Nothing is known about the board, so the Undo stays for another try.
+    console.warn('[workspace] undo failed:', error)
+    toast.error("Couldn't undo the change", { description: 'Try again in a moment.' })
+    return
+  } finally {
+    undoing.value = false
+  }
+  // The button is gone, and with it the focus; the line that replaced it is
+  // the sensible place to land, and the status line has already said it.
+  await nextTick()
+  const active = document.activeElement
+  if (active === null || active === document.body) undoLine.value?.focus()
+  await workspace.hydrate()
+}
+
 function respond(approved: boolean) {
   const id = approval.value?.id
   // Without an id there is nothing to answer, and the SDK would no-op silently.
@@ -242,24 +289,55 @@ function respond(approved: boolean) {
       </Button>
     </div>
 
-    <p
-      v-else-if="outcome"
-      data-testid="approval-outcome"
-      :class="outcome.failed ? 'text-destructive' : 'text-muted-foreground'"
-    >
-      <!-- The glyph is drawn, not read: the words already say how it went. Mono,
+    <!-- The record and, once applied, its one quiet way back. Undo is ghost: the
+         Ink belongs to a decision still open, not to a record. -->
+    <div v-else-if="outcome" class="flex flex-wrap items-center gap-x-2">
+      <p
+        data-testid="approval-outcome"
+        :class="outcome.failed ? 'text-destructive' : 'text-muted-foreground'"
+      >
+        <!-- The glyph is drawn, not read: the words already say how it went. Mono,
            because Geist has none of the glyphs and the fallback drew ● at half
            the height of ◐. -->
-      <span
-        aria-hidden="true"
-        data-testid="approval-outcome-mark"
-        class="font-mono"
-        :class="OUTCOME_MARK_TONES[outcome.mark]"
-        >{{ outcome.mark }}</span
-      >
-      <!-- A typed error's code is the ErrorCard's, right below, in Stop Red;
+        <span
+          aria-hidden="true"
+          data-testid="approval-outcome-mark"
+          class="font-mono"
+          :class="OUTCOME_MARK_TONES[outcome.mark]"
+          >{{ outcome.mark }}</span
+        >
+        <!-- A typed error's code is the ErrorCard's, right below, in Stop Red;
            repeated here it pushed the line onto a second one at 1440. -->
-      {{ outcome.text }}{{ outcome.code === undefined ? '' : '.' }}
+        {{ outcome.text }}{{ outcome.code === undefined ? '' : '.' }}
+      </p>
+      <Button
+        v-if="undoTarget && !undo"
+        data-testid="approval-undo"
+        type="button"
+        variant="ghost"
+        size="xs"
+        :aria-label="`Undo: ${summary.headline}`"
+        :aria-disabled="undoing || undefined"
+        @click="undoChange"
+      >
+        {{ undoing ? 'Undoing…' : 'Undo' }}
+      </Button>
+    </div>
+    <!-- tabindex -1: focus lands here when the Undo that made it is gone. -->
+    <p
+      v-if="undo"
+      ref="undoLine"
+      tabindex="-1"
+      data-testid="approval-undo-record"
+      :data-state="undo.state"
+      class="focus-visible:outline-ring rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
+      :class="undo.state === 'refused' ? 'text-destructive' : 'text-muted-foreground'"
+    >
+      <span v-if="undo.state === 'undone'" aria-hidden="true" class="font-mono">↶ </span>
+      <template v-for="(piece, index) in undo.copy" :key="index">
+        <span v-if="typeof piece === 'string'">{{ piece }}</span>
+        <span v-else class="font-mono">{{ piece.id }}</span>
+      </template>
     </p>
   </div>
 </template>

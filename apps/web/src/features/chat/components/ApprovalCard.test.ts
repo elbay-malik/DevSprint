@@ -1,16 +1,19 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createWorkspaceSeed } from '@devsprint/shared'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const addToolApprovalResponse = vi.fn()
+const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }))
+vi.mock('vue-sonner', () => ({ toast: { error: toastError } }))
 
 vi.mock('../composables/useDevSprintChat', () => ({
   useDevSprintChat: () => ({ addToolApprovalResponse }),
 }))
 
 const { default: ApprovalCard } = await import('./ApprovalCard.vue')
-const { clearApprovalRecords } = await import('../lib/approval-records')
+const { clearApprovalRecords, lastUndo } = await import('../lib/approval-records')
 
 function requested(input: Record<string, unknown>, toolName = 'update_issue_status') {
   return {
@@ -22,8 +25,11 @@ function requested(input: Record<string, unknown>, toolName = 'update_issue_stat
   }
 }
 
-function mountCard(part: unknown, props: { lead?: boolean } = {}) {
-  return mount(ApprovalCard, { props: { part: part as never, ...props } })
+function mountCard(part: unknown, props: { lead?: boolean } = {}, attach = false) {
+  return mount(ApprovalCard, {
+    props: { part: part as never, ...props },
+    ...(attach ? { attachTo: document.body } : {}),
+  })
 }
 
 /** Ink fill: the default button variant's background class. */
@@ -415,5 +421,181 @@ describe('ApprovalCard', () => {
       approval: { id: 'approval-1', approved: true, signature: 'sig' },
     })
     expect(decided.find('[data-testid="approval-warning"]').exists()).toBe(false)
+  })
+
+  describe('undo', () => {
+    const DS9 = createWorkspaceSeed().issues.find((issue) => issue.key === 'DS-9')!
+
+    /** DS-9's status change, approved and applied, carrying the workspace's change id. */
+    function applied(
+      output: unknown = {
+        ok: true,
+        data: {
+          issue: { ...DS9, status: 'done' },
+          previousStatus: 'in_progress',
+          changeId: 'chg-1',
+        },
+      },
+    ) {
+      return mountCard(
+        {
+          ...requested({ issueKey: 'DS-9', status: 'done' }),
+          state: 'output-available',
+          output,
+          approval: { id: 'approval-1', approved: true, signature: 'sig' },
+        },
+        {},
+        true,
+      )
+    }
+
+    function answer(status: number, body: unknown) {
+      // The board read that follows an undo gets a board back, not the undo's answer.
+      const fetch = vi.fn((url: string) =>
+        Promise.resolve(
+          String(url).endsWith('/undo')
+            ? new Response(JSON.stringify(body), { status })
+            : new Response(JSON.stringify(createWorkspaceSeed())),
+        ),
+      )
+      vi.stubGlobal('fetch', fetch)
+      return fetch
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals()
+      toastError.mockClear()
+      document.body.innerHTML = ''
+    })
+
+    it('is offered quietly on an applied write the workspace recorded, and nowhere else', () => {
+      const button = applied().get('[data-testid="approval-undo"]')
+      expect(button.text()).toBe('Undo')
+      expect(button.attributes('aria-label')).toBe('Undo: DS-9: Done')
+      // A record's way back is not the region's decision: never Ink.
+      expect(button.classes()).not.toContain('bg-primary')
+
+      // Nothing to undo without the id: an older api, a denial, a failure, a deploy.
+      expect(applied({ ok: true, data: {} }).find('[data-testid="approval-undo"]').exists()).toBe(
+        false,
+      )
+      expect(
+        applied({ ok: false, error: { code: 'ISSUE_NOT_FOUND', message: 'no' } })
+          .find('[data-testid="approval-undo"]')
+          .exists(),
+      ).toBe(false)
+      const deploy = mountCard({
+        ...requested({ version: 'v1.5.0', environment: 'staging' }, 'run_deployment'),
+        state: 'output-available',
+        output: { ok: true, data: { deployment: { status: 'succeeded' }, changeId: 'x' } },
+        approval: { id: 'approval-1', approved: true, signature: 'sig' },
+      })
+      expect(deploy.find('[data-testid="approval-undo"]').exists()).toBe(false)
+    })
+
+    it('sends only the change id, then records, says and shows the board put back', async () => {
+      const fetch = answer(200, {
+        ok: true,
+        data: {
+          changeId: 'chg-1',
+          tool: 'update_issue_status',
+          issueKey: 'DS-9',
+          outcome: 'restored',
+          issue: { ...DS9, status: 'in_progress' },
+          undoneAt: new Date(2026, 9, 25, 14, 5).toISOString(),
+        },
+      })
+      const wrapper = applied()
+      const button = wrapper.get('[data-testid="approval-undo"]')
+      ;(button.element as HTMLElement).focus()
+      await button.trigger('click')
+      await flushPromises()
+
+      const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit]
+      expect(url).toMatch(/\/api\/workspace\/undo$/)
+      expect(init.method).toBe('POST')
+      expect(JSON.parse(init.body as string)).toEqual({ changeId: 'chg-1' })
+
+      const line = wrapper.get('[data-testid="approval-undo-record"]')
+      expect(line.text()).toBe('↶ Undone by you at 14:05 — DS-9 back to In progress.')
+      expect(line.get('.font-mono:not([aria-hidden])').text()).toBe('DS-9')
+      // One-shot: the Undo is gone, and focus lands on the line that replaced it.
+      expect(wrapper.find('[data-testid="approval-undo"]').exists()).toBe(false)
+      expect(document.activeElement).toBe(line.element)
+      // The decision's own record stays above it.
+      expect(wrapper.get('[data-testid="approval-outcome"]').text()).toContain('applied')
+      expect(lastUndo.value?.line).toBe('Undone by you at 14:05 — DS-9 back to In progress.')
+      // And the board is read again, to show the issue back where it was.
+      expect(fetch.mock.calls.some(([url]) => String(url).endsWith('/api/workspace'))).toBe(true)
+    })
+
+    it('says a created issue is gone from the board', async () => {
+      answer(200, {
+        ok: true,
+        data: {
+          changeId: 'chg-2',
+          tool: 'create_issue',
+          issueKey: 'DS-14',
+          outcome: 'removed',
+          issue: null,
+          undoneAt: new Date(2026, 9, 25, 14, 6).toISOString(),
+        },
+      })
+      const wrapper = mountCard({
+        ...requested(
+          { title: 'Retry failed webhooks', type: 'task', sprintId: 'sprint-12' },
+          'create_issue',
+        ),
+        state: 'output-available',
+        output: { ok: true, data: { issue: { ...DS9, key: 'DS-14' }, changeId: 'chg-2' } },
+        approval: { id: 'approval-1', approved: true, signature: 'sig' },
+      })
+      await wrapper.get('[data-testid="approval-undo"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.get('[data-testid="approval-undo-record"]').text()).toBe(
+        '↶ Undone by you at 14:06 — DS-14 removed from the board.',
+      )
+    })
+
+    it('reads a refusal in plain words, and does not offer the Undo again', async () => {
+      answer(409, {
+        ok: false,
+        error: {
+          code: 'UNDO_CONFLICT',
+          message: 'DS-9 has changed since, so that change was not undone.',
+        },
+      })
+      const wrapper = applied()
+      await wrapper.get('[data-testid="approval-undo"]').trigger('click')
+      await flushPromises()
+
+      const line = wrapper.get('[data-testid="approval-undo-record"]')
+      expect(line.text()).toBe('That change to DS-9 can’t be undone: the board has moved on.')
+      expect(line.classes()).toContain('text-destructive')
+      expect(line.attributes('data-state')).toBe('refused')
+      expect(wrapper.find('[data-testid="approval-undo"]').exists()).toBe(false)
+      expect(lastUndo.value?.line).toBe(line.text())
+    })
+
+    it('keeps the Undo after a network failure, since nothing is known about the board', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.reject(new TypeError('offline'))),
+      )
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        const wrapper = applied()
+        await wrapper.get('[data-testid="approval-undo"]').trigger('click')
+        await flushPromises()
+
+        expect(toastError).toHaveBeenCalledWith("Couldn't undo the change", {
+          description: 'Try again in a moment.',
+        })
+        expect(wrapper.get('[data-testid="approval-undo"]').text()).toBe('Undo')
+        expect(wrapper.find('[data-testid="approval-undo-record"]').exists()).toBe(false)
+      } finally {
+        warn.mockRestore()
+      }
+    })
   })
 })

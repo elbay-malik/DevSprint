@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { createWorkspaceSeed } from '@devsprint/shared'
 import {
+  approveAllLabel,
+  approveAllPlan,
+  approvedTogether,
+  needOwnDecision,
   approvalOutcome,
   approvalOutcomeLine,
   approvalStateSignature,
@@ -281,5 +285,115 @@ describe('changesToReview', () => {
 
   it('leaves the points off when none of the changes carries any', () => {
     expect(changesToReview(2, 0)).toBe('2 changes to review')
+  })
+})
+
+describe('approveAllPlan', () => {
+  const status = (id: string, issueKey: string, state = 'approval-requested') => ({
+    type: 'tool-update_issue_status',
+    toolCallId: id,
+    state,
+    input: { issueKey, status: 'done' },
+    approval: { id: `a-${id}` },
+  })
+
+  it('answers the open board writes, each with the status it moves from', () => {
+    const plan = approveAllPlan(
+      [
+        { type: 'text', text: 'Five to close.' },
+        status('c1', 'DS-7'),
+        status('c2', ' ds-9 '),
+        {
+          type: 'tool-create_issue',
+          toolCallId: 'c3',
+          state: 'approval-requested',
+          input: { title: 'Retry webhooks', type: 'task' },
+          approval: { id: 'a-c3' },
+        },
+        // An ungated read is not part of any decision.
+        { type: 'tool-list_issues', toolCallId: 'c4', state: 'output-available', input: {} },
+      ],
+      issues,
+    )
+    expect(plan).toEqual({
+      approvals: [
+        { toolCallId: 'c1', approvalId: 'a-c1', from: 'in_review' },
+        { toolCallId: 'c2', approvalId: 'a-c2', from: 'in_progress' },
+        { toolCallId: 'c3', approvalId: 'a-c3' },
+      ],
+      excluded: [],
+      remaining: false,
+    })
+  })
+
+  it('leaves deploys, release notes and keys the board does not hold to their own cards', () => {
+    const plan = approveAllPlan(
+      [
+        status('c1', 'DS-7'),
+        status('c2', 'DS-42'),
+        {
+          type: 'dynamic-tool',
+          toolName: 'run_deployment',
+          toolCallId: 'c3',
+          state: 'approval-requested',
+          input: { version: 'v1.5.0', environment: 'staging' },
+          approval: { id: 'a-c3' },
+        },
+        {
+          type: 'tool-create_release_notes',
+          toolCallId: 'c4',
+          state: 'approval-requested',
+          input: { version: 'v1.5.0', markdown: '# v1.5.0' },
+          approval: { id: 'a-c4' },
+        },
+      ],
+      issues,
+    )
+    expect(plan.approvals.map((approval) => approval.toolCallId)).toEqual(['c1'])
+    expect(plan.excluded).toEqual([
+      [{ id: 'DS-42' }],
+      ['deploying ', { id: 'v1.5.0' }, ' to ', { id: 'staging' }],
+      ['saving the ', { id: 'v1.5.0' }, ' release notes'],
+    ])
+  })
+
+  it('knows when some cards were already answered one by one', () => {
+    const plan = approveAllPlan(
+      [status('c1', 'DS-11', 'approval-responded'), status('c2', 'DS-7'), status('c3', 'DS-8')],
+      issues,
+    )
+    expect(plan.remaining).toBe(true)
+    expect(plan.approvals).toHaveLength(2)
+  })
+})
+
+describe('the Approve all copy', () => {
+  it('counts exactly what it answers, and says when it is the rest', () => {
+    expect(approveAllLabel(5, false)).toBe('Approve all 5')
+    expect(approveAllLabel(4, true)).toBe('Approve remaining 4')
+  })
+
+  it('names what it leaves, in a sentence that reads whole', () => {
+    const text = (parts: ReturnType<typeof needOwnDecision>) =>
+      parts.map((part) => (typeof part === 'string' ? part : part.id)).join('')
+    expect(needOwnDecision([])).toEqual([])
+    expect(text(needOwnDecision([[{ id: 'DS-42' }]]))).toBe('DS-42 needs its own decision.')
+    expect(text(needOwnDecision([['deploying ', { id: 'v1.5.0' }]]))).toBe(
+      'Deploying v1.5.0 needs its own decision.',
+    )
+    expect(
+      text(
+        needOwnDecision([
+          [{ id: 'DS-42' }],
+          [{ id: 'DS-43' }],
+          ['saving the ', { id: 'v1.5.0' }, ' release notes'],
+        ]),
+      ),
+    ).toBe('DS-42, DS-43 and saving the v1.5.0 release notes need their own decisions.')
+  })
+
+  it('says one press as one line', () => {
+    expect(approvedTogether(4, '14:05')).toBe('4 changes approved by you at 14:05.')
+    expect(approvedTogether(2)).toBe('2 changes approved by you.')
   })
 })

@@ -7,18 +7,30 @@ import { MCP_ENDPOINT } from '@/lib/api'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useDevSprintChat } from '../composables/useDevSprintChat'
 import {
+  APPROVE_ALL_MIN,
   approvalOutcome,
   approvalOutcomeLine,
   approvalStateSignature,
+  approveAllLabel,
+  approveAllPlan,
+  approvedTogether,
   changesNeedApproval,
   changesToReview,
   isSettledApproval,
   parseApprovalStates,
   pendingApprovalCount,
+  needOwnDecision,
   pendingStatusMoves,
   type ApprovalPartLike,
+  type BatchApproval,
+  type CopyPart,
 } from '../lib/approvals'
-import { decisionTimeOf } from '../lib/approval-records'
+import {
+  decisionTimeOf,
+  formatDecisionTime,
+  lastUndo,
+  recordDecision,
+} from '../lib/approval-records'
 import { SUGGESTIONS } from '../lib/suggestions'
 import { findIssueByKey } from '@/features/workspace/lib/issue-key'
 import ApprovalCard from './ApprovalCard.vue'
@@ -61,6 +73,8 @@ interface ApprovalGroup {
   headerAt?: number
   /** "5 changes to review · 23 pts". */
   header?: string
+  /** The open board writes one press would answer, when there are enough to offer it. */
+  approveAll?: { approvals: BatchApproval[]; label: string; note: CopyPart[] }
 }
 
 /**
@@ -68,8 +82,15 @@ interface ApprovalGroup {
  * with two or more gets a header that counts what is still open and what it
  * weighs on the board. Each card keeps its own decision; only the first open
  * one spends the Ink (DESIGN.md, "Ink once per region").
+ *
+ * When two or more of the open cards are board writes that can land, the
+ * header also offers "Approve all N", and that becomes the region's one Ink:
+ * no card's Approve is filled beside it. Its count is exactly what it answers,
+ * and whatever it leaves (a deploy, release notes, a key the board does not
+ * hold) is named under it. Only the last message gets it, because the SDK
+ * answers approvals against the last message only.
  */
-function approvalGroupOf(parts: readonly object[]): ApprovalGroup {
+function approvalGroupOf(parts: readonly object[], last: boolean): ApprovalGroup {
   const gated = (parts as (ToolPartLike & { approval?: unknown })[])
     .map((part, index) => ({ part, index }))
     .filter(({ part }) => part.approval !== undefined)
@@ -82,11 +103,32 @@ function approvalGroupOf(parts: readonly object[]): ApprovalGroup {
     (sum, key) => sum + (findIssueByKey(issues, key)?.points ?? 0),
     0,
   )
-  return { ...group, headerAt: gated[0]?.index, header: changesToReview(open.length, points) }
+  const header = {
+    ...group,
+    headerAt: gated[0]?.index,
+    header: changesToReview(open.length, points),
+  }
+  const plan = approveAllPlan(parts, issues)
+  if (!last || plan.approvals.length < APPROVE_ALL_MIN) return header
+  return {
+    ...header,
+    leadId: undefined,
+    approveAll: {
+      approvals: plan.approvals,
+      label: approveAllLabel(plan.approvals.length, plan.remaining),
+      note: needOwnDecision(plan.excluded),
+    },
+  }
 }
 
 const approvalGroups = computed(
-  () => new Map(chat.messages.map((message) => [message.id, approvalGroupOf(message.parts)])),
+  () =>
+    new Map(
+      chat.messages.map((message, index, all) => [
+        message.id,
+        approvalGroupOf(message.parts, index === all.length - 1),
+      ]),
+    ),
 )
 
 /**
@@ -159,6 +201,35 @@ function settledThisTurn(parts: readonly object[]): string {
   return [...outcomes.filter((o) => o.failed), ...outcomes.filter((o) => !o.failed)]
     .map(approvalOutcomeLine)
     .join(' ')
+}
+
+/**
+ * The calls one "Approve all" press answered and not yet seen decided, with
+ * what the status line says once they all are. The SDK takes each answer as a
+ * job of its own, so the cards turn over across several renders, and saying
+ * each one, and moving focus card by card, would be four announcements and
+ * four jumps for one press.
+ */
+let batch: { ids: Set<string>; said: string } | undefined
+
+/**
+ * Answers every open board write in the group, one approval at a time, so each
+ * card records and resumes exactly as if it had been pressed: its own decision
+ * time and "from", its own record line, its own single-use approval id.
+ */
+function approveAll(messageId: string): void {
+  if (chat.messages.at(-1)?.id !== messageId) return
+  const approvals = approvalGroups.value.get(messageId)?.approveAll?.approvals ?? []
+  if (approvals.length === 0) return
+  const decidedAt = new Date()
+  batch = {
+    ids: new Set(approvals.map((approval) => approval.toolCallId)),
+    said: approvedTogether(approvals.length, formatDecisionTime(decidedAt)),
+  }
+  for (const { approvalId, from } of approvals) {
+    recordDecision(approvalId, { decidedAt, ...(from === undefined ? {} : { from }) })
+    void chat.addToolApprovalResponse({ id: approvalId, approved: true })
+  }
 }
 
 /**
@@ -292,17 +363,27 @@ watch(
   (signature, previousSignature) => {
     const states = parseApprovalStates(signature)
     const previous = parseApprovalStates(previousSignature)
-    const decidedId = [...states.keys()].find(
+    const decided = [...states.keys()].filter(
       (id) => previous.get(id) === 'approval-requested' && states.get(id) !== 'approval-requested',
     )
+    const decidedId = decided.at(-1)
     if (decidedId === undefined) return
 
-    const parts = chat.messages.at(-1)?.parts ?? []
-    const part = (parts as (ToolPartLike & ApprovalPartLike)[]).find(
-      (candidate) => candidate.toolCallId === decidedId,
-    )
-    const outcome = part ? approvalOutcome(part, decisionTimeOf(part)) : undefined
-    const said = outcome ? approvalOutcomeLine(outcome) : ''
+    let said: string
+    if (batch !== undefined && decided.some((id) => batch?.ids.has(id))) {
+      // Wait for the whole press to land, then say it once.
+      for (const id of batch.ids) if (states.get(id) !== 'approval-requested') batch.ids.delete(id)
+      if (batch.ids.size > 0) return
+      said = batch.said
+      batch = undefined
+    } else {
+      const parts = chat.messages.at(-1)?.parts ?? []
+      const part = (parts as (ToolPartLike & ApprovalPartLike)[]).find(
+        (candidate) => candidate.toolCallId === decidedId,
+      )
+      const outcome = part ? approvalOutcome(part, decisionTimeOf(part)) : undefined
+      said = outcome ? approvalOutcomeLine(outcome) : ''
+    }
     const pending = pendingCallIds()
 
     announcement.value =
@@ -321,6 +402,11 @@ watch(
   },
   { flush: 'post' },
 )
+
+/** An Undo on a card is said here too, so every record line reaches the status line. */
+watch(lastUndo, (undo) => {
+  if (undo !== undefined) announcement.value = undo.line
+})
 </script>
 
 <template>
@@ -428,13 +514,40 @@ watch(
           <template v-else-if="isToolUIPart(part)">
             <!-- In the bubble's text colour: Graphite on Paper Tint is under
                  4.5:1 at 12px. -->
-            <p
+            <div
               v-if="approvalGroups.get(message.id)?.headerAt === index"
               data-testid="approval-group-header"
-              class="scroll-mt-3 text-xs font-medium tabular-nums"
+              class="flex scroll-mt-3 flex-col gap-1 text-xs"
             >
-              {{ approvalGroups.get(message.id)?.header }}
-            </p>
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <p data-testid="approval-group-count" class="font-medium tabular-nums">
+                  {{ approvalGroups.get(message.id)?.header }}
+                </p>
+                <!-- The group's one Ink while it is shown; the cards decide in outline. -->
+                <Button
+                  v-if="approvalGroups.get(message.id)?.approveAll"
+                  type="button"
+                  size="sm"
+                  data-testid="approval-approve-all"
+                  :aria-label="`${approvalGroups.get(message.id)?.approveAll?.label} changes`"
+                  @click="approveAll(message.id)"
+                >
+                  {{ approvalGroups.get(message.id)?.approveAll?.label }}
+                </Button>
+              </div>
+              <p
+                v-if="approvalGroups.get(message.id)?.approveAll?.note.length"
+                data-testid="approval-group-note"
+              >
+                <template
+                  v-for="(piece, pieceIndex) in approvalGroups.get(message.id)?.approveAll?.note"
+                  :key="pieceIndex"
+                >
+                  <span v-if="typeof piece === 'string'">{{ piece }}</span>
+                  <span v-else class="font-mono">{{ piece.id }}</span>
+                </template>
+              </p>
+            </div>
             <ApprovalCard
               v-if="isApprovalPart(part)"
               :part="part"

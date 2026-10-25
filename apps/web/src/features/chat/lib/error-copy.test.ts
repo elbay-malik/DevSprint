@@ -6,6 +6,17 @@ import { errorCopyText, toolErrorCopy as copyParts } from './error-copy'
 const toolErrorCopy = (...args: Parameters<typeof copyParts>) => errorCopyText(copyParts(...args))
 
 describe('toolErrorCopy', () => {
+  it('says an undo the board refused in one sentence, whichever the reason', () => {
+    // Moved on since, already undone, or a reset: to the reader, all one thing.
+    expect(toolErrorCopy('undo', 'UNDO_CONFLICT', { issueKey: 'ds-9' })).toBe(
+      'That change to DS-9 can’t be undone: the board has moved on.',
+    )
+    expect(copyParts('undo', 'UNDO_CONFLICT', { issueKey: 'DS-9' })).toContainEqual({ id: 'DS-9' })
+    expect(toolErrorCopy('undo', 'UNDO_CONFLICT')).toBe(
+      'That change can’t be undone: the board has moved on.',
+    )
+  })
+
   it('names the issue the board does not hold, as the board spells keys (S-E)', () => {
     expect(toolErrorCopy('update_issue_status', 'ISSUE_NOT_FOUND', { issueKey: ' ds-42 ' })).toBe(
       'No issue DS-42 on the board.',
@@ -26,6 +37,7 @@ describe('toolErrorCopy', () => {
       'DEPLOY_ALREADY_SETTLED',
       'STAGE_FAILED',
       'WORKSPACE_FULL',
+      'UNDO_CONFLICT',
       'INVALID_INPUT',
     ]
     const fallback = toolErrorCopy('list_issues', 'SOMETHING_NEW')

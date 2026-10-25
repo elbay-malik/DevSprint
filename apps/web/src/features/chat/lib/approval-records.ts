@@ -1,5 +1,6 @@
-import { reactive } from 'vue'
+import { reactive, shallowRef } from 'vue'
 import type { IssueStatus } from '@devsprint/shared'
+import type { CopyPart } from './approvals'
 
 /**
  * What the board looked like, and when, at the moment a person answered an
@@ -23,9 +24,37 @@ export function approvalRecord(approvalId: string | undefined): ApprovalRecord |
   return approvalId === undefined ? undefined : records.get(approvalId)
 }
 
+/**
+ * How an Undo on an applied card went, kept by approval id for the same reason
+ * as the decision: the record line has to survive the card being remounted.
+ * `undone` reads "Undone by you at 14:05 — DS-9 back to In progress.";
+ * `refused` is the board's plain reason, and the Undo does not come back.
+ */
+export type UndoRecord =
+  { state: 'undone'; copy: readonly CopyPart[] } | { state: 'refused'; copy: readonly CopyPart[] }
+
+const undos = reactive(new Map<string, UndoRecord>())
+
+/**
+ * The latest undo, for the transcript's status line to say. A counter rides
+ * along so two undos that read alike are still two announcements.
+ */
+export const lastUndo = shallowRef<{ line: string; seq: number }>()
+
+export function recordUndo(approvalId: string, record: UndoRecord, line: string): void {
+  undos.set(approvalId, record)
+  lastUndo.value = { line, seq: (lastUndo.value?.seq ?? 0) + 1 }
+}
+
+export function undoRecordOf(approvalId: string | undefined): UndoRecord | undefined {
+  return approvalId === undefined ? undefined : undos.get(approvalId)
+}
+
 /** For tests: every card in a spec answers the same approval id. */
 export function clearApprovalRecords(): void {
   records.clear()
+  undos.clear()
+  lastUndo.value = undefined
 }
 
 /**

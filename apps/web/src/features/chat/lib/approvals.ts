@@ -1,3 +1,4 @@
+import type { IssueStatus } from '@devsprint/shared'
 import { findIssueByKey } from '@/features/workspace/lib/issue-key'
 
 /**
@@ -250,4 +251,143 @@ export function isSettledApproval(part: { state?: string; approval?: unknown }):
     part.approval !== undefined &&
     (part.state === 'output-available' || part.state === 'output-error')
   )
+}
+
+/**
+ * The board writes one press of "Approve all" may answer. Release notes and
+ * deployments are left out on purpose: a draft goes out under a version and a
+ * deploy ships one, so each keeps a decision of its own.
+ */
+const BATCH_APPROVABLE_TOOLS: readonly string[] = ['update_issue_status', 'create_issue']
+
+/** The fields of a pending part that "Approve all" reads. */
+interface BatchPartLike {
+  type?: string
+  toolName?: string
+  toolCallId?: string
+  state?: string
+  input?: unknown
+  approval?: { id?: string }
+}
+
+/** A line in pieces, identifiers apart, as the error copy is (DESIGN.md, the Readout Rule). */
+export type CopyPart = string | { id: string }
+
+/** One card "Approve all" would answer. */
+export interface BatchApproval {
+  toolCallId: string
+  approvalId: string
+  /** The issue's status as the board has it now, for the card's from → to record. */
+  from?: IssueStatus
+}
+
+export interface ApproveAllPlan {
+  /** The open board writes it answers, in transcript order. */
+  approvals: BatchApproval[]
+  /** Each open card it leaves for its own decision, named the way the card names it. */
+  excluded: CopyPart[][]
+  /** Some card in the group was already answered, so the rest are what remains. */
+  remaining: boolean
+}
+
+function toolNameOf(part: BatchPartLike): string | undefined {
+  if (part.type === 'dynamic-tool') return part.toolName
+  return part.type?.startsWith('tool-') ? part.type.slice('tool-'.length) : undefined
+}
+
+function stringField(input: unknown, name: string): string | undefined {
+  if (typeof input !== 'object' || input === null || !(name in input)) return undefined
+  const value = (input as Record<string, unknown>)[name]
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+}
+
+/** How the header names a card it leaves alone: "DS-42", "deploying v1.5.0 to staging". */
+function excludedLabel(tool: string | undefined, input: unknown): CopyPart[] {
+  const key = stringField(input, 'issueKey')
+  const version = stringField(input, 'version')
+  if (tool === 'update_issue_status' && key !== undefined) return [{ id: key }]
+  if (tool === 'run_deployment' && version !== undefined) {
+    const environment = stringField(input, 'environment')
+    return environment === undefined
+      ? ['deploying ', { id: version }]
+      : ['deploying ', { id: version }, ' to ', { id: environment }]
+  }
+  if (tool === 'create_release_notes' && version !== undefined) {
+    return ['saving the ', { id: version }, ' release notes']
+  }
+  return ['one other change']
+}
+
+/**
+ * What "Approve all" would answer on a message, and what it leaves. Only board
+ * writes that can land qualify: a status change for a key the board does not
+ * hold is the S-E case, where the card makes Deny the default, so it is left
+ * for the person to read rather than approved along with the rest.
+ */
+export function approveAllPlan(
+  parts: readonly object[] | undefined,
+  issues: readonly { key: string; status: IssueStatus }[],
+): ApproveAllPlan {
+  const plan: ApproveAllPlan = { approvals: [], excluded: [], remaining: false }
+  for (const part of (parts ?? []) as BatchPartLike[]) {
+    if (part.approval === undefined) continue
+    if (part.state !== 'approval-requested') {
+      plan.remaining = true
+      continue
+    }
+    const tool = toolNameOf(part)
+    const key = stringField(part.input, 'issueKey')
+    const issue = key === undefined ? undefined : findIssueByKey(issues, key)
+    const lands = tool !== 'update_issue_status' || issue !== undefined
+    const approvalId = part.approval.id
+    if (
+      tool !== undefined &&
+      BATCH_APPROVABLE_TOOLS.includes(tool) &&
+      lands &&
+      approvalId !== undefined &&
+      part.toolCallId !== undefined
+    ) {
+      plan.approvals.push({
+        toolCallId: part.toolCallId,
+        approvalId,
+        ...(issue === undefined ? {} : { from: issue.status }),
+      })
+    } else {
+      plan.excluded.push(excludedLabel(tool, part.input))
+    }
+  }
+  return plan
+}
+
+/** A single press only earns its place over two or more cards. */
+export const APPROVE_ALL_MIN = 2
+
+/** "Approve all 5", or "Approve remaining 3" once some were answered one by one. */
+export function approveAllLabel(count: number, remaining: boolean): string {
+  return remaining ? `Approve remaining ${count}` : `Approve all ${count}`
+}
+
+/**
+ * "DS-42 needs its own decision." or "DS-42 and deploying v1.5.0 need their
+ * own decisions.", for the cards "Approve all" leaves, so its count is never a
+ * surprise.
+ */
+export function needOwnDecision(labels: readonly CopyPart[][]): CopyPart[] {
+  if (labels.length === 0) return []
+  const joined: CopyPart[] = []
+  labels.forEach((label, index) => {
+    if (index > 0) joined.push(index === labels.length - 1 ? ' and ' : ', ')
+    joined.push(...label)
+  })
+  const [first, ...rest] = joined
+  const lead =
+    typeof first === 'string' ? `${first.charAt(0).toUpperCase()}${first.slice(1)}` : first
+  const verb = labels.length === 1 ? ' needs its own decision.' : ' need their own decisions.'
+  return [lead as CopyPart, ...rest, verb]
+}
+
+/** What the status line says once one press has answered several cards. */
+export function approvedTogether(count: number, at?: string): string {
+  const when = at === undefined ? '' : ` at ${at}`
+  return `${count} changes approved by you${when}.`
 }

@@ -36,7 +36,8 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 }))
 
 const { default: ChatMessageList } = await import('./ChatMessageList.vue')
-const { clearApprovalRecords, recordDecision } = await import('../lib/approval-records')
+const { approvalRecord, clearApprovalRecords, recordDecision, recordUndo } =
+  await import('../lib/approval-records')
 
 // Every mounted list watches the shared `chat`; one left mounted would keep
 // reacting to later tests' changes and moving focus in trees no longer shown.
@@ -518,11 +519,82 @@ describe('ChatMessageList status and focus', () => {
   })
 })
 
+describe('ChatMessageList approve all and undo, said aloud', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    chat.messages = [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Close it out' }] }]
+    chat.status = 'ready'
+  })
+  afterEach(() => {
+    document.body.innerHTML = ''
+    delete (chat as Partial<typeof chat> & { addToolApprovalResponse?: unknown })
+      .addToolApprovalResponse
+  })
+
+  const status = (wrapper: ReturnType<typeof mount>) =>
+    wrapper.get('[data-testid="chat-status"]').text()
+
+  it('says one press once, when its last card has turned, then moves focus on', async () => {
+    chat.messages = [
+      ...chat.messages,
+      turnWith([gated('c1', 'DS-7'), gated('c2', 'DS-8'), gated('c3', 'DS-42')]),
+    ]
+    const parts = chat.messages.at(-1)!.parts as unknown as ReturnType<typeof gated>[]
+    // The SDK answers each approval as a job of its own: one card at a time.
+    const answers: (() => void)[] = []
+    Object.assign(chat, {
+      addToolApprovalResponse: vi.fn(({ id }: { id: string }) => {
+        answers.push(() => {
+          const index = parts.findIndex((part) => part.approval.id === id)
+          const part = parts[index]!
+          parts[index] = gated(part.toolCallId, part.input.issueKey, 'approval-responded', true)
+        })
+      }),
+    })
+    const wrapper = mount(Pane, { attachTo: document.body })
+    const button = wrapper.get('[data-testid="approval-approve-all"]')
+    ;(button.element as HTMLElement).focus()
+    await button.trigger('click')
+
+    answers[0]!()
+    await nextTick()
+    // Half-landed: nothing said yet, and focus stays where the press was.
+    expect(status(wrapper)).toBe('')
+
+    answers[1]!()
+    await nextTick()
+    expect(status(wrapper)).toMatch(
+      /^2 changes approved by you at \d\d:\d\d\. 1 change needs your approval\.$/,
+    )
+    // The one card it left is next.
+    expect(document.activeElement).toBe(
+      wrapper.get('[data-call-id="c3"] [data-approval-focus]').element,
+    )
+  })
+
+  it('says an undo on the status line, in the record’s own words', async () => {
+    const wrapper = mount(ChatMessageList)
+    recordUndo(
+      'a-c1',
+      {
+        state: 'undone',
+        copy: ['Undone by you at 14:05 — ', { id: 'DS-9' }, ' back to In progress.'],
+      },
+      'Undone by you at 14:05 — DS-9 back to In progress.',
+    )
+    await nextTick()
+    expect(status(wrapper)).toBe('Undone by you at 14:05 — DS-9 back to In progress.')
+  })
+})
+
 describe('ChatMessageList approval groups', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     chat.status = 'ready'
   })
+
+  const points = (key: string) =>
+    createWorkspaceSeed().issues.find((issue) => issue.key === key)?.points ?? 0
 
   const ink = (wrapper: ReturnType<typeof mount>) =>
     wrapper
@@ -542,13 +614,18 @@ describe('ChatMessageList approval groups', () => {
     ]
     const wrapper = mount(ChatMessageList)
 
-    const header = wrapper.get('[data-testid="approval-group-header"]')
+    const header = wrapper.get('[data-testid="approval-group-count"]')
     expect(header.text()).toBe('5 changes to review · 23 pts')
     // Above the cards, not between them.
     const html = wrapper.html()
     expect(html.indexOf('approval-group-header')).toBeLessThan(html.indexOf('approval-card'))
-    // One Ink Approve, on the first card; the other four decide in outline.
-    expect(ink(wrapper)).toEqual([true, false, false, false, false])
+    // One Ink in the message: Approve all holds it, so every card decides in outline.
+    const all = wrapper.get('[data-testid="approval-approve-all"]')
+    expect(all.text()).toBe('Approve all 5')
+    expect(all.attributes('aria-label')).toBe('Approve all 5 changes')
+    expect(all.classes()).toContain('bg-primary')
+    expect(ink(wrapper)).toEqual([false, false, false, false, false])
+    expect(wrapper.find('[data-testid="approval-group-note"]').exists()).toBe(false)
   })
 
   it('counts only what is still open, and hands the Ink to the first undecided card', () => {
@@ -556,24 +633,108 @@ describe('ChatMessageList approval groups', () => {
       turnWith([
         gated('c1', 'DS-7', 'approval-responded', true),
         gated('c2', 'DS-8'),
-        gated('c3', 'DS-11'),
+        // Not on the board, so Approve all would have one card left to offer.
+        gated('c3', 'DS-42'),
       ]),
     ]
     const wrapper = mount(ChatMessageList)
 
-    expect(wrapper.get('[data-testid="approval-group-header"]').text()).toBe(
-      '2 changes to review · 5 pts',
+    expect(wrapper.get('[data-testid="approval-group-count"]').text()).toBe(
+      `2 changes to review · ${points('DS-8')} pts`,
     )
+    expect(wrapper.find('[data-testid="approval-approve-all"]').exists()).toBe(false)
     expect(ink(wrapper)).toEqual([true, false])
   })
 
+  it('offers what remains once some cards were answered one by one', () => {
+    chat.messages = [
+      turnWith([
+        gated('c1', 'DS-11', 'approval-responded', false),
+        gated('c2', 'DS-7'),
+        gated('c3', 'DS-8'),
+      ]),
+    ]
+    const wrapper = mount(ChatMessageList)
+
+    expect(wrapper.get('[data-testid="approval-approve-all"]').text()).toBe('Approve remaining 2')
+  })
+
+  it('leaves a deploy and a key the board does not hold to their own decisions, and says so', () => {
+    chat.messages = [
+      turnWith([
+        gated('c1', 'DS-7'),
+        gated('c2', 'DS-42'),
+        gated('c3', 'DS-8'),
+        {
+          type: 'tool-run_deployment',
+          toolCallId: 'c4',
+          state: 'approval-requested',
+          input: { version: 'v1.5.0', environment: 'staging' },
+          approval: { id: 'a-c4' },
+        },
+      ]),
+    ]
+    const wrapper = mount(ChatMessageList)
+
+    expect(wrapper.get('[data-testid="approval-group-count"]').text()).toContain(
+      '4 changes to review',
+    )
+    expect(wrapper.get('[data-testid="approval-approve-all"]').text()).toBe('Approve all 2')
+    const note = wrapper.get('[data-testid="approval-group-note"]')
+    expect(note.text()).toBe('DS-42 and deploying v1.5.0 to staging need their own decisions.')
+    // Identifiers in mono, as everywhere else.
+    expect(note.findAll('.font-mono').map((el) => el.text())).toEqual([
+      'DS-42',
+      'v1.5.0',
+      'staging',
+    ])
+    // The missing key's card gives its Ink Deny up to Approve all, too.
+    expect(
+      wrapper
+        .findAll('[data-testid="approval-deny"]')
+        .map((button) => button.classes().includes('bg-primary')),
+    ).toEqual([false, false, false, false])
+  })
+
+  it('answers each board write on its own, as a press on each card would', async () => {
+    const addToolApprovalResponse = vi.fn()
+    Object.assign(chat, { addToolApprovalResponse })
+    try {
+      chat.messages = [turnWith([gated('c1', 'DS-7'), gated('c2', 'DS-42'), gated('c3', 'DS-8')])]
+      const wrapper = mount(ChatMessageList)
+      await wrapper.get('[data-testid="approval-approve-all"]').trigger('click')
+
+      expect(addToolApprovalResponse.mock.calls).toEqual([
+        [{ id: 'a-c1', approved: true }],
+        [{ id: 'a-c3', approved: true }],
+      ])
+      // Each keeps its own record: its from status and the time it was decided.
+      expect(approvalRecord('a-c1')?.from).toBe('in_review')
+      expect(approvalRecord('a-c3')?.from).toBe(
+        createWorkspaceSeed().issues.find((issue) => issue.key === 'DS-8')?.status,
+      )
+      expect(approvalRecord('a-c2')).toBeUndefined()
+    } finally {
+      delete (chat as Partial<typeof chat> & { addToolApprovalResponse?: unknown })
+        .addToolApprovalResponse
+    }
+  })
+
+  it('only offers Approve all on the last message, which the SDK answers', () => {
+    chat.messages = [
+      { ...turnWith([gated('c1', 'DS-7'), gated('c2', 'DS-8')]), id: 'old' },
+      { id: 'u2', role: 'user', parts: [{ type: 'text', text: 'Never mind' }] },
+    ]
+    const wrapper = mount(ChatMessageList)
+    expect(wrapper.find('[data-testid="approval-group-header"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="approval-approve-all"]').exists()).toBe(false)
+  })
+
   it('counts a lowercase or padded key’s points, as the api would find the issue', () => {
-    const points = (key: string) =>
-      createWorkspaceSeed().issues.find((issue) => issue.key === key)?.points ?? 0
     chat.messages = [turnWith([gated('c1', 'ds-7'), gated('c2', '  DS-8 ')])]
     const wrapper = mount(ChatMessageList)
 
-    expect(wrapper.get('[data-testid="approval-group-header"]').text()).toBe(
+    expect(wrapper.get('[data-testid="approval-group-count"]').text()).toBe(
       `2 changes to review · ${points('DS-7') + points('DS-8')} pts`,
     )
     expect(wrapper.find('[data-testid="approval-warning"]').exists()).toBe(false)

@@ -71,6 +71,19 @@ export function toolErrorCopy(toolName: string, code: string, input?: unknown): 
       return ['A deployment stage failed.']
     case 'WORKSPACE_FULL':
       return ['The board is full. Reset it to carry on.']
+    // An undo the board refused: the issue has moved on, it was already
+    // undone, or a reset cleared the record. One sentence covers all three,
+    // because to the person they mean the same thing.
+    case 'UNDO_CONFLICT': {
+      const key = text('issueKey')
+      return key
+        ? [
+            'That change to ',
+            { id: key.toUpperCase() },
+            ' can’t be undone: the board has moved on.',
+          ]
+        : ['That change can’t be undone: the board has moved on.']
+    }
     case 'INVALID_INPUT':
       return ['The board couldn’t accept that request.']
     default:
