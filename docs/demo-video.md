@@ -66,7 +66,7 @@ day readout changes.
 **Prompt:** `Looks good, save it.`
 
 **Screen:** an approval card appears. Pause on it for a beat, then click **Approve**. The card
-records "Approved by you — applied", and the agent confirms the save.
+records "Approved by you at <time> — applied", and the agent confirms the save.
 
 > "Saving is a write, so nothing happens until I approve it. The card stays as the record of who
 > allowed what."

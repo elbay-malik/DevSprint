@@ -33,7 +33,7 @@ Section 5 are the canonical names for Phase 7; the board contents below are the 
 |                                                 |  | args summary...     [ Deny ] [ Approve ]  |  |
 |                                                 |  +-------------------------------------------+  |
 |                                                 |                                                 |
-|                                                 |  +-------------------------------------[Stop]+  |
+|                                                 |  +-------------------------------[Stop reply]+  |
 |                                                 |  | Ask the copilot...                [Send]  |  |
 |                                                 |  +-------------------------------------------+  |
 |                                                 |  (scenario buttons: [S-A] [S-B] ... [S-E])      |
@@ -54,8 +54,8 @@ Annotations:
   composer sits at the bottom; scripted scenario buttons (S-A through S-E; S-F runs in an external
   MCP host) fill the composer with the verbatim scenario prompt as a spend control.
 - **Header.** Sprint selector, demo reset, theme toggle. Reset restores the seed workspace.
-- **Stop button** is visible only while the agent is streaming; it aborts the agent loop
-  mid-turn. Scenario S-C variant C2 uses the card-level Cancel instead, which is a different
+- **Stop button** ("Stop reply") is visible only while the agent is streaming; it aborts the
+  agent loop mid-turn, and its label says it stops the reply, not a deployment. Scenario S-C variant C2 uses the card-level Cancel instead, which is a different
   mechanism as well as a different control: Stop aborts the request, Cancel posts to the api. It has
   to, because aborting does not reliably reach a deploy already in flight
   ([ADR-0013](adr/0013-deployment-cancel-as-an-api-route.md)).
@@ -80,15 +80,18 @@ assistant turn (top to bottom)
                               / failed / skipped glyph, a progress bar counting
                               whole stages, and the last log line; Cancel
                               button while the run is live
- 6. ErrorCard                 error code + message, subdued styling
+ 6. ErrorCard                 one line per error code in the board's words
+                              ("No issue DS-42 on the board.") + tool name and
+                              code, subdued styling
 ```
 
 ## 3. ApprovalCard anatomy
 
 ```
-+--[ Approval required: update_issue_status ]--------------+
++----------------------------------------------------------+
 | DS-7: In review → Done                                   |
 | "Billing export CSV download"                            |
+| update_issue_status                                      |
 |                                                          |
 | > Raw arguments (collapsed JSON, click to expand)        |
 +----------------------------------------------------------+
@@ -96,27 +99,34 @@ assistant turn (top to bottom)
 +----------------------------------------------------------+
 ```
 
-- **Header**: `Approval required: <tool name>`.
-- **Body**: human-readable args summary (here `DS-7: In review → Done` plus the issue title;
-  statuses use the labels in `status-labels.ts`, never the raw enum),
-  with the raw JSON arguments behind a collapsible disclosure.
+- **Headline**: human-readable args summary (here `DS-7: In review → Done`; statuses use the
+  labels in `status-labels.ts`, never the raw enum). No label sits above it.
+- **Body**: the issue title, then the tool name as a quiet mono meta line, with the raw JSON
+  arguments behind a collapsible disclosure.
 - **Footer**: Deny (with an optional free-text reason input) and Approve.
 - **Resolved state** replaces the footer once the user acts; the card stays in the transcript as
   an audit record:
 
 ```
 +----------------------------------------------------------+
-| Approved by you — applied.                               |
+| DS-7: In review → Done                                   |
+| ● Approved by you at 14:02 — applied.                    |
 +----------------------------------------------------------+
 
 +----------------------------------------------------------+
-| Denied: "Still blocked on vendor sandbox"                |
+| DS-11: Blocked → Done                                    |
+| – Denied by you at 14:03: "Still blocked on vendor       |
+|   sandbox".                                              |
 +----------------------------------------------------------+
 ```
 
-A failed approved write, a failed deployment included, reads
-`Approved by you, but it failed: <message> (<CODE>)` in Stop Red. Any other deployment reads
-`Approved by you — deployment <status>.` (for example `deployment succeeded`).
+The headline keeps its "from" status after the decision: the board's status is captured, with
+the time, when the person answers. The time is the reader's locale on a 24-hour clock. The glyph
+follows the deployment card (● applied, ◐ still running, – denied or cancelled, ✕ failed). A
+write that returned a typed error reads `✕ Approved by you at 14:02 — not applied (<CODE>).` in
+Stop Red, and the ErrorCard right below explains it. A call that threw, with no ErrorCard, reads
+`✕ Approved by you at 14:02, but it failed: <reason>`. A deployment reads
+`Approved by you at 14:02 — deployment <status>.` (for example `deployment succeeded`).
 
 ## 4. HITL approval sequence
 

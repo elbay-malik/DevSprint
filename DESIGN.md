@@ -335,8 +335,9 @@ decision or a result lives.
   region (Send, Approve), or for the safe default (Deny) when the affirmative cannot land. A
   message holding several open approval cards is one region: only the first undecided card's
   Approve is Ink, and the others decide in outline.
-- **Outline:** a Rule border on Paper, for secondary or abortive actions (Reset board, Stop, Deny,
-  Cancel deploy).
+- **Outline:** a Rule border on Paper, for secondary or abortive actions (Reset board, Stop reply,
+  Deny, Cancel deploy). The composer's Stop names what it stops ("Stop reply"), so it is not
+  mistaken for a deployment card's Cancel.
 - **Secondary / Ghost:** Paper Tint fill or transparent. They pair as a toggle, with
   `aria-pressed`: secondary when on and ghost when off (the Published / Draft switch). The fill
   alone is about 1.1:1 on Paper, so the pressed half also takes a 2px underline in its text
@@ -351,7 +352,10 @@ decision or a result lives.
 - **Style:** pills, 20px tall, 12px medium text.
 - **Secondary:** a Paper Tint fill, for counts and statuses.
 - **Outline:** a hairline, for points, tool names (mono) and change types.
-- **State:** badges are static labels. Only the change-type word inside a badge takes a signal hue.
+- **State:** badges are static labels. Only the change-type sign inside a badge takes a signal hue.
+- **Sections (release-notes diff):** a Graphite "Sections:" label, then one outline chip per
+  changed section, a sign and the heading ("+ Added", "− Fixed", "~ Changed"). The sign takes the
+  tone; the word ("removed") is in the chip's title and read to screen readers after the heading.
 
 ### Cards / Containers
 
@@ -374,7 +378,12 @@ decision or a result lives.
   12px type, inset inside the Paper Tint assistant bubble. This covers the issue table, burndown,
   release-notes diff, deployment progress, approval and tool chip.
 - **Error card:** the same shell on Paper with a 40% Stop Red border. On Paper its 12px code and
-  tool name hold 4.76:1 and 4.73:1; on the bubble's Paper Tint they fell under 4.5:1.
+  tool name hold 4.76:1 and 4.73:1; on the bubble's Paper Tint they fell under 4.5:1. It leads with
+  one line in the board's words, chosen per error code in the SPA and filled from the call's own
+  arguments ("No issue DS-42 on the board."), never the api's model-facing message. The mono tool
+  name and the Stop Red code follow as its label.
+- **Issue table (search):** the last column is "Match", a word (Strong, Good, Weak) from the
+  search score's own scale; the score itself is in the cell's title and read to screen readers.
 - **Markdown tables** the copilot writes sit in the same shell on Paper, so their Graphite headers
   clear 4.5:1.
 - **Shadow strategy:** none (see Elevation & Depth).
@@ -402,15 +411,23 @@ hairline underneath and no fill. There are no routes to navigate besides a 404.
 
 ### Approval Card (signature)
 
-The record of a decision. The eyebrow is 12px Graphite ("Approval required:" plus the mono tool
-name), followed by a 14px medium headline (the one 14px line inside chat cards), and the raw
-arguments one `<details>` away. While pending, it holds a reason input, an outline Deny and a
+The record of a decision. It opens on a 14px medium headline (the one 14px line inside chat
+cards), with no label above it: "Approval required" would be untrue on a decided card. Under it
+sit the issue title and a quiet 12px Graphite mono line naming the tool, and the raw arguments are
+one `<details>` away. While pending, it holds a reason input, an outline Deny and a
 primary Approve, which is outline too on every open card but the first in its message. When a
 status change targets a key the board does not hold, a 12px Stop Red line says so under the
 headline ("DS-42 isn’t on the board.", the key in mono), the decision group is described by it,
 Deny takes the Ink and Approve drops to outline. Approve still works, so the write can return its
-typed error. When resolved, the controls give way to one line, "Approved by you — applied."
-or "Denied: …", in Graphite, and in Stop Red only when an approved write failed.
+typed error. When resolved, the controls give way to one line in Graphite, and in Stop Red only
+when an approved write failed. It leads with a glyph from the deployment card's language (● applied,
+in Go Green; ◐ still running; – denied or cancelled; ✕ failed), drawn and hidden from screen
+readers, then the words and the time of the decision on a 24-hour clock in the reader's locale:
+"● Approved by you at 14:02 — applied." or "– Denied by you at 14:03: “Still blocked”.". A typed
+error is explained by the ErrorCard right below, so the line stays short: "✕ Approved by you at
+14:02 — not applied (ISSUE_NOT_FOUND).". A status change keeps its "from" after the decision
+("DS-9: In progress → Done"): the board's status is captured with the time when the person
+answers, since the board moves on once the write lands.
 
 Decisions are followed by focus and by voice. The pending controls are a named group ("Decision:
 DS-7: In review → Done"). When a turn ends waiting on approvals, focus moves to the first open
@@ -434,10 +451,15 @@ announced politely to screen readers.
 
 ### Burndown Chart (signature)
 
-An inline SVG figure. "Remaining" is a 2px Trace Blue line and "Ideal" a 2px dashed Graphite line,
-over Rule gridlines and 11px tabular labels, drawn at real size: the viewBox takes the chart's
-drawn width, and the height stays 180px, so the plot keeps its height in any column. Hovering
-moves the readout to the hovered day.
+An inline SVG figure titled with the sprint's name ("Burndown: Sprint 12 — Notifications &
+billing"; the id, in mono, only for a sprint the board does not hold). "Remaining" is a 2px Trace
+Blue line and "Ideal" a 2px dashed Graphite line, over Rule gridlines and 11px tabular labels,
+drawn at real size: the viewBox takes the chart's drawn width, and the height stays 180px, so the
+plot keeps its height in any column. Dates label the first and last day and every few days between,
+centred on their day, as many as fit with a label's width and a 12px gap between them (every third
+day in a phone column). The ideal value is given in whole points in the readout, the end label and
+the Series table; the line is drawn from the exact values. Hovering moves the readout to the
+hovered day.
 
 ## Do's and Don'ts
 
