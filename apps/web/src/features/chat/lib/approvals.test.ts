@@ -365,6 +365,16 @@ describe('approveAllPlan', () => {
     expect(plan.remaining).toBe(true)
     expect(plan.approvals).toHaveLength(2)
   })
+
+  it('does not count a card from an earlier round on the same message', () => {
+    // Approved and run last round; the continuation then proposed a fresh batch.
+    const plan = approveAllPlan(
+      [status('c1', 'DS-11', 'output-available'), status('c2', 'DS-7'), status('c3', 'DS-8')],
+      issues,
+    )
+    expect(plan.remaining).toBe(false)
+    expect(plan.approvals).toHaveLength(2)
+  })
 })
 
 describe('the Approve all copy', () => {

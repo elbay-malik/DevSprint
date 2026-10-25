@@ -572,6 +572,47 @@ describe('ChatMessageList approve all and undo, said aloud', () => {
     )
   })
 
+  it('says the writes one press applied as one line when the turn ends', async () => {
+    chat.messages = [
+      ...chat.messages,
+      turnWith([gated('c1', 'DS-7'), gated('c2', 'DS-8'), gated('c3', 'DS-9')]),
+    ]
+    const parts = chat.messages.at(-1)!.parts as unknown as Record<string, unknown>[]
+    Object.assign(chat, {
+      addToolApprovalResponse: vi.fn(({ id }: { id: string }) => {
+        const index = parts.findIndex(
+          (part) => (part as { approval: { id: string } }).approval.id === id,
+        )
+        const part = parts[index] as ReturnType<typeof gated>
+        parts[index] = gated(part.toolCallId, part.input.issueKey, 'approval-responded', true)
+      }),
+    })
+    const wrapper = mount(Pane, { attachTo: document.body })
+    await wrapper.get('[data-testid="approval-approve-all"]').trigger('click')
+    await nextTick()
+
+    chat.status = 'submitted'
+    await nextTick()
+    parts[0] = { ...gated('c1', 'DS-7', 'output-available', true), output: { ok: true, data: {} } }
+    parts[1] = { ...gated('c2', 'DS-8', 'output-available', true), output: { ok: true, data: {} } }
+    parts[2] = {
+      ...gated('c3', 'DS-9', 'output-available', true),
+      output: {
+        ok: false,
+        error: { code: 'ISSUE_NOT_FOUND', message: 'No issue with key DS-9.' },
+      },
+    }
+    chat.status = 'streaming'
+    await nextTick()
+    chat.status = 'ready'
+    await nextTick()
+
+    // The failure on its own, first; the two that applied once, not twice.
+    expect(status(wrapper)).toMatch(
+      /^Approved by you at (\d\d:\d\d) — not applied \(ISSUE_NOT_FOUND\)\. 2 changes approved by you at \1 — applied\. Copilot replied\.$/,
+    )
+  })
+
   it('says an undo on the status line, in the record’s own words', async () => {
     const wrapper = mount(ChatMessageList)
     recordUndo(

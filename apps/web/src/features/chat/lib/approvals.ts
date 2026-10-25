@@ -286,7 +286,7 @@ export interface ApproveAllPlan {
   approvals: BatchApproval[]
   /** Each open card it leaves for its own decision, named the way the card names it. */
   excluded: CopyPart[][]
-  /** Some card in the group was already answered, so the rest are what remains. */
+  /** Some card in this round was already answered, so the rest are what remains. */
   remaining: boolean
 }
 
@@ -332,7 +332,10 @@ export function approveAllPlan(
   for (const part of (parts ?? []) as BatchPartLike[]) {
     if (part.approval === undefined) continue
     if (part.state !== 'approval-requested') {
-      plan.remaining = true
+      // Answered this round, its write not yet run. A card that already ran
+      // (output-*) belongs to an earlier round on the same message: the
+      // continuation appends there, so a fresh batch is not "the rest" of it.
+      if (part.state === 'approval-responded') plan.remaining = true
       continue
     }
     const tool = toolNameOf(part)
@@ -390,4 +393,10 @@ export function needOwnDecision(labels: readonly CopyPart[][]): CopyPart[] {
 export function approvedTogether(count: number, at?: string): string {
   const when = at === undefined ? '' : ` at ${at}`
   return `${count} changes approved by you${when}.`
+}
+
+/** The same press, once its writes have run: one line for every card that applied. */
+export function appliedTogether(count: number, at?: string): string {
+  const when = at === undefined ? '' : ` at ${at}`
+  return `${count} changes approved by you${when} — applied.`
 }

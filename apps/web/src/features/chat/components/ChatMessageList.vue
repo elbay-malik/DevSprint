@@ -13,6 +13,7 @@ import {
   approvalStateSignature,
   approveAllLabel,
   approveAllPlan,
+  appliedTogether,
   approvedTogether,
   changesNeedApproval,
   changesToReview,
@@ -187,20 +188,30 @@ function settledCallIds(): Set<string> {
   return ids
 }
 
-/** Outcome lines of the writes that ran this turn, failures first. */
+/**
+ * Outcome lines of the writes that ran this turn, failures first. The cards one
+ * "Approve all" press applied are said as one line, the way the press itself
+ * was; a card from it that failed is still said on its own.
+ */
 function settledThisTurn(parts: readonly object[]): string {
-  const outcomes = (parts as (ToolPartLike & ApprovalPartLike)[])
-    .filter(
-      (part) =>
-        part.toolCallId !== undefined &&
-        isSettledApproval(part) &&
-        !settledBefore.has(part.toolCallId),
-    )
-    .map((part) => approvalOutcome(part, decisionTimeOf(part)))
-    .filter((outcome) => outcome !== undefined)
-  return [...outcomes.filter((o) => o.failed), ...outcomes.filter((o) => !o.failed)]
-    .map(approvalOutcomeLine)
-    .join(' ')
+  const settled = (parts as (ToolPartLike & ApprovalPartLike)[]).flatMap((part) => {
+    if (part.toolCallId === undefined || !isSettledApproval(part)) return []
+    if (settledBefore.has(part.toolCallId)) return []
+    const outcome = approvalOutcome(part, decisionTimeOf(part))
+    return outcome === undefined ? [] : [{ id: part.toolCallId, outcome }]
+  })
+  const together = settled.filter(
+    ({ id, outcome }) => pressed?.ids.has(id) === true && !outcome.failed && outcome.mark === '●',
+  )
+  const collapse = pressed !== undefined && together.length > 1
+  const lines = settled
+    .filter((entry) => !collapse || !together.includes(entry))
+    .map(({ outcome }) => outcome)
+  return [
+    ...lines.filter((o) => o.failed).map(approvalOutcomeLine),
+    ...(collapse ? [appliedTogether(together.length, pressed?.at)] : []),
+    ...lines.filter((o) => !o.failed).map(approvalOutcomeLine),
+  ].join(' ')
 }
 
 /**
@@ -213,6 +224,12 @@ function settledThisTurn(parts: readonly object[]): string {
 let batch: { ids: Set<string>; said: string } | undefined
 
 /**
+ * The same press, kept whole until its writes have run and been said: `batch`
+ * empties as the cards turn, but the writes land on the request that follows.
+ */
+let pressed: { ids: ReadonlySet<string>; at: string } | undefined
+
+/**
  * Answers every open board write in the group, one approval at a time, so each
  * card records and resumes exactly as if it had been pressed: its own decision
  * time and "from", its own record line, its own single-use approval id.
@@ -222,10 +239,10 @@ function approveAll(messageId: string): void {
   const approvals = approvalGroups.value.get(messageId)?.approveAll?.approvals ?? []
   if (approvals.length === 0) return
   const decidedAt = new Date()
-  batch = {
-    ids: new Set(approvals.map((approval) => approval.toolCallId)),
-    said: approvedTogether(approvals.length, formatDecisionTime(decidedAt)),
-  }
+  const at = formatDecisionTime(decidedAt)
+  const ids = approvals.map((approval) => approval.toolCallId)
+  batch = { ids: new Set(ids), said: approvedTogether(approvals.length, at) }
+  pressed = { ids: new Set(ids), at }
   for (const { approvalId, from } of approvals) {
     recordDecision(approvalId, { decidedAt, ...(from === undefined ? {} : { from }) })
     void chat.addToolApprovalResponse({ id: approvalId, approved: true })
@@ -341,6 +358,7 @@ watch(
     }
     // One update for the whole turn: what ran, then what the turn ended on.
     const ran = settledThisTurn(last.parts)
+    pressed = undefined
     const said = (line: string) => (ran ? `${ran} ${line}` : line)
     const pending = pendingApprovalCount(last.parts)
     if (pending === 0) {

@@ -357,6 +357,10 @@ test('deny DS-11, then Approve remaining 4 answers each card on its own record',
   )
   await turnSettled(page)
   await expect(all).toHaveCount(0)
+  // And the writes it ran are said once more as one line, not four.
+  await expect(page.getByTestId('chat-status')).toHaveText(
+    /^4 changes approved by you at \d\d.\d\d — applied\. Copilot replied\.$/,
+  )
   // Each card still carries its own record and its own from → to.
   for (const index of [0, 1, 2, 3]) {
     await expect(cards.nth(index).getByTestId('approval-outcome')).toHaveText(
