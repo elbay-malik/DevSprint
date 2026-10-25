@@ -152,3 +152,10 @@ anything.
 `MODEL_PROVIDER` is now `auto` (ADR-0021). The switch took more than the one line this ADR
 promised: both configured models had been retired, so the change also carries new model IDs,
 corrected tool descriptions and prompt rules, and evals that work against a live model.
+
+## Status note — 2026-10-25
+
+"Both deploys so far" is out of date. Every deploy so far has run from a laptop with
+`pnpm deploy:all`, except the MCP-first `Internal` rollout (ADR-0020), which was run by hand in
+that order, as the deploy-order note above says. The 2026-10-25 redeploy of `main` (`97396ca`)
+passed every smoke check.

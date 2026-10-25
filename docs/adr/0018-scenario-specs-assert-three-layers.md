@@ -114,3 +114,11 @@ Corrections to this ADR as written:
 - **"One browser test per scenario" is seven tests for six,** because C2 is its own test.
 - **The e2e servers are now defined once,** in `apps/web/e2e/servers.ts`, which both
   `playwright.config.ts` and `pnpm ci:local` use.
+
+## Status note — 2026-10-25
+
+- **Markdown rendering is no longer unbuilt.** ADR-0022 renders a safe subset in chat (bold,
+  italic, code, lists, headings, tables) through our own parser
+  (`apps/web/src/features/chat/lib/chat-text.ts`), still by interpolation with no `v-html` and no
+  links. The list of unbuilt UI above, and the ADR-0016 reference "why chat text is not rendered as
+  markdown", predate it.

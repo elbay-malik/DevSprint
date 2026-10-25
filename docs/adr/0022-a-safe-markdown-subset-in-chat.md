@@ -59,3 +59,10 @@ The system prompt now describes the formatting that renders instead of asking fo
 
 - [ADR-0016](0016-two-spend-controls-and-an-honest-injection-posture.md): the no-`v-html` posture
 - [ADR-0021](0021-a-live-model-on-the-demo.md): the live model that made this visible
+
+## Status note — 2026-10-25
+
+One more construct renders: a bare `<br>` (also `<br/>` and `<br />`, any case) becomes a line
+break, because models put it inside table cells, where a real newline would end the row
+(`chat-text.ts`, `2a591ec`). Only the bare tag matches. `<br onclick=…>` and every other tag still
+arrive as text, so there is still no `v-html` and the injection posture is unchanged.

@@ -60,3 +60,10 @@ Both models named above have been retired by their providers. Groq dropped
 `llama-3.3-70b-versatile`, and Google refuses `gemini-2.5-flash` to new keys. The routing stands.
 The models are now Groq `openai/gpt-oss-120b` and Gemini `gemini-3.8-flash`, chosen on live
 scenario runs, and the demo runs `auto` (ADR-0021).
+
+## Status note — 2026-10-25
+
+The roadmap reference above says the fallback triggers at 1K RPD / 100K TPD. It doesn't: those
+figures were the retired llama model's free-tier limits, and nothing counts requests or tokens to
+switch early. A Groq call goes to Gemini only after it fails with a rate-limit, quota or server
+error (`shouldFallback` in `apps/api/src/agent/fallback-model.ts`).
