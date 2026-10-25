@@ -83,6 +83,20 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expectNoViolations(page)
     })
 
+    test('an applied change with its Undo, then the undone record', async ({ page }) => {
+      await page.goto('/')
+      await send(page, 'Mark DS-7 as done.')
+      const card = page.getByTestId('approval-card')
+      await card.getByTestId('approval-approve').click()
+      await expect(card.getByTestId('approval-undo')).toBeVisible()
+      await expect(page.getByTestId('chat-input')).toBeEnabled()
+      await expectNoViolations(page)
+
+      await card.getByTestId('approval-undo').click()
+      await expect(card.getByTestId('approval-undo-record')).toBeVisible()
+      await expectNoViolations(page)
+    })
+
     test('a deployment mid-run and once it has finished', async ({ page }) => {
       await page.goto('/')
       await send(page, 'Deploy v1.5.0-rc.1 to staging.')

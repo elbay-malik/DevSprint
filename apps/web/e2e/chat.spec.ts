@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { MCP, resetBoard, storedWorkspace, turnSettled } from './support'
+import { API, MCP, recordStream, resetBoard, send, storedWorkspace, turnSettled } from './support'
 
 // Approved writes mutate the Worker's workspace, so every test starts from the
 // seed rather than inheriting whatever an earlier run left behind. The six
@@ -318,4 +318,117 @@ test('a draft typed while approvals are open is kept, and sent once they are ans
   await input.press('ArrowDown')
   await input.press('ArrowDown')
   await expect(input).toHaveValue('')
+})
+
+// S-B's close-out, decided the short way. The scenario spec keeps the per-card
+// path its step table describes; this is the one press for the rest.
+test('deny DS-11, then Approve remaining 4 answers each card on its own record', async ({
+  page,
+  request,
+}) => {
+  const stream = recordStream(page)
+  await page.goto('/')
+  await send(
+    page,
+    "We're closing Sprint 12 today — mark every remaining open issue in the sprint as done.",
+  )
+  const cards = page.getByTestId('approval-card')
+  await expect(cards).toHaveCount(5)
+
+  // While it is offered, Approve all is the message's one Ink: no card's
+  // Approve is filled beside it.
+  const all = page.getByTestId('approval-approve-all')
+  await expect(all).toHaveText('Approve all 5')
+  await expect(all).toHaveClass(/bg-primary/)
+  for (const approve of await page.getByTestId('approval-approve').all()) {
+    await expect(approve).not.toHaveClass(/bg-primary/)
+  }
+
+  const blocked = cards.nth(4)
+  await expect(blocked.getByTestId('approval-headline')).toContainText('DS-11')
+  await blocked.getByTestId('approval-reason').fill('Still blocked on vendor sandbox')
+  await blocked.getByTestId('approval-deny').click()
+  await expect(all).toHaveText('Approve remaining 4')
+  await all.click()
+
+  // One line for the press, then the turn resumes on its own.
+  await expect(page.getByTestId('chat-status')).toContainText(
+    /4 changes approved by you at \d\d.\d\d\./,
+  )
+  await turnSettled(page)
+  await expect(all).toHaveCount(0)
+  // Each card still carries its own record and its own from → to.
+  for (const index of [0, 1, 2, 3]) {
+    await expect(cards.nth(index).getByTestId('approval-outcome')).toHaveText(
+      /^● Approved by you at \d\d.\d\d — applied\.$/,
+    )
+  }
+  await expect(cards.first().getByTestId('approval-headline')).toHaveText('DS-7: In review → Done')
+  await expect(page.locator('[data-role="assistant"]').last()).toContainText(
+    '4 of the 5 issues are now Done.',
+  )
+
+  // Still five single-use approvals, four of which ran; DS-11 never moved.
+  const events = await stream.events()
+  expect(events.filter((event) => event.type === 'tool-approval-request')).toHaveLength(5)
+  const calls = (await stream.calls()).filter((call) => call.name === 'update_issue_status')
+  const outputs = await stream.outputs()
+  expect(calls.filter((call) => outputs.has(call.id)).map((call) => call.input.issueKey)).toEqual([
+    'DS-7',
+    'DS-8',
+    'DS-9',
+    'DS-10',
+  ])
+  const stored = await storedWorkspace(request)
+  for (const key of ['DS-7', 'DS-8', 'DS-9', 'DS-10']) {
+    expect(stored.issues.find((issue) => issue.key === key)?.status).toBe('done')
+  }
+  expect(stored.issues.find((issue) => issue.key === 'DS-11')?.status).toBe('blocked')
+})
+
+test('an applied change can be undone once, and the board shows it back', async ({
+  page,
+  request,
+}) => {
+  const stream = recordStream(page)
+  await page.goto('/')
+  await expect(page.getByTestId('workspace-source')).toHaveText(/live/i)
+  await send(page, 'Mark DS-7 as done.')
+  const card = page.getByTestId('approval-card')
+  await card.getByTestId('approval-approve').click()
+  await turnSettled(page)
+  await expect(
+    page.getByTestId('board-column-done').locator('[data-issue-key="DS-7"]'),
+  ).toBeVisible()
+
+  const undo = card.getByTestId('approval-undo')
+  await expect(undo).toHaveText('Undo')
+  // A record's way back, never the region's Ink.
+  await expect(undo).not.toHaveClass(/bg-primary/)
+  await undo.click()
+
+  const record = card.getByTestId('approval-undo-record')
+  await expect(record).toHaveText(/^↶ Undone by you at \d\d.\d\d — DS-7 back to In review\.$/)
+  await expect(page.getByTestId('chat-status')).toHaveText(
+    /^Undone by you at \d\d.\d\d — DS-7 back to In review\.$/,
+  )
+  await expect(undo).toHaveCount(0)
+  await expect(record).toBeFocused()
+  // The approval's own record stays above it.
+  await expect(card.getByTestId('approval-outcome')).toContainText('applied')
+  await expect(
+    page.getByTestId('board-column-in_review').locator('[data-issue-key="DS-7"]'),
+  ).toBeVisible()
+  expect(
+    (await storedWorkspace(request)).issues.find((issue) => issue.key === 'DS-7')?.status,
+  ).toBe('in_review')
+
+  // One-shot on the server too: the same change id is refused the second time.
+  const [write] = (await stream.calls()).filter((call) => call.name === 'update_issue_status')
+  const output = (await stream.outputs()).get(write?.id ?? '') as { data?: { changeId?: string } }
+  const again = await request.post(`${API}/api/workspace/undo`, {
+    data: { changeId: output.data?.changeId },
+  })
+  expect(again.status()).toBe(409)
+  expect((await again.json()).error.code).toBe('UNDO_CONFLICT')
 })
