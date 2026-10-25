@@ -35,7 +35,10 @@ defineProps<{
     <CardContent class="flex flex-col gap-1.5 px-3">
       <div class="flex items-center justify-between gap-2">
         <span class="text-muted-foreground font-mono text-xs">{{ issue.key }}</span>
-        <Badge variant="outline" class="tabular-nums">{{ issue.points }}</Badge>
+        <Badge variant="outline" class="tabular-nums"
+          >{{ issue.points
+          }}<span class="sr-only">{{ issue.points === 1 ? ' point' : ' points' }}</span></Badge
+        >
       </div>
       <p class="text-sm leading-snug font-medium">{{ issue.title }}</p>
       <p v-if="assigneeHandle" class="text-muted-foreground text-xs">{{ assigneeHandle }}</p>

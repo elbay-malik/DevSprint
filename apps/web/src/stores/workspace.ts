@@ -25,12 +25,16 @@ export function changedStatusKeys(previous: Workspace, next: Workspace): Set<str
  * the Worker's copy — the same board the agent's tools read, which lives in a
  * Durable Object rather than in any one isolate's memory (ADR-0011). Approved
  * writes land there and show up here on the next hydrate, whether they came
- * from this SPA or from an external MCP host.
+ * from this SPA or from an external MCP host. The pane hydrates when a turn
+ * settles and when the reader comes back to the tab (useReadOnReturn); it
+ * does not poll.
  */
 export const useWorkspaceStore = defineStore('workspace', () => {
   const workspace = ref<Workspace>(createWorkspaceSeed())
   const source = ref<WorkspaceSource>('seed')
   const hydrating = ref(false)
+  /** When the Worker last answered a read (epoch ms); undefined until it has. */
+  const readAt = ref<number>()
   /**
    * Issues whose status the last read changed, marked on the board for
    * CHANGE_HIGHLIGHT_MS so an approved move is seen landing rather than found.
@@ -61,6 +65,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       if (source.value === 'api') markChanged(changedStatusKeys(workspace.value, next))
       workspace.value = next
       source.value = 'api'
+      readAt.value = Date.now()
     } catch (error) {
       // Expected whenever the Worker is not running locally: fall back to the
       // seed and warn once instead of toasting on every retry. The reset is
@@ -87,13 +92,16 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const backlogIssues = computed(() =>
     workspace.value.issues.filter((issue) => issue.sprintId === null),
   )
-  const stats = computed(() => computeSprintStats(sprintIssues.value))
+  const stats = computed(() =>
+    computeSprintStats(sprintIssues.value, activeSprint.value, workspace.value.now),
+  )
   const users = computed(() => workspace.value.users)
 
   return {
     workspace,
     source,
     hydrating,
+    readAt,
     hydrate,
     recentlyChanged,
     activeSprint,

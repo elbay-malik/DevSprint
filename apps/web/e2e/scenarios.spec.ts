@@ -18,6 +18,15 @@ test.beforeEach(async ({ request }) => {
   await resetBoard(request)
 })
 
+/**
+ * The operator switching back to the SPA: the tab's clock moved on past the
+ * re-read throttle, then the window takes focus, as it does on a tab switch.
+ */
+async function returnToTab(page: Page, at: number) {
+  await page.clock.setFixedTime(at)
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+}
+
 async function openBoard(page: Page) {
   await page.goto('/')
   await expect(page.getByTestId('workspace-source')).toHaveText(/live/i)
@@ -423,7 +432,11 @@ test.describe('S-F — an external MCP host operates the same workspace', () => 
     // its own interface; the cast changes no runtime behaviour.
     await client.connect(new StreamableHTTPClientTransport(new URL(`${MCP}/mcp`)) as Transport)
     try {
-      // The SPA is already open when the write happens (precondition).
+      // The SPA is already open when the write happens (precondition). Its
+      // clock is pinned so the operator's switch back can step past the
+      // 5s throttle on re-reads without the test sleeping through it.
+      let clock = Date.parse('2026-10-25T12:00:00Z')
+      await page.clock.setFixedTime(clock)
       await openBoard(page)
       await expect(page.locator('[data-issue-key="DS-14"]')).toHaveCount(0)
 
@@ -472,8 +485,10 @@ test.describe('S-F — an external MCP host operates the same workspace', () => 
       const stored = (await storedWorkspace(request)).issues.find((issue) => issue.key === 'DS-14')
       expect(stored?.sprintId).toBeNull()
 
-      // The SPA does not poll (ADR-0014), so the operator's switch is a reload.
-      await page.reload()
+      // The SPA does not poll (ADR-0014's status note); the operator's switch
+      // back to it is what re-reads the board, with no reload.
+      clock += 6_000
+      await returnToTab(page, clock)
       const backlogCard = page.getByTestId('board-backlog').locator('[data-issue-key="DS-14"]')
       await expect(backlogCard).toContainText('Add CSV export progress indicator')
       await expect(backlogCard.getByTestId('issue-status')).toHaveText('Todo')
@@ -486,7 +501,8 @@ test.describe('S-F — an external MCP host operates the same workspace', () => 
         }),
       )
       expect(moved.ok).toBe(true)
-      await page.reload()
+      clock += 6_000
+      await returnToTab(page, clock)
       await expect(backlogCard.getByTestId('issue-status')).toHaveText('In progress')
     } finally {
       await client.close()

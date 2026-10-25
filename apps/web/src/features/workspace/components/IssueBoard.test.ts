@@ -56,6 +56,48 @@ describe('IssueBoard', () => {
     expect(card(wrapper, 'DS-7').attributes()).not.toHaveProperty('data-board-change')
   })
 
+  it('gives counts and points their units for screen readers', () => {
+    const wrapper = mountBoard()
+    // "2 DS-9 5" was all a screen reader had to go on.
+    const done = wrapper.get('[data-testid="board-column-done"]')
+    expect(done.get('h2').text()).toBe('Done 2 issues')
+    expect(done.get('h2 .sr-only').text()).toBe('issues')
+    const blocked = wrapper.get('[data-testid="board-column-blocked"]')
+    expect(blocked.get('h2 .sr-only').text()).toBe('issue')
+
+    const points = card(wrapper, 'DS-9').get('[data-slot="badge"]')
+    expect(points.text()).toBe('5 points')
+    expect(points.get('.sr-only').text()).toBe('points')
+  })
+
+  it("lists each column's cards, and the backlog's", () => {
+    const wrapper = mountBoard()
+    const inReview = wrapper.get('[data-testid="board-column-in_review"]')
+    const list = inReview.get('ul')
+    expect(list.attributes('role')).toBe('list')
+    expect(list.findAll(':scope > li')).toHaveLength(2)
+    expect(list.findAll('li [data-testid="issue-card"]')).toHaveLength(2)
+
+    const backlogList = wrapper.get('[data-testid="board-backlog"] ul')
+    expect(backlogList.findAll(':scope > li')).toHaveLength(backlog.length)
+  })
+
+  it('draws an empty column as a compact slot, not a list', () => {
+    const wrapper = mountBoard()
+    const todo = wrapper.get('[data-testid="board-column-todo"]')
+    expect(todo.find('ul').exists()).toBe(false)
+    const slot = todo.get('[data-testid="board-column-empty"]')
+    expect(slot.text()).toBe('No issues')
+    expect(slot.classes()).toEqual(expect.arrayContaining(['border', 'rounded-xl', 'text-xs']))
+  })
+
+  it('lets the backlog heading take focus from the jump above the board', () => {
+    const wrapper = mountBoard()
+    const heading = wrapper.get('#board-backlog-heading')
+    expect(heading.attributes('tabindex')).toBe('-1')
+    expect(heading.text()).toContain('Backlog')
+  })
+
   it('draws a plain board when nothing is pending or changed', () => {
     const wrapper = mountBoard()
     expect(wrapper.find('[data-pending-move]').exists()).toBe(false)

@@ -203,7 +203,12 @@ test('the header resets the board and switches theme', async ({ page }) => {
   const doneColumn = page.getByTestId('board-column-done')
   await expect(doneColumn).toContainText('DS-7')
 
+  // The board is shared, so Reset asks first, and only Confirm resets.
   await page.getByTestId('reset-demo').click()
+  await expect(page.getByTestId('reset-demo-question')).toContainText('Reset for everyone?')
+  await expect(page.getByTestId('reset-demo-confirm')).toBeFocused()
+  await expect(doneColumn).toContainText('DS-7')
+  await page.getByTestId('reset-demo-confirm').click()
   // Back where the seed has it, not merely gone from Done.
   await expect(doneColumn).not.toContainText('DS-7')
   await expect(
