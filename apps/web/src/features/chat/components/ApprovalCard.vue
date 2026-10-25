@@ -333,7 +333,15 @@ function respond(approved: boolean) {
       class="focus-visible:outline-ring rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
       :class="undo.state === 'refused' ? 'text-destructive' : 'text-muted-foreground'"
     >
-      <span v-if="undo.state === 'undone'" aria-hidden="true" class="font-mono">↶ </span>
+      <!-- No mono face on the stack draws ↶, so the fallback's came out at half
+           the size and weight of the ● above. Scaled, and in the text colour, to match it. -->
+      <span
+        v-if="undo.state === 'undone'"
+        aria-hidden="true"
+        data-testid="approval-undo-mark"
+        class="text-foreground font-mono text-[1.5em] leading-none"
+        >↶
+      </span>
       <template v-for="(piece, index) in undo.copy" :key="index">
         <span v-if="typeof piece === 'string'">{{ piece }}</span>
         <span v-else class="font-mono">{{ piece.id }}</span>
