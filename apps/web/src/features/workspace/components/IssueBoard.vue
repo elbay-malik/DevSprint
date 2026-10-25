@@ -3,13 +3,23 @@ import { computed } from 'vue'
 import { ISSUE_STATUSES, type Issue, type User } from '@devsprint/shared'
 import { Badge } from '@/components/ui/badge'
 import IssueCard from './IssueCard.vue'
-import { ISSUE_STATUS_LABELS } from '../lib/status-labels'
+import { ISSUE_STATUS_LABELS, statusLabel } from '../lib/status-labels'
 
 const props = defineProps<{
   issues: Issue[]
   backlog: Issue[]
   users: User[]
+  /** Issue key → the status a pending approval card would move it to. */
+  pendingMoves?: ReadonlyMap<string, unknown>
+  /** Issues the last read of the board moved, marked briefly. */
+  changed?: ReadonlySet<string>
 }>()
+
+function pendingLabel(issue: Issue): string | undefined {
+  return props.pendingMoves?.has(issue.key)
+    ? statusLabel(props.pendingMoves.get(issue.key))
+    : undefined
+}
 
 const columns = computed(() =>
   ISSUE_STATUSES.map((status) => ({
@@ -40,6 +50,8 @@ const handleById = computed(() => new Map(props.users.map((user) => [user.id, `@
           :key="issue.id"
           :issue="issue"
           :assignee-handle="issue.assigneeId ? handleById.get(issue.assigneeId) : undefined"
+          :pending-status="pendingLabel(issue)"
+          :changed="changed?.has(issue.key)"
         />
         <p v-if="column.issues.length === 0" class="text-muted-foreground px-1 text-xs">
           No issues
@@ -59,6 +71,8 @@ const handleById = computed(() => new Map(props.users.map((user) => [user.id, `@
           :key="issue.id"
           :issue="issue"
           :status-label="ISSUE_STATUS_LABELS[issue.status]"
+          :pending-status="pendingLabel(issue)"
+          :changed="changed?.has(issue.key)"
         />
       </div>
     </div>

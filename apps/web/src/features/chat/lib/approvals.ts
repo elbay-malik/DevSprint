@@ -118,3 +118,39 @@ export function pendingApprovalCount(parts: readonly object[] | undefined): numb
 export function changesNeedApproval(count: number): string {
   return count === 1 ? '1 change needs your approval.' : `${count} changes need your approval.`
 }
+
+/** The fields of a tool part a pending status change is read from. */
+interface StatusMovePartLike {
+  type?: string
+  toolName?: string
+  state?: string
+  input?: unknown
+}
+
+/**
+ * The status changes still waiting on a card, as issue key → requested status,
+ * so the board can mark the issues they would move. Only `update_issue_status`
+ * targets a card already on the board; a new issue has nowhere to be marked.
+ * A later card for the same issue wins, as it would if both were approved.
+ */
+export function pendingStatusMoves(parts: readonly object[] | undefined): Map<string, unknown> {
+  const moves = new Map<string, unknown>()
+  for (const part of (parts ?? []) as StatusMovePartLike[]) {
+    if (part.state !== 'approval-requested') continue
+    const isStatusChange =
+      part.type === 'tool-update_issue_status' ||
+      (part.type === 'dynamic-tool' && part.toolName === 'update_issue_status')
+    const input = part.input as { issueKey?: unknown; status?: unknown } | undefined
+    if (isStatusChange && typeof input?.issueKey === 'string') {
+      moves.set(input.issueKey, input.status)
+    }
+  }
+  return moves
+}
+
+/** "5 changes to review · 23 pts"; the points are left off when none are known. */
+export function changesToReview(count: number, points: number): string {
+  const changes = count === 1 ? '1 change to review' : `${count} changes to review`
+  if (points <= 0) return changes
+  return `${changes} · ${points} ${points === 1 ? 'pt' : 'pts'}`
+}

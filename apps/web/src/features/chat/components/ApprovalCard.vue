@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, useId } from 'vue'
 import { getToolName, type DynamicToolUIPart, type ToolUIPart } from 'ai'
 import type { DevSprintUITools } from '@devsprint/shared/tools'
 import { Button } from '@/components/ui/button'
@@ -15,9 +15,18 @@ import { approvalOutcome } from '../lib/approvals'
  * arguments one click away, and stays in the transcript afterwards as the record
  * of who decided what.
  */
-const props = defineProps<{
-  part: ToolUIPart<DevSprintUITools> | DynamicToolUIPart
-}>()
+const props = withDefaults(
+  defineProps<{
+    part: ToolUIPart<DevSprintUITools> | DynamicToolUIPart
+    /**
+     * Whether this card holds its region's one Ink button. Five open cards in
+     * one message would otherwise be five equal fills, so the transcript gives
+     * it to the first undecided card only and the rest decide in outline.
+     */
+    lead?: boolean
+  }>(),
+  { lead: true },
+)
 
 const chat = useDevSprintChat()
 const workspace = useWorkspaceStore()
@@ -39,6 +48,39 @@ const decided = computed(() => props.part.state !== 'approval-requested')
  */
 const outcome = computed(() => approvalOutcome(props.part))
 
+const toolInput = computed(() => props.part.input as Record<string, unknown> | undefined)
+
+/** The board's copy of the issue a status change targets, if it has one. */
+const targetIssue = computed(() => {
+  const key = toolInput.value?.issueKey
+  if (toolName.value !== 'update_issue_status' || typeof key !== 'string') return undefined
+  return workspace.workspace.issues.find((candidate) => candidate.key === key)
+})
+
+/**
+ * A status change for a key the board does not hold (S-E). Approving it can
+ * only fail, so the card says so before the decision and makes Deny the
+ * default. Approve stays: the write's own typed error is what the agent's
+ * recovery answers to, and the person may know something the board does not.
+ */
+const missingIssueKey = computed((): string | undefined => {
+  const key = toolInput.value?.issueKey
+  if (decided.value || toolName.value !== 'update_issue_status' || typeof key !== 'string') {
+    return undefined
+  }
+  return targetIssue.value === undefined ? key : undefined
+})
+
+const warningId = useId()
+
+/** The one Ink button, if this card holds it: Approve, or Deny for a change that cannot land. */
+const approveVariant = computed(() =>
+  props.lead && missingIssueKey.value === undefined ? 'default' : 'outline',
+)
+const denyVariant = computed(() =>
+  props.lead && missingIssueKey.value !== undefined ? 'default' : 'outline',
+)
+
 /**
  * What the change means, not what it looks like as JSON. The workspace pane
  * already holds the board, so the card can name the issue being moved and where
@@ -49,7 +91,7 @@ const summary = computed((): { headline: string; detail?: string } => {
   if (input === undefined) return { headline: 'Preparing the change…' }
 
   if (toolName.value === 'update_issue_status' && typeof input.issueKey === 'string') {
-    const issue = workspace.workspace.issues.find((candidate) => candidate.key === input.issueKey)
+    const issue = targetIssue.value
     // The "from" status is read live, so it is only truthful while the change is
     // still pending. Once the board catches up an executed write, keeping it
     // would rewrite this record into a nonsense "done → done".
@@ -108,6 +150,14 @@ function respond(approved: boolean) {
         {{ summary.headline }}
       </p>
       <p v-if="summary.detail" class="text-muted-foreground">{{ summary.detail }}</p>
+      <p
+        v-if="missingIssueKey"
+        :id="warningId"
+        data-testid="approval-warning"
+        class="text-destructive"
+      >
+        <span class="font-mono">{{ missingIssueKey }}</span> isn’t on the board.
+      </p>
     </div>
 
     <details>
@@ -128,6 +178,7 @@ function respond(approved: boolean) {
       v-if="!decided"
       role="group"
       :aria-label="`Decision: ${summary.headline}`"
+      :aria-describedby="missingIssueKey ? warningId : undefined"
       tabindex="-1"
       data-approval-focus
       class="focus-visible:outline-ring flex flex-wrap items-center gap-2 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
@@ -146,7 +197,7 @@ function respond(approved: boolean) {
       <Button
         data-testid="approval-deny"
         size="sm"
-        variant="outline"
+        :variant="denyVariant"
         :aria-label="`Deny: ${summary.headline}`"
         @click="respond(false)"
       >
@@ -155,6 +206,7 @@ function respond(approved: boolean) {
       <Button
         data-testid="approval-approve"
         size="sm"
+        :variant="approveVariant"
         :aria-label="`Approve: ${summary.headline}`"
         @click="respond(true)"
       >

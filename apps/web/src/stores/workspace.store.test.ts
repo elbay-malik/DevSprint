@@ -1,7 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createWorkspaceSeed } from '@devsprint/shared'
-import { useWorkspaceStore } from './workspace'
+import { CHANGE_HIGHLIGHT_MS, changedStatusKeys, useWorkspaceStore } from './workspace'
 
 describe('useWorkspaceStore', () => {
   beforeEach(() => {
@@ -120,5 +120,47 @@ describe('useWorkspaceStore', () => {
     expect(store.source).toBe('seed')
     expect(store.workspace).toEqual(createWorkspaceSeed())
     expect(console.warn).toHaveBeenCalledTimes(1)
+  })
+
+  it('marks the issues a later read moved, then lets the mark go', async () => {
+    vi.useFakeTimers()
+    const first = createWorkspaceSeed()
+    const second = createWorkspaceSeed()
+    const moved = second.issues.find((issue) => issue.key === 'DS-7')
+    if (!moved) throw new Error('seed lost DS-7')
+    moved.status = 'done'
+    const respond = (body: unknown) => new Response(JSON.stringify(body), { status: 200 })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce(respond(first)).mockResolvedValueOnce(respond(second)),
+    )
+
+    const store = useWorkspaceStore()
+    await store.hydrate()
+    // The first read only replaces the seed; nothing was shown as live yet.
+    expect(store.recentlyChanged.size).toBe(0)
+
+    await store.hydrate()
+    expect([...store.recentlyChanged]).toEqual(['DS-7'])
+
+    vi.advanceTimersByTime(CHANGE_HIGHLIGHT_MS - 1)
+    expect(store.recentlyChanged.has('DS-7')).toBe(true)
+    vi.advanceTimersByTime(1)
+    expect(store.recentlyChanged.size).toBe(0)
+    vi.useRealTimers()
+  })
+})
+
+describe('changedStatusKeys', () => {
+  it('names only issues present in both reads whose status differs', () => {
+    const before = createWorkspaceSeed()
+    const after = createWorkspaceSeed()
+    for (const issue of after.issues) {
+      if (issue.key === 'DS-9') issue.status = 'in_review'
+      if (issue.key === 'DS-10') issue.title = 'Renamed, not moved'
+    }
+    after.issues.push({ ...after.issues[0]!, id: 'issue-new', key: 'DS-99', status: 'done' })
+
+    expect([...changedStatusKeys(before, after)]).toEqual(['DS-9'])
   })
 })

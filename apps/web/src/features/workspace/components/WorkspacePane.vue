@@ -4,11 +4,13 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useDevSprintChat } from '@/features/chat/composables/useDevSprintChat'
+import { usePendingMoves } from '@/features/chat/composables/usePendingMoves'
 import IssueBoard from './IssueBoard.vue'
 import SprintStatsCards from './SprintStatsCards.vue'
 
 const store = useWorkspaceStore()
 const chat = useDevSprintChat()
+const pendingMoves = usePendingMoves()
 
 onMounted(() => void store.hydrate())
 
@@ -52,6 +54,12 @@ watch(
     </header>
     <SprintStatsCards :stats="store.stats" />
     <Separator />
-    <IssueBoard :issues="store.sprintIssues" :backlog="store.backlogIssues" :users="store.users" />
+    <IssueBoard
+      :issues="store.sprintIssues"
+      :backlog="store.backlogIssues"
+      :users="store.users"
+      :pending-moves="pendingMoves"
+      :changed="store.recentlyChanged"
+    />
   </section>
 </template>

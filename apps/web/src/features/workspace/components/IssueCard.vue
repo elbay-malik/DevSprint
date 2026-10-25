@@ -8,11 +8,24 @@ defineProps<{
   assigneeHandle?: string
   /** Shown only where the column does not already say it — the backlog. */
   statusLabel?: string
+  /** Where a pending approval card would move this issue ("Done"). */
+  pendingStatus?: string
+  /** The last read of the board moved this issue; main.css marks it briefly. */
+  changed?: boolean
 }>()
 </script>
 
 <template>
-  <Card data-testid="issue-card" :data-issue-key="issue.key" class="gap-0 py-3">
+  <!-- A pending move is a dashed ring, the drawn convention for "proposed",
+       with the destination in words beneath, so it reads in greyscale. -->
+  <Card
+    data-testid="issue-card"
+    :data-issue-key="issue.key"
+    :data-pending-move="pendingStatus === undefined ? undefined : ''"
+    :data-board-change="changed ? '' : undefined"
+    class="gap-0 py-3"
+    :class="pendingStatus !== undefined && 'outline-ring outline-2 outline-offset-2 outline-dashed'"
+  >
     <CardContent class="flex flex-col gap-1.5 px-3">
       <div class="flex items-center justify-between gap-2">
         <span class="text-muted-foreground font-mono text-xs">{{ issue.key }}</span>
@@ -22,6 +35,14 @@ defineProps<{
       <p v-if="assigneeHandle" class="text-muted-foreground text-xs">{{ assigneeHandle }}</p>
       <p v-if="statusLabel" data-testid="issue-status" class="text-muted-foreground text-xs">
         {{ statusLabel }}
+      </p>
+      <p
+        v-if="pendingStatus !== undefined"
+        data-testid="issue-pending-move"
+        class="text-foreground text-xs font-medium"
+      >
+        <span aria-hidden="true">→ </span><span class="sr-only">Awaiting approval to move to </span
+        >{{ pendingStatus }}
       </p>
     </CardContent>
   </Card>

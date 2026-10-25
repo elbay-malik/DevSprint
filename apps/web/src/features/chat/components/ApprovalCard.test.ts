@@ -20,9 +20,13 @@ function requested(input: Record<string, unknown>, toolName = 'update_issue_stat
   }
 }
 
-function mountCard(part: unknown) {
-  return mount(ApprovalCard, { props: { part: part as never } })
+function mountCard(part: unknown, props: { lead?: boolean } = {}) {
+  return mount(ApprovalCard, { props: { part: part as never, ...props } })
 }
+
+/** Ink fill: the default button variant's background class. */
+const isInk = (wrapper: ReturnType<typeof mountCard>, testid: string) =>
+  wrapper.get(`[data-testid="${testid}"]`).classes().includes('bg-primary')
 
 describe('ApprovalCard', () => {
   beforeEach(() => {
@@ -276,5 +280,56 @@ describe('ApprovalCard', () => {
     expect(classes).toContain('text-base')
     expect(classes).toContain('md:text-xs')
     expect(classes).not.toContain('text-xs')
+  })
+
+  it('spends the Ink on Approve only when it leads its region', () => {
+    const lead = mountCard(requested({ issueKey: 'DS-7', status: 'done' }))
+    expect(isInk(lead, 'approval-approve')).toBe(true)
+    expect(isInk(lead, 'approval-deny')).toBe(false)
+
+    // The second of five open cards decides in outline, with the same buttons.
+    const follower = mountCard(requested({ issueKey: 'DS-8', status: 'done' }), { lead: false })
+    expect(isInk(follower, 'approval-approve')).toBe(false)
+    expect(isInk(follower, 'approval-deny')).toBe(false)
+  })
+
+  it('warns before asking to change an issue the board does not hold (S-E)', () => {
+    const wrapper = mountCard(requested({ issueKey: 'DS-42', status: 'done' }))
+
+    const warning = wrapper.get('[data-testid="approval-warning"]')
+    expect(warning.text()).toBe('DS-42 isn’t on the board.')
+    expect(warning.classes()).toContain('text-destructive')
+    // The decision group carries the warning, so focus landing there hears it.
+    expect(wrapper.get('[data-approval-focus]').attributes('aria-describedby')).toBe(
+      warning.attributes('id'),
+    )
+    // Deny is the default; Approve is demoted, not removed.
+    expect(isInk(wrapper, 'approval-deny')).toBe(true)
+    expect(isInk(wrapper, 'approval-approve')).toBe(false)
+  })
+
+  it('still lets a change to a missing issue be approved, so its typed error comes back', async () => {
+    const wrapper = mountCard(requested({ issueKey: 'DS-42', status: 'done' }))
+
+    await wrapper.get('[data-testid="approval-approve"]').trigger('click')
+
+    expect(addToolApprovalResponse).toHaveBeenCalledWith({ id: 'approval-1', approved: true })
+  })
+
+  it('gives no warning for an issue on the board, or once the change is decided', () => {
+    expect(
+      mountCard(requested({ issueKey: 'DS-7', status: 'done' }))
+        .find('[data-testid="approval-warning"]')
+        .exists(),
+    ).toBe(false)
+
+    // After the decision the outcome line reports the failure; one record is enough.
+    const decided = mountCard({
+      ...requested({ issueKey: 'DS-42', status: 'done' }),
+      state: 'output-available',
+      output: { ok: false, error: { code: 'ISSUE_NOT_FOUND', message: 'no' } },
+      approval: { id: 'approval-1', approved: true, signature: 'sig' },
+    })
+    expect(decided.find('[data-testid="approval-warning"]').exists()).toBe(false)
   })
 })

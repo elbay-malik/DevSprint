@@ -408,3 +408,72 @@ describe('ChatMessageList status and focus', () => {
     expect(document.activeElement).toBe(board)
   })
 })
+
+describe('ChatMessageList approval groups', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    chat.status = 'ready'
+  })
+
+  const ink = (wrapper: ReturnType<typeof mount>) =>
+    wrapper
+      .findAll('[data-testid="approval-approve"]')
+      .map((button) => button.classes().includes('bg-primary'))
+
+  it('heads two or more open cards with what they add up to on the board', () => {
+    chat.messages = [
+      turnWith([
+        { type: 'text', text: 'Five to close.' },
+        gated('c1', 'DS-7'),
+        gated('c2', 'DS-8'),
+        gated('c3', 'DS-9'),
+        gated('c4', 'DS-10'),
+        gated('c5', 'DS-11'),
+      ]),
+    ]
+    const wrapper = mount(ChatMessageList)
+
+    const header = wrapper.get('[data-testid="approval-group-header"]')
+    expect(header.text()).toBe('5 changes to review · 23 pts')
+    // Above the cards, not between them.
+    const html = wrapper.html()
+    expect(html.indexOf('approval-group-header')).toBeLessThan(html.indexOf('approval-card'))
+    // One Ink Approve, on the first card; the other four decide in outline.
+    expect(ink(wrapper)).toEqual([true, false, false, false, false])
+  })
+
+  it('counts only what is still open, and hands the Ink to the first undecided card', () => {
+    chat.messages = [
+      turnWith([
+        gated('c1', 'DS-7', 'approval-responded', true),
+        gated('c2', 'DS-8'),
+        gated('c3', 'DS-11'),
+      ]),
+    ]
+    const wrapper = mount(ChatMessageList)
+
+    expect(wrapper.get('[data-testid="approval-group-header"]').text()).toBe(
+      '2 changes to review · 5 pts',
+    )
+    expect(ink(wrapper)).toEqual([true, false])
+  })
+
+  it('needs no header for a single card, which keeps its Ink Approve', () => {
+    chat.messages = [turnWith([gated('c1', 'DS-7')])]
+    const wrapper = mount(ChatMessageList)
+
+    expect(wrapper.find('[data-testid="approval-group-header"]').exists()).toBe(false)
+    expect(ink(wrapper)).toEqual([true])
+  })
+
+  it('drops the header once every card in the group is decided', () => {
+    chat.messages = [
+      turnWith([
+        gated('c1', 'DS-7', 'approval-responded', true),
+        gated('c2', 'DS-8', 'approval-responded', false),
+      ]),
+    ]
+    const wrapper = mount(ChatMessageList)
+    expect(wrapper.find('[data-testid="approval-group-header"]').exists()).toBe(false)
+  })
+})

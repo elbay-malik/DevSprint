@@ -6,6 +6,19 @@ import { WORKSPACE_ENDPOINT } from '@/lib/api'
 
 export type WorkspaceSource = 'seed' | 'api'
 
+/** How long a card that just changed status stays marked; main.css animates it. */
+export const CHANGE_HIGHLIGHT_MS = 1500
+
+/** Keys of the issues whose status differs between two reads of the board. */
+export function changedStatusKeys(previous: Workspace, next: Workspace): Set<string> {
+  const before = new Map(previous.issues.map((issue) => [issue.key, issue.status]))
+  return new Set(
+    next.issues
+      .filter((issue) => before.has(issue.key) && before.get(issue.key) !== issue.status)
+      .map((issue) => issue.key),
+  )
+}
+
 /**
  * Workspace state. Starts from the shared seed so the board renders instantly
  * (and keeps working while the api Worker is down), then `hydrate()` swaps in
@@ -18,14 +31,33 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const workspace = ref<Workspace>(createWorkspaceSeed())
   const source = ref<WorkspaceSource>('seed')
   const hydrating = ref(false)
+  /**
+   * Issues whose status the last read changed, marked on the board for
+   * CHANGE_HIGHLIGHT_MS so an approved move is seen landing rather than found.
+   */
+  const recentlyChanged = ref<ReadonlySet<string>>(new Set())
   let warned = false
+  let clearChanged: ReturnType<typeof setTimeout> | undefined
+
+  function markChanged(keys: ReadonlySet<string>): void {
+    clearTimeout(clearChanged)
+    recentlyChanged.value = keys
+    if (keys.size === 0) return
+    clearChanged = setTimeout(() => {
+      recentlyChanged.value = new Set()
+    }, CHANGE_HIGHLIGHT_MS)
+  }
 
   async function hydrate(): Promise<void> {
     hydrating.value = true
     try {
       const response = await fetch(WORKSPACE_ENDPOINT)
       if (!response.ok) throw new Error(`GET ${WORKSPACE_ENDPOINT} responded ${response.status}`)
-      workspace.value = (await response.json()) as Workspace
+      const next = (await response.json()) as Workspace
+      // Only a change between two reads of the Worker is news. The first read
+      // replaces the seed, and whatever differs there was never shown as live.
+      if (source.value === 'api') markChanged(changedStatusKeys(workspace.value, next))
+      workspace.value = next
       source.value = 'api'
     } catch (error) {
       // Expected whenever the Worker is not running locally: fall back to the
@@ -35,6 +67,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       // board showing the Worker's data under a "seed data" badge.
       workspace.value = createWorkspaceSeed()
       source.value = 'seed'
+      markChanged(new Set())
       if (!warned) {
         warned = true
         console.warn('[workspace] api unreachable, showing seed data:', error)
@@ -61,6 +94,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     source,
     hydrating,
     hydrate,
+    recentlyChanged,
     activeSprint,
     sprintIssues,
     backlogIssues,

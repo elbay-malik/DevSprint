@@ -1,18 +1,22 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { isToolUIPart } from 'ai'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { useDevSprintChat } from '../composables/useDevSprintChat'
 import {
   approvalOutcome,
   approvalOutcomeLine,
   changesNeedApproval,
+  changesToReview,
   pendingApprovalCount,
+  pendingStatusMoves,
 } from '../lib/approvals'
 import ApprovalCard from './ApprovalCard.vue'
 import ChatText from './ChatText.vue'
 import ToolResultCard from './ToolResultCard.vue'
 
 const chat = useDevSprintChat()
+const workspace = useWorkspaceStore()
 const root = ref<HTMLElement>()
 
 const busy = computed(() => chat.status === 'submitted' || chat.status === 'streaming')
@@ -36,6 +40,42 @@ function isLive(messageId: string): boolean {
 function isApprovalPart(part: { approval?: unknown }): boolean {
   return part.approval !== undefined
 }
+
+/** How a message's approval cards read as a set. */
+interface ApprovalGroup {
+  /** The card that holds the message's one Ink button: the first undecided one. */
+  leadId?: string
+  /** Where the group's one-line header goes, when the message asks for two or more. */
+  headerAt?: number
+  /** "5 changes to review · 23 pts". */
+  header?: string
+}
+
+/**
+ * Five cards in a row are one review, not five unrelated asks, so a message
+ * with two or more gets a header that counts what is still open and what it
+ * weighs on the board. Each card keeps its own decision; only the first open
+ * one spends the Ink (DESIGN.md, "Ink once per region").
+ */
+function approvalGroupOf(parts: readonly object[]): ApprovalGroup {
+  const gated = (parts as (ToolPartLike & { approval?: unknown })[])
+    .map((part, index) => ({ part, index }))
+    .filter(({ part }) => part.approval !== undefined)
+  const open = gated.filter(({ part }) => part.state === 'approval-requested')
+  const group: ApprovalGroup = { leadId: open[0]?.part.toolCallId }
+  if (gated.length < 2 || open.length === 0) return group
+
+  const points = [...pendingStatusMoves(parts).keys()].reduce(
+    (sum, key) =>
+      sum + (workspace.workspace.issues.find((issue) => issue.key === key)?.points ?? 0),
+    0,
+  )
+  return { ...group, headerAt: gated[0]?.index, header: changesToReview(open.length, points) }
+}
+
+const approvalGroups = computed(
+  () => new Map(chat.messages.map((message) => [message.id, approvalGroupOf(message.parts)])),
+)
 
 /**
  * A deployment is gated *and* long-running, so it needs both: the approval card
@@ -239,9 +279,19 @@ watch(
             deployment is the one part that wants both.
           -->
           <template v-else-if="isToolUIPart(part)">
+            <!-- In the bubble's text colour: Graphite on Paper Tint is under
+                 4.5:1 at 12px. -->
+            <p
+              v-if="approvalGroups.get(message.id)?.headerAt === index"
+              data-testid="approval-group-header"
+              class="text-xs font-medium tabular-nums"
+            >
+              {{ approvalGroups.get(message.id)?.header }}
+            </p>
             <ApprovalCard
               v-if="isApprovalPart(part)"
               :part="part"
+              :lead="approvalGroups.get(message.id)?.leadId === part.toolCallId"
               :data-call-id="part.toolCallId"
             />
             <ToolResultCard

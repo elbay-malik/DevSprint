@@ -3,7 +3,9 @@ import {
   approvalOutcome,
   approvalOutcomeLine,
   changesNeedApproval,
+  changesToReview,
   pendingApprovalCount,
+  pendingStatusMoves,
 } from './approvals'
 
 describe('approvalOutcome', () => {
@@ -74,5 +76,69 @@ describe('changesNeedApproval', () => {
   it('agrees with its count', () => {
     expect(changesNeedApproval(1)).toBe('1 change needs your approval.')
     expect(changesNeedApproval(5)).toBe('5 changes need your approval.')
+  })
+})
+
+describe('pendingStatusMoves', () => {
+  const statusChange = (issueKey: string, status: string, state = 'approval-requested') => ({
+    type: 'tool-update_issue_status',
+    toolCallId: `call-${issueKey}`,
+    state,
+    input: { issueKey, status },
+    approval: { id: `a-${issueKey}` },
+  })
+
+  it('maps each open status change to the issue it would move and where', () => {
+    const moves = pendingStatusMoves([
+      { type: 'text', text: 'Closing out.' },
+      statusChange('DS-7', 'done'),
+      statusChange('DS-11', 'done'),
+    ])
+    expect([...moves]).toEqual([
+      ['DS-7', 'done'],
+      ['DS-11', 'done'],
+    ])
+  })
+
+  it('drops a change once it is answered, and ignores writes with no card on the board', () => {
+    const moves = pendingStatusMoves([
+      statusChange('DS-7', 'done', 'approval-responded'),
+      {
+        type: 'tool-create_issue',
+        toolCallId: 'c2',
+        state: 'approval-requested',
+        input: { title: 'New one', type: 'feature' },
+        approval: { id: 'a2' },
+      },
+    ])
+    expect(moves.size).toBe(0)
+  })
+
+  it('reads a dynamic tool part by its tool name', () => {
+    const moves = pendingStatusMoves([
+      {
+        type: 'dynamic-tool',
+        toolName: 'update_issue_status',
+        toolCallId: 'c1',
+        state: 'approval-requested',
+        input: { issueKey: 'DS-9', status: 'in_review' },
+      },
+    ])
+    expect(moves.get('DS-9')).toBe('in_review')
+  })
+
+  it('has nothing pending for a message with no parts', () => {
+    expect(pendingStatusMoves(undefined).size).toBe(0)
+  })
+})
+
+describe('changesToReview', () => {
+  it('counts the open changes and what they weigh', () => {
+    expect(changesToReview(5, 23)).toBe('5 changes to review · 23 pts')
+    expect(changesToReview(1, 1)).toBe('1 change to review · 1 pt')
+  })
+
+  it('leaves the points off when none of the changes carries any', () => {
+    expect(changesToReview(2, 0)).toBe('2 changes to review')
   })
 })
