@@ -54,6 +54,12 @@ typography:
     fontSize: '0.75rem'
     fontWeight: 400
     lineHeight: 1.333
+  chart-label:
+    fontFamily: 'Geist Variable, sans-serif'
+    fontSize: '0.6875rem'
+    fontWeight: 400
+    lineHeight: 1
+    fontFeature: 'tnum'
 rounded:
   sm: '6px'
   md: '8px'
@@ -172,9 +178,9 @@ An achromatic ink-and-paper ramp, with three signal hues that each carry a meani
 
 ### Primary
 
-- **Ink** (oklch(0.205 0 0)): the one affirmative action per region (Send, Approve) and the user's
-  own chat bubble. In dark mode the roles invert: the primary fill becomes Rule (oklch(0.922 0 0))
-  with Ink text.
+- **Ink** (oklch(0.205 0 0)): the one affirmative action per region (Send, Approve), or the safe
+  default (Deny) when the affirmative cannot land, and the user's own chat bubble. In dark mode the
+  roles invert: the primary fill becomes Rule (oklch(0.922 0 0)) with Ink text.
 
 ### Neutral
 
@@ -200,8 +206,8 @@ An achromatic ink-and-paper ramp, with three signal hues that each carry a meani
   failed stages and removed sections. On the error card it is tinted (a 40% border on Paper), so an
   error reads as information, not an alarm. Token: `--destructive`.
 - **Go Green** (oklch(0.508 0.118 165.612); dark oklch(0.765 0.177 163.223)): success and
-  completion. Succeeded stages and runs, added sections, and "ok" tool states. Token: `--success`
-  (`text-success`).
+  completion. Succeeded stages and runs, added sections, "ok" tool states, and the 1.5s ring on a
+  board card whose status just changed. Token: `--success` (`text-success`).
 - **Trace Blue** (oklch(0.55 0.163 255.53), #2070ce; dark oklch(0.622 0.161 255.05), #3987e5): the
   measured data line. Used only for the "Remaining" series of the burndown chart and its end
   label, which is small text, so the light value holds 4.91:1 on Paper (dark 5.44:1). Token:
@@ -238,9 +244,9 @@ instrument readout: wherever something can be copied, matched or referenced, it 
   tracked, and no label sits above a heading: the heading carries its own weight.
 - **Mono** (400, 12px): issue keys, tool names, versions, environments, stage names, error codes,
   log lines and inline code (at 0.85em).
-- Chart labels (axis values, dates, "today" and the line-end values) are 11px tabular at real
-  size, the one size below Caption. The chart's viewBox follows the width it is drawn at, so an
-  SVG unit is a CSS pixel and no label shrinks in a narrow column.
+- **Chart Label** (400, 11px, tabular): the chart's axis values, dates, "today" and the line-end
+  values, drawn at real size, the one size below Caption. The chart's viewBox follows the width it
+  is drawn at, so an SVG unit is a CSS pixel and no label shrinks in a narrow column.
 
 ### Named Rules
 
@@ -288,10 +294,11 @@ regions (the board pane, the chat scroller) have no border to recolour, so they 
 `--ring` outline: offset 2px on disclosures, and drawn inside on scroll regions, where an outer
 outline would be clipped. That rule lives once in `main.css`, not per component.
 
-Two more rings belong to the board, both outlines 2px off the card, so neither touches its 10%
-hairline. A **dashed** `--ring` outline marks an issue a pending approval would move, and a
-**solid** `--ring` outline marks, for 1.5s, an issue the last read of the
-board moved (see Board cards).
+Two more rings belong to the board, both 1px and drawn inside the card's own edge, so a marked
+card keeps its footprint and stacked cards never merge. A **dashed** `--ring` outline, in place of
+the 10% hairline, marks an issue a pending approval would move, and a **solid** Go Green
+(`--success`) ring marks, for 1.5s, an issue the last read of the board moved (see Board cards).
+Neither is solid Graphite, so neither reads as focus.
 
 ### Named Rules
 
@@ -325,8 +332,9 @@ decision or a result lives.
 - **Shape:** gently rounded, 10px for the default 32px height and 8px for the 28px size used in
   cards and the header.
 - **Primary:** an Ink fill with Bright Paper text, reserved for the single affirmative action in a
-  region (Send, Approve). A message holding several open approval cards is one region: only the
-  first undecided card's Approve is Ink, and the others decide in outline.
+  region (Send, Approve), or for the safe default (Deny) when the affirmative cannot land. A
+  message holding several open approval cards is one region: only the first undecided card's
+  Approve is Ink, and the others decide in outline.
 - **Outline:** a Rule border on Paper, for secondary or abortive actions (Reset board, Stop, Deny,
   Cancel deploy).
 - **Secondary / Ghost:** Paper Tint fill or transparent. They pair as a toggle, with
@@ -350,16 +358,18 @@ decision or a result lives.
 - **Board cards:** 14px corners on Paper with a 1px ring at 10%, 12px padding, a mono key and an
   outline points badge on top, and the title in 14px medium.
 - **Pending move (board card):** while an approval card asks to change an issue's status, its
-  board card takes a 2px dashed `--ring` outline, offset 2px, and a 12px medium caption in the
-  text colour naming the destination ("→ Done", from the shared status labels; screen readers hear
-  "Awaiting approval to move to Done"). It is read from the chat's open `update_issue_status`
-  cards, and it goes the moment the card is answered. New issues have no card to mark.
+  board card swaps its hairline for a 1px dashed `--ring` outline drawn inside its edge (offset
+  -1px), so it keeps its footprint and aligns with the column heading, and takes a 12px medium
+  caption in the text colour naming the destination ("→ Done", from the shared status labels;
+  screen readers hear "Awaiting approval to move to Done"). It is read from the chat's open
+  `update_issue_status` cards, matching keys the way the api does (trimmed, any case), and it goes
+  the moment the card is answered. New issues have no card to mark.
 - **Changed (board card):** when a read of the board finds an issue's status changed since the
-  last read, the card is marked for 1.5s: a 2px solid `--ring` outline settles from 5px out to 2px
-  on an exponential ease-out, holds, then fades. It takes no background tint, since
-  the card's muted text is 4.73:1 on Paper and any ink tint past about 2% drops it under 4.5:1. Under reduced motion the
-  outline is simply there for the same 1.5s. The first read, which replaces the seed, marks
-  nothing.
+  last read, the card is marked for 1.5s: a 1px solid Go Green (`--success`) ring inside its edge
+  (offset -1px) holds, then fades on an exponential ease-out. It takes no background tint, since
+  the card's muted text is 4.73:1 on Paper and any tint past about 2% drops it under 4.5:1. Under
+  reduced motion the ring is simply there for the same 1.5s. The first read, which replaces the
+  seed, marks nothing, and a read that moves nothing lets a running mark finish.
 - **Chat cards:** a shared shell of 8px corners, a 1px Rule border on Paper, 8 by 12px padding and
   12px type, inset inside the Paper Tint assistant bubble. This covers the issue table, burndown,
   release-notes diff, deployment progress, approval and tool chip.
@@ -439,8 +449,8 @@ moves the readout to the hovered day.
 - **Do** set identifiers in monospace and numbers in tabular figures.
 - **Do** separate surfaces with a 1px ring at 10% or a tonal step, and keep 14px corners for board
   cards and 8px for chat cards.
-- **Do** spend the Ink-filled button once per region, on the affirmative action, and use outline
-  for everything secondary or abortive.
+- **Do** spend the Ink-filled button once per region, on the affirmative action, or on the safe
+  default (Deny) when the affirmative cannot land, and use outline for everything else.
 - **Do** check every change in both themes at WCAG 2.2 AA.
 - **Do** theme the browser's own surfaces: `color-scheme` per theme, an ink-tint selection, Rule-coloured
   scrollbars, a `theme-color` that follows the chosen theme (not only the OS), and the theme applied
