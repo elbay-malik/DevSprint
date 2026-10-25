@@ -14,7 +14,7 @@ An AI copilot for a sprint board, built to show how an agent can be **useful wit
 
 ## Try it
 
-The live demo runs a **real model**: Groq's `openai/gpt-oss-120b`, with Gemini 2.5 Flash taking
+The live demo runs a **real model**: Groq's `openai/gpt-oss-120b`, with Gemini 3.8 Flash taking
 over when Groq fails or hits its rate limit. Ask it anything about the board. These six prompts
 are the demo scenarios, and each one exercises a different part of the system. A real model words
 its answers its own way, and may take a slightly different route than described here:
@@ -91,7 +91,7 @@ tests are checked as well as run:
   100 only ever sees the empty first page, and missed three real violations.
 - **Deploy smoke checks.** Each one names the misconfiguration it catches.
 
-**By the numbers:** 342 unit and eval tests, 29 browser tests, and Lighthouse 100 / 100 / 100 /
+**By the numbers:** 365 unit and eval tests, 29 browser tests, and Lighthouse 100 / 100 / 100 /
 100 on the live site, on mobile and desktop.
 
 ## What it deliberately doesn't do
@@ -136,9 +136,10 @@ locally, copy `apps/api/.dev.vars.example` to `apps/api/.dev.vars` and set `GROQ
 
 Routing follows [ADR-0005](docs/adr/0005-model-routing-groq-primary-gemini-fallback.md) and
 [ADR-0021](docs/adr/0021-a-live-model-on-the-demo.md). Groq `openai/gpt-oss-120b` is primary,
-since Groq retired `llama-3.3-70b-versatile`. Gemini `gemini-2.5-flash` is the fallback, used when
-Groq fails with a retryable error, a 429 or a 5xx. `MODEL_PROVIDER` takes `auto`, `groq`, `gemini`
-or `mock`. `wrangler.jsonc` sets `auto`, which falls back to the mock when no keys are set, so a
+since Groq retired `llama-3.3-70b-versatile`. Gemini `gemini-3.8-flash` is the fallback, since
+Google no longer offers `gemini-2.5-flash` to new users. It is used when Groq fails with a
+retryable error, a 429 or a 5xx. `MODEL_PROVIDER` takes `auto`, `groq`, `gemini` or `mock`.
+`wrangler.jsonc` sets `auto`, which falls back to the mock when no keys are set, so a
 fresh clone still runs without any. Each response reports the resolved route in the `X-DevSprint-Model` header.
 Two spend controls bound a live model: 60 chat requests a minute per IP, and a 100,000-token
 daily cap that the mock never counts against.
@@ -195,14 +196,15 @@ Pushes to `main` run it in CI once both test jobs pass. Details are in
 
 ## Repository layout
 
-| Path              | Package                 | What it is                                                    |
-| ----------------- | ----------------------- | ------------------------------------------------------------- |
-| `apps/web`        | `@devsprint/web`        | Vue 3 SPA: Vite 8, Pinia, shadcn-vue (Reka UI, Tailwind v4)   |
-| `apps/api`        | `@devsprint/api`        | Hono Worker: chat route, agent loop, workspace Durable Object |
-| `apps/mcp-issues` | `@devsprint/mcp-issues` | Public issues MCP server, Streamable HTTP and stateless       |
-| `packages/shared` | `@devsprint/shared`     | Domain types, tool schemas, seed fixtures                     |
-| `scripts/`        | (root)                  | `deploy.ts`, `smoke.ts`, `ci-local.ts`                        |
-| `docs/`           | (none)                  | Product brief, domain model, scenarios, wireframes, ADRs      |
+| Path                      | Package                 | What it is                                                                               |
+| ------------------------- | ----------------------- | ---------------------------------------------------------------------------------------- |
+| `apps/web`                | `@devsprint/web`        | Vue 3 SPA: Vite 8, Pinia, shadcn-vue (Reka UI, Tailwind v4)                              |
+| `apps/api`                | `@devsprint/api`        | Hono Worker: chat route, agent loop, workspace Durable Object                            |
+| `apps/mcp-issues`         | `@devsprint/mcp-issues` | Public issues MCP server, Streamable HTTP and stateless                                  |
+| `packages/shared`         | `@devsprint/shared`     | Domain types, tool schemas, seed fixtures                                                |
+| `scripts/`                | (root)                  | `deploy.ts`, `smoke.ts`, `ci-local.ts`                                                   |
+| `docs/`                   | (none)                  | Product brief, domain model, scenarios, wireframes, demo-video storyboard, roadmap, ADRs |
+| `PRODUCT.md`, `DESIGN.md` | (root)                  | The product record and the design system (tokens mirrored in `.impeccable/design.json`)  |
 
 The [roadmap](docs/roadmap.md) records all 16 phases, from design docs to this write-up, with what
 each one actually found.
