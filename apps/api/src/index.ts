@@ -114,6 +114,45 @@ app.get(API_ROUTES.workspace, async (c) => c.json(await workspaceOf(c.env).snaps
 app.post(API_ROUTES.workspaceReset, async (c) => c.json(await workspaceOf(c.env).reset()))
 
 /**
+ * Undoes one approved board write — an approval card's Undo button.
+ *
+ * The body names the change and nothing else: `{ changeId }`, the id the
+ * write's own result carried. What to put back comes from the workspace's
+ * record of that write, taken when it landed (workspace/changes.ts), so a
+ * client cannot use this to write arbitrary state — at most it can reverse a
+ * write that really happened, once, while the issue still reads what that
+ * write left. Open for the same reason reset is (see the README): it is a
+ * person's action on the shared demo board, not something the agent can reach.
+ *
+ * The copilot's transcript never hears about it. That is fine, because the
+ * agent re-reads the board through its tools before it answers.
+ */
+app.post(API_ROUTES.workspaceUndo, async (c) => {
+  let body: unknown
+  try {
+    body = await c.req.json()
+  } catch {
+    return invalidInput(c, 'Request body must be JSON.')
+  }
+  const changeId =
+    typeof body === 'object' && body !== null && 'changeId' in body ? body.changeId : undefined
+  if (typeof changeId !== 'string') return invalidInput(c, '`changeId` must be a string.')
+
+  const result = await workspaceOf(c.env).undoChange({ changeId })
+  if (!result.ok) {
+    console.warn(JSON.stringify({ event: 'undo-refused', code: result.error.code }))
+    // Refused because the board has moved on, not because the request was
+    // wrong — a 409, like a cancel that arrives after the run settled.
+    return c.json(result, result.error.code === 'UNDO_CONFLICT' ? 409 : 400)
+  }
+  // The same one-JSON-line record an agent step leaves, so an undo shows up in
+  // the log beside the write it reversed.
+  const { tool, issueKey, outcome } = result.data
+  console.log(JSON.stringify({ event: 'undo', changeId, tool, issueKey, outcome }))
+  return c.json(result)
+})
+
+/**
  * Cancels a running deployment (scenario S-C, variant C2).
  *
  * The obvious design is to hang cancellation off the request's abort signal —

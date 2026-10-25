@@ -16,6 +16,8 @@ export const API_ROUTES = {
   chat: '/api/chat',
   workspace: '/api/workspace',
   workspaceReset: '/api/workspace/reset',
+  /** `POST /api/workspace/undo` with `{ changeId }` — an approved card's Undo button. */
+  workspaceUndo: '/api/workspace/undo',
   /** `POST /api/deployments/:id/cancel` — the progress card's Cancel button. */
   deploymentCancel: '/api/deployments/:id/cancel',
 } as const

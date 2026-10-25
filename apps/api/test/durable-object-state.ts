@@ -24,13 +24,17 @@ export function fakeDurableObjectState() {
 
   const storage = {
     get: <T>(key: string) => Promise.resolve(data.get(key) as T | undefined),
-    put: (key: string, value: unknown) => {
-      if (failNextPutForAnyKey || failNextPutFor === key) {
+    // Both forms the real storage takes: one key, or several written
+    // atomically — which is why a failure for any key in a batch writes none.
+    put: (keyOrEntries: string | Record<string, unknown>, value?: unknown) => {
+      const entries = typeof keyOrEntries === 'string' ? { [keyOrEntries]: value } : keyOrEntries
+      const keys = Object.keys(entries)
+      if (failNextPutForAnyKey || (failNextPutFor !== null && keys.includes(failNextPutFor))) {
         failNextPutFor = null
         failNextPutForAnyKey = false
-        return Promise.reject(new Error(`fake storage.put failed for '${key}'`))
+        return Promise.reject(new Error(`fake storage.put failed for '${keys.join(', ')}'`))
       }
-      data.set(key, value)
+      for (const key of keys) data.set(key, entries[key])
       return Promise.resolve()
     },
     delete: (key: string) => Promise.resolve(data.delete(key)),

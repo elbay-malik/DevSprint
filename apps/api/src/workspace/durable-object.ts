@@ -20,6 +20,7 @@ import type {
   RunDeploymentInput,
   SetDeploymentStageInput,
   FinishDeploymentInput,
+  UndoChangeInput,
 } from '@devsprint/shared/tools'
 import {
   diffReleaseNotes,
@@ -30,13 +31,18 @@ import {
   searchIssues,
 } from './queries'
 import {
-  createIssue,
   createReleaseNotes,
   finishDeployment,
   setDeploymentStage,
   startDeployment,
-  updateIssueStatus,
 } from './mutations'
+import {
+  createIssueTracked,
+  undoChange,
+  updateIssueStatusTracked,
+  type BoardChange,
+  type Tracked,
+} from './changes'
 import { nextUtcMidnightAfter } from './reset-schedule'
 
 const STORAGE_KEY = 'workspace'
@@ -58,6 +64,12 @@ const LEDGER_KEY = 'spent-approvals'
  * close) and avoids `saveLedger` throwing on a very busy one instead.
  */
 const LEDGER_MAX = 1500
+/**
+ * What each recorded board write changed, for undo — bounded by `CHANGES_MAX`
+ * in changes.ts. Its own key, saved in the same `put` as the board, so the two
+ * can never disagree about whether a write or an undo happened.
+ */
+const CHANGES_KEY = 'board-changes'
 /**
  * A ceiling on the serialized board, well under what the storage backend takes.
  * `WorkspaceDO` is registered under `new_sqlite_classes`, so the real limit is
@@ -101,6 +113,8 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
   private workspace: Workspace | undefined
   /** Cached between calls, same as the workspace above. */
   private ledger: Set<string> | undefined
+  /** Cached between calls, same as the workspace above. */
+  private changes: BoardChange[] | undefined
 
   constructor(ctx: DurableObjectState, env: Cloudflare.Env) {
     super(ctx, env)
@@ -154,8 +168,20 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
    * Durable Object that already serialises the whole board on every write.
    */
   private async mutate<T>(apply: (draft: Workspace) => ToolResult<T>): Promise<ToolResult<T>> {
+    return this.commit((draft) => ({ result: apply(draft) }))
+  }
+
+  /**
+   * `mutate`, for a write that also records itself for undo (or is one). The
+   * journal it hands back is adopted on the same terms as the board: only once
+   * storage has taken both, in one `put`, so a rejected write leaves neither a
+   * change on the board nor a record of one.
+   */
+  private async commit<T>(
+    apply: (draft: Workspace, changes: readonly BoardChange[]) => Tracked<T>,
+  ): Promise<ToolResult<T>> {
     const draft = structuredClone(await this.load())
-    const result = apply(draft)
+    const { result, changes } = apply(draft, await this.loadChanges())
     if (!result.ok) return result
 
     // A bound on the whole board, not just each field. Field-level limits in
@@ -173,8 +199,27 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
       }
     }
 
-    await this.save(draft)
+    if (changes === undefined) {
+      await this.save(draft)
+    } else {
+      await this.ctx.storage.put({ [STORAGE_KEY]: draft, [CHANGES_KEY]: changes })
+      this.workspace = draft
+      this.changes = changes
+    }
     return result
+  }
+
+  private async loadChanges(): Promise<BoardChange[]> {
+    this.changes ??= (await this.ctx.storage.get<BoardChange[]>(CHANGES_KEY)) ?? []
+    return this.changes
+  }
+
+  /**
+   * A fresh change id, and real wall-clock time like the reset alarm's — the
+   * demo clock is for the board's own timestamps.
+   */
+  private stamp() {
+    return { changeId: crypto.randomUUID(), at: new Date(Date.now()).toISOString() }
   }
 
   private async loadLedger(): Promise<Set<string>> {
@@ -200,10 +245,16 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
    * approvals against issues and deployments reset back to a shape they no
    * longer match. A real deployment would want the ledger scoped to something
    * a reset does not touch.
+   *
+   * The undo journal goes with the board, in the same write: its records name
+   * issues the seed may not have, or has in a different state, so every undo
+   * from before a reset is refused as unknown afterwards.
    */
   async reset(): Promise<Workspace> {
     const seeded = createWorkspaceSeed()
-    await this.save(seeded)
+    await this.ctx.storage.put({ [STORAGE_KEY]: seeded, [CHANGES_KEY]: [] })
+    this.workspace = seeded
+    this.changes = []
     this.ledger = new Set()
     await this.saveLedger()
     return seeded
@@ -306,13 +357,25 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
   // Each runs its mutation through `mutate`, which works on a copy and adopts it
   // only once storage has taken the write — so a rejected write leaves no trace
   // in storage *or* in the cache.
+  //
+  // The two issue writes also record what they changed as they land, whichever
+  // client made them, so an approved card can offer an undo (changes.ts).
 
   async createIssue(input: CreateIssueInput) {
-    return this.mutate((draft) => createIssue(draft, input))
+    const stamp = this.stamp()
+    return this.commit((draft, changes) => createIssueTracked(draft, input, { changes, ...stamp }))
   }
 
   async updateIssueStatus(input: UpdateIssueStatusInput) {
-    return this.mutate((draft) => updateIssueStatus(draft, input))
+    const stamp = this.stamp()
+    return this.commit((draft, changes) =>
+      updateIssueStatusTracked(draft, input, { changes, ...stamp }),
+    )
+  }
+
+  async undoChange(input: UndoChangeInput) {
+    const { at } = this.stamp()
+    return this.commit((draft, changes) => undoChange(draft, changes, input.changeId, at))
   }
 
   async createReleaseNotes(input: CreateReleaseNotesInput) {

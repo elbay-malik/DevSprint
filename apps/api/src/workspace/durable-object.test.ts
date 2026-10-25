@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WorkspaceDO } from './durable-object'
+import type { BoardChange } from './changes'
 import { fakeDurableObjectState } from '../../test/durable-object-state'
 
 /**
@@ -266,6 +267,102 @@ describe('WorkspaceDO — approval ledger', () => {
     await expect(stub.spendApprovals(['a0'])).resolves.toEqual([])
     // Everything else spent in that call is still remembered.
     await expect(stub.spendApprovals(['a2000'])).resolves.toEqual(['a2000'])
+  })
+})
+
+describe('WorkspaceDO — undo journal', () => {
+  async function approvedDone(stub: WorkspaceDO) {
+    const result = await stub.updateIssueStatus({ issueKey: 'DS-7', status: 'done' })
+    if (!result.ok || result.data.changeId === undefined) throw new Error('write was not recorded')
+    return result.data.changeId
+  }
+
+  it('mints a change id on every recorded write', async () => {
+    const { stub } = await freshDO()
+    const first = await approvedDone(stub)
+    const created = await stub.createIssue({
+      title: 'Flaky login test',
+      type: 'bug',
+      priority: 'high',
+      sprintId: null,
+    })
+
+    expect(first).toMatch(/^[0-9a-f-]{36}$/)
+    expect(created.ok && created.data.changeId).toMatch(/^[0-9a-f-]{36}$/)
+    expect(created.ok && created.data.changeId).not.toBe(first)
+  })
+
+  it('persists the record with the board, so an undo survives a fresh load', async () => {
+    const fake = fakeDurableObjectState()
+    const first = new WorkspaceDO(fake.ctx, {} as Cloudflare.Env)
+    await fake.ready()
+    const changeId = await approvedDone(first)
+
+    const second = new WorkspaceDO(fake.ctx, {} as Cloudflare.Env)
+    await fake.ready()
+    const undone = await second.undoChange({ changeId })
+
+    expect(undone.ok).toBe(true)
+    expect((await second.snapshot()).issues.find((issue) => issue.key === 'DS-7')?.status).toBe(
+      'in_review',
+    )
+  })
+
+  it('reads the before-state from its own storage', async () => {
+    // Rewrite the stored record behind the object's back, then load fresh:
+    // the undo follows the record, which is the only thing it ever consults.
+    const fake = fakeDurableObjectState()
+    const first = new WorkspaceDO(fake.ctx, {} as Cloudflare.Env)
+    await fake.ready()
+    const changeId = await approvedDone(first)
+    const stored = fake.raw.get('board-changes') as BoardChange[]
+    fake.raw.set('board-changes', [
+      { ...stored[0]!, before: { ...stored[0]!.before!, status: 'blocked' } },
+    ])
+
+    const second = new WorkspaceDO(fake.ctx, {} as Cloudflare.Env)
+    await fake.ready()
+    await second.undoChange({ changeId })
+
+    expect((await second.snapshot()).issues.find((issue) => issue.key === 'DS-7')?.status).toBe(
+      'blocked',
+    )
+  })
+
+  it('keeps neither the write nor its record when storage rejects them', async () => {
+    const { fake, stub } = await freshDO()
+    fake.failNextPut('board-changes')
+    await expect(stub.updateIssueStatus({ issueKey: 'DS-7', status: 'done' })).rejects.toThrow()
+
+    expect((await stub.snapshot()).issues.find((issue) => issue.key === 'DS-7')?.status).toBe(
+      'in_review',
+    )
+    expect(fake.raw.get('board-changes')).toBeUndefined()
+  })
+
+  it('keeps an undo the storage write rejected from landing in the cache', async () => {
+    const { fake, stub } = await freshDO()
+    const changeId = await approvedDone(stub)
+
+    fake.failNextPut('workspace')
+    await expect(stub.undoChange({ changeId })).rejects.toThrow()
+
+    expect((await stub.snapshot()).issues.find((issue) => issue.key === 'DS-7')?.status).toBe(
+      'done',
+    )
+    // Not marked undone either, so the retry still goes through.
+    await expect(stub.undoChange({ changeId })).resolves.toMatchObject({ ok: true })
+  })
+
+  it('forgets every change on reset', async () => {
+    const { fake, stub } = await freshDO()
+    const changeId = await approvedDone(stub)
+
+    await stub.reset()
+
+    const result = await stub.undoChange({ changeId })
+    expect(result.ok === false && result.error.code).toBe('UNDO_CONFLICT')
+    expect(fake.raw.get('board-changes')).toEqual([])
   })
 })
 

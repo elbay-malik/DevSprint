@@ -62,6 +62,155 @@ describe('POST /api/workspace/reset', () => {
   })
 })
 
+describe('POST /api/workspace/undo', () => {
+  afterEach(async () => {
+    await app.request('/api/workspace/reset', { method: 'POST' }, env)
+  })
+
+  function undo(body: unknown) {
+    return app.request(
+      '/api/workspace/undo',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: typeof body === 'string' ? body : JSON.stringify(body),
+      },
+      env,
+    )
+  }
+
+  /** An approved write, landed the way the tool layer lands it. */
+  async function applied(status: 'done' | 'blocked' = 'done') {
+    const { createLocalWorkspaceApi } = await import('./workspace/store')
+    const result = await createLocalWorkspaceApi(workspace.store).updateIssueStatus({
+      issueKey: 'DS-7',
+      status,
+    })
+    if (!result.ok || result.data.changeId === undefined) throw new Error('write was not recorded')
+    return result.data.changeId
+  }
+
+  const status = (key: string) => workspace.store.get().issues.find((i) => i.key === key)?.status
+
+  it('puts an approved status change back', async () => {
+    const changeId = await applied()
+    expect(status('DS-7')).toBe('done')
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const res = await undo({ changeId })
+
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toMatchObject({
+      ok: true,
+      data: { changeId, tool: 'update_issue_status', issueKey: 'DS-7', outcome: 'restored' },
+    })
+    expect(status('DS-7')).toBe('in_review')
+    // Recorded the same way an agent step is: one JSON line.
+    expect(log).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: 'undo',
+        changeId,
+        tool: 'update_issue_status',
+        issueKey: 'DS-7',
+        outcome: 'restored',
+      }),
+    )
+    log.mockRestore()
+  })
+
+  it('takes the before-state from the server, never the body', async () => {
+    const changeId = await applied()
+
+    const res = await undo({ changeId, before: { status: 'blocked' }, status: 'blocked' })
+
+    expect(res.status).toBe(200)
+    expect(status('DS-7')).toBe('in_review')
+  })
+
+  it('removes an approved created issue', async () => {
+    const { createLocalWorkspaceApi } = await import('./workspace/store')
+    const created = await createLocalWorkspaceApi(workspace.store).createIssue({
+      title: 'Flaky login test',
+      type: 'bug',
+      priority: 'high',
+      sprintId: null,
+    })
+    const { changeId, issue } = created.ok ? created.data : { changeId: '', issue: undefined }
+
+    const res = await undo({ changeId })
+
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toMatchObject({ data: { outcome: 'removed', issue: null } })
+    expect(workspace.store.get().issues.some((i) => i.key === issue?.key)).toBe(false)
+  })
+
+  it('refuses a second undo of the same change with a 409', async () => {
+    const changeId = await applied()
+    await undo({ changeId })
+
+    const res = await undo({ changeId })
+
+    expect(res.status).toBe(409)
+    await expect(res.json()).resolves.toMatchObject({ ok: false, error: { code: 'UNDO_CONFLICT' } })
+  })
+
+  it('refuses with a 409 when the issue has changed since', async () => {
+    const changeId = await applied()
+    const { updateIssueStatus } = await import('./workspace/mutations')
+    updateIssueStatus(workspace.store.get(), { issueKey: 'DS-7', status: 'in_progress' })
+
+    const res = await undo({ changeId })
+
+    expect(res.status).toBe(409)
+    expect(status('DS-7')).toBe('in_progress')
+  })
+
+  it('refuses a change from before a reset', async () => {
+    const changeId = await applied()
+    await app.request('/api/workspace/reset', { method: 'POST' }, env)
+
+    const res = await undo({ changeId })
+
+    expect(res.status).toBe(409)
+    await expect(res.json()).resolves.toMatchObject({ error: { code: 'UNDO_CONFLICT' } })
+  })
+
+  it('has no undo for a release-notes draft or a deployment', async () => {
+    const { createLocalWorkspaceApi } = await import('./workspace/store')
+    const api = createLocalWorkspaceApi(workspace.store)
+    const notes = await api.createReleaseNotes({ version: 'v9.0.0', markdown: '# v9.0.0' })
+    const deploy = await api.startDeployment({
+      environment: 'staging',
+      version: 'v9.9.9',
+      skipTests: false,
+    })
+    expect(notes.ok && 'changeId' in notes.data).toBe(false)
+    expect(deploy.ok && 'changeId' in deploy.data).toBe(false)
+
+    for (const id of [
+      notes.ok ? notes.data.releaseNote.id : '',
+      deploy.ok ? deploy.data.deployment.id : '',
+    ]) {
+      expect((await undo({ changeId: id })).status, id).toBe(409)
+    }
+  })
+
+  it('rejects a malformed or oversized id, or a body that is not JSON, with a 400', async () => {
+    for (const body of [
+      { changeId: 'x'.repeat(65) },
+      { changeId: '' },
+      { changeId: 'not an id' },
+      { changeId: 7 },
+      {},
+      'not json',
+    ]) {
+      const res = await undo(body)
+      expect(res.status, JSON.stringify(body)).toBe(400)
+      await expect(res.json()).resolves.toMatchObject({ error: { code: 'INVALID_INPUT' } })
+    }
+  })
+})
+
 describe('POST /api/deployments/:id/cancel', () => {
   // These add a deployment the seed does not have, and the store is shared
   // across the file, so put it back rather than leaving it for later tests.

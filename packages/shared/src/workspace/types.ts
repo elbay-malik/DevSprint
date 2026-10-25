@@ -130,6 +130,12 @@ export type ToolErrorCode =
   | 'STAGE_FAILED'
   /** The demo board has grown past what one Durable Object value should hold. */
   | 'WORKSPACE_FULL'
+  /**
+   * An undo the board can no longer honour: the issue has changed since, the
+   * change was already undone, or there is no record of it (a reset clears
+   * them all).
+   */
+  | 'UNDO_CONFLICT'
   | 'INVALID_INPUT'
 
 export interface ToolError {

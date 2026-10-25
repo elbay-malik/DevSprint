@@ -9,13 +9,18 @@ import {
   searchIssues,
 } from './queries'
 import {
-  createIssue,
   createReleaseNotes,
   finishDeployment,
   setDeploymentStage,
   startDeployment,
-  updateIssueStatus,
 } from './mutations'
+import {
+  createIssueTracked,
+  undoChange,
+  updateIssueStatusTracked,
+  type BoardChange,
+  type Tracked,
+} from './changes'
 
 export interface WorkspaceStore {
   /** The live workspace snapshot. */
@@ -24,6 +29,9 @@ export interface WorkspaceStore {
   reset(): void
   /** Approval ids already spent, mirroring the DO's persisted ledger (ADR-0014). */
   spentApprovals(): Set<string>
+  /** What each recorded board write changed, mirroring the DO's undo journal. */
+  changes(): readonly BoardChange[]
+  setChanges(changes: BoardChange[]): void
   /** Model tokens spent today, mirroring the DO's daily budget (ADR-0016). */
   modelUsage(): DailyModelUsage
   recordModelUsage(tokens: number): DailyModelUsage
@@ -48,13 +56,19 @@ export function createWorkspaceStore(): WorkspaceStore {
     return usage
   }
   let ledger = new Set<string>()
+  let changes: BoardChange[] = []
   return {
     get: () => workspace,
     reset: () => {
       workspace = createWorkspaceSeed()
       ledger = new Set()
+      changes = []
     },
     spentApprovals: () => ledger,
+    changes: () => changes,
+    setChanges: (next) => {
+      changes = next
+    },
     modelUsage: () => currentUsage(),
     recordModelUsage: (tokens) => {
       const current = currentUsage()
@@ -71,6 +85,16 @@ export function createWorkspaceStore(): WorkspaceStore {
  * both delegate to the same query and mutation functions.
  */
 export function createLocalWorkspaceApi(store: WorkspaceStore): WorkspaceApi {
+  /** Adopts the journal a write hands back, as the DO's `commit` does. */
+  const tracked = <T>({ result, changes }: Tracked<T>) => {
+    if (changes !== undefined) store.setChanges(changes)
+    return Promise.resolve(result)
+  }
+  const stamp = () => ({
+    changes: store.changes(),
+    changeId: crypto.randomUUID(),
+    at: new Date(Date.now()).toISOString(),
+  })
   return {
     snapshot: () => Promise.resolve(store.get()),
     reset: () => {
@@ -83,8 +107,12 @@ export function createLocalWorkspaceApi(store: WorkspaceStore): WorkspaceApi {
     getDeploymentHistory: (input) => Promise.resolve(getDeploymentHistory(store.get(), input)),
     getBurndown: (input) => Promise.resolve(getBurndown(store.get(), input)),
     diffReleaseNotes: (input) => Promise.resolve(diffReleaseNotes(store.get(), input)),
-    createIssue: (input) => Promise.resolve(createIssue(store.get(), input)),
-    updateIssueStatus: (input) => Promise.resolve(updateIssueStatus(store.get(), input)),
+    createIssue: (input) => tracked(createIssueTracked(store.get(), input, stamp())),
+    updateIssueStatus: (input) => tracked(updateIssueStatusTracked(store.get(), input, stamp())),
+    undoChange: (input) => {
+      const { changes, at } = stamp()
+      return tracked(undoChange(store.get(), changes, input.changeId, at))
+    },
     createReleaseNotes: (input) => Promise.resolve(createReleaseNotes(store.get(), input)),
     startDeployment: (input) => Promise.resolve(startDeployment(store.get(), input)),
     setDeploymentStage: (input) => Promise.resolve(setDeploymentStage(store.get(), input)),

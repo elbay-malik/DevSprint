@@ -36,6 +36,8 @@ import type {
   RunDeploymentData,
   SearchIssuesData,
   SprintStatusData,
+  UndoChangeData,
+  UndoChangeInput,
   UpdateIssueStatusData,
 } from './types'
 
@@ -86,6 +88,15 @@ export interface WorkspaceApi {
   createIssue(input: CreateIssueInput): Promise<ToolResult<CreateIssueData>>
   updateIssueStatus(input: UpdateIssueStatusInput): Promise<ToolResult<UpdateIssueStatusData>>
   createReleaseNotes(input: CreateReleaseNotesInput): Promise<ToolResult<CreateReleaseNotesData>>
+
+  /**
+   * Reverses one recorded board write — `createIssue` or `updateIssueStatus`,
+   * whose results carry the `changeId` — from the workspace's own record of
+   * what it changed. One-shot, and refused with `UNDO_CONFLICT` once the issue
+   * has moved on from what that write left, so it never overwrites a later
+   * change. Not a tool: like reset, it is a person's action in the SPA.
+   */
+  undoChange(input: UndoChangeInput): Promise<ToolResult<UndoChangeData>>
 
   /**
    * A deployment runs over several seconds, so it is persisted in steps rather

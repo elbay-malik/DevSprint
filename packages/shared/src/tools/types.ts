@@ -98,11 +98,21 @@ export interface ReleaseNotesDiffData {
   changedSections: ChangedSection[]
 }
 
-export interface CreateIssueData {
+/**
+ * Set on a board write the workspace recorded for undo. The id is minted by
+ * the workspace when the write lands, and it is all `POST /api/workspace/undo`
+ * takes: what to put back is read from the workspace's own record of the
+ * write, never from the client. Absent means there is nothing to undo.
+ */
+export interface UndoableWrite {
+  changeId?: string
+}
+
+export interface CreateIssueData extends UndoableWrite {
   issue: Issue
 }
 
-export interface UpdateIssueStatusData {
+export interface UpdateIssueStatusData extends UndoableWrite {
   issue: Issue
   previousStatus: IssueStatus
 }
@@ -118,6 +128,31 @@ export interface CreateReleaseNotesData {
  */
 export interface RunDeploymentData {
   deployment: Deployment
+}
+
+/**
+ * The writes an undo can reverse. Release notes and deployments are not on it:
+ * a draft is harmless to leave and a release cannot be un-shipped, so their
+ * cards never offer one.
+ */
+export const UNDOABLE_TOOL_NAMES = ['create_issue', 'update_issue_status'] as const
+export type UndoableToolName = (typeof UNDOABLE_TOOL_NAMES)[number]
+
+export interface UndoChangeInput {
+  /** The `changeId` the write's own result carried. */
+  changeId: string
+}
+
+export interface UndoChangeData {
+  changeId: string
+  tool: UndoableToolName
+  issueKey: string
+  /** `removed` takes a created issue off the board; `restored` puts its fields back. */
+  outcome: 'restored' | 'removed'
+  /** The issue as it now stands, or null once a created issue is removed. */
+  issue: Issue | null
+  /** Real wall-clock time, ISO-8601 UTC — unlike board timestamps, not the demo clock. */
+  undoneAt: string
 }
 
 /**
