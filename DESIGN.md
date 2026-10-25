@@ -262,7 +262,11 @@ the copilot follows, divided by a hairline, with a full screen of its own.
   42rem of pane the board has 2 columns, from 42rem 3, and from 56rem all 5 statuses sit in one
   row. Stats go from 2 across to 4 at 42rem. Gaps are 12px, and the backlog sits below as its own
   grid.
-- **Chat:** a text-only bubble spans at most 85% of the column, so the two speakers stay distinct.
+- **Chat:** the transcript is a `role="log"` named "Conversation" that does not speak itself
+  (`aria-live="off"`), and each bubble is an `<article>` named for its speaker ("You" or
+  "Copilot"). One always-mounted polite status line reports the turn instead of the stream: "The
+  copilot is working on your request…", then "Copilot replied." or "2 changes need your
+  approval.", and each recorded decision. A text-only bubble spans at most 85% of the column, so the two speakers stay distinct.
   An assistant bubble that holds cards spans the full column, because tables, charts and approval
   controls need the width. The user's bubble aligns to the end and the assistant's to the start.
 
@@ -354,9 +358,14 @@ decision or a result lives.
   colour at 30%, about 4.5% white, in dark mode), 14px text.
 - **Focus:** a `--ring` border with a 3px `--ring` halo at 50%.
 - **Error / Disabled:** a Stop Red border and a 20% ring when invalid. At 50% opacity with no
-  pointer when disabled, except the composer: while it is locked it stays at full opacity, and its
-  placeholder names what to do ("Approve or deny the change above to continue…", counting the
-  changes when several are pending), also exposed to screen readers via `aria-describedby`.
+  pointer when disabled, except the composer, which is never disabled: while a turn runs or
+  approvals are open it is read-only with `aria-disabled`, so it keeps the focus it holds, and it
+  stays at full opacity. While locked, its placeholder names what to do in a form short enough to
+  fit at 390px ("Decide on the change above", or "Decide on the 5 changes above"), and the full
+  sentence ("Approve or deny the 5 changes above to continue.") is exposed to screen readers via
+  `aria-describedby`.
+- **Size on phones:** every field, the approval card's reason input included, is 16px below the
+  medium breakpoint, so iOS does not zoom on focus. The reason input drops to 12px from md.
 
 ### Navigation
 
@@ -371,6 +380,13 @@ name), followed by a 14px medium headline (the one 14px line inside chat cards),
 arguments one `<details>` away. While pending, it holds a reason input, an outline Deny and a
 primary Approve. When resolved, the controls give way to one line, "Approved by you — applied."
 or "Denied: …", in Graphite, and in Stop Red only when an approved write failed.
+
+Decisions are followed by focus and by voice. The pending controls are a named group ("Decision:
+DS-7: In review → Done"). When a turn ends waiting on approvals, focus moves to the first open
+card's group. After each Approve or Deny it moves to the next open card, and back to the composer
+once none are left. Focus moves only when it was already in the chat pane or had fallen to the
+page, so someone working on the board is not pulled away. The outcome line is also what the
+transcript's status line announces.
 
 ### Deployment Progress (signature)
 
