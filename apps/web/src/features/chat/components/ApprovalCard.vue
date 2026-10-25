@@ -144,7 +144,7 @@ function respond(approved: boolean) {
     data-testid="approval-card"
     :data-state="part.state"
     :data-tool="toolName"
-    class="bg-background flex min-w-0 flex-col gap-2 rounded-md border px-3 py-2 text-xs"
+    class="bg-background flex min-w-0 scroll-mt-3 flex-col gap-2 rounded-md border px-3 py-2 text-xs"
   >
     <p class="text-muted-foreground font-medium">
       Approval required: <span class="font-mono">{{ toolName }}</span>

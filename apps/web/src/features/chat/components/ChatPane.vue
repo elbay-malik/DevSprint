@@ -110,7 +110,7 @@ watch(
     </header>
     <Separator />
     <ScrollArea class="min-h-0 flex-1">
-      <ChatMessageList />
+      <ChatMessageList @reveal="following = false" />
     </ScrollArea>
     <Separator />
     <ChatInput />

@@ -359,6 +359,40 @@ describe('ChatMessageList status and focus', () => {
     expect(document.activeElement).toBe(first)
   })
 
+  it('brings the group header into view with the first card, not just its buttons', async () => {
+    const scrolled: { el: Element; block: unknown }[] = []
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element, arg?: unknown) {
+      scrolled.push({ el: this, block: (arg as ScrollIntoViewOptions | undefined)?.block })
+    })
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+    try {
+      const wrapper = mount(Pane, { attachTo: document.body })
+      chat.status = 'submitted'
+      await nextTick()
+      chat.messages = [...chat.messages, turnWith([gated('c1', 'DS-7'), gated('c2', 'DS-9')])]
+      chat.status = 'streaming'
+      await nextTick()
+      chat.status = 'ready'
+      await nextTick()
+
+      // The browser's own focus scroll would hide the header and headline.
+      expect(focus).toHaveBeenLastCalledWith({ preventScroll: true })
+      // So the pane stops pinning the transcript to its bottom.
+      expect(wrapper.findComponent(ChatMessageList).emitted('reveal')).toHaveLength(1)
+      expect(scrolled[0]).toEqual({
+        el: wrapper.get('[data-testid="approval-group-header"]').element,
+        block: 'start',
+      })
+      expect(scrolled.at(-1)).toEqual({
+        el: wrapper.get('[data-call-id="c1"] [data-approval-focus]').element,
+        block: 'nearest',
+      })
+    } finally {
+      focus.mockRestore()
+      delete (Element.prototype as Partial<Element>).scrollIntoView
+    }
+  })
+
   it('announces each decision and moves on to the next open card, then the composer', async () => {
     chat.messages = [
       ...chat.messages,

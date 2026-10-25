@@ -23,6 +23,8 @@ import ToolResultCard from './ToolResultCard.vue'
 const chat = useDevSprintChat()
 const workspace = useWorkspaceStore()
 const root = ref<HTMLElement>()
+/** Before it scrolls a card into view, so the pane stops following the bottom. */
+const emit = defineEmits<{ reveal: [] }>()
 
 const busy = computed(() => chat.status === 'submitted' || chat.status === 'streaming')
 
@@ -174,6 +176,26 @@ function focusTarget(callId: string | undefined): HTMLElement | null {
   )
 }
 
+/**
+ * Focus a decision without letting the browser scroll just the button row into
+ * view: that hides the card's own headline, and on the first card the group
+ * header above it. The card (or the header) is brought to the top instead, and
+ * the decision row only nudged into view if the card is taller than the pane.
+ */
+function focusDecision(callId: string | undefined, withHeader = false): void {
+  const target = focusTarget(callId)
+  if (target === null) return
+  target.focus({ preventScroll: true })
+  // Without this the pane's follow-the-bottom pins the view straight back down.
+  emit('reveal')
+  const card = target.closest<HTMLElement>('[data-call-id]')
+  const header = withHeader ? card?.previousElementSibling : null
+  const top = header?.matches('[data-testid="approval-group-header"]') ? header : card
+  // Optional: jsdom has no scrollIntoView.
+  top?.scrollIntoView?.({ block: 'start' })
+  target.scrollIntoView?.({ block: 'nearest' })
+}
+
 function focusComposer(): void {
   const pane = root.value?.closest('[data-testid="chat-pane"]')
   pane?.querySelector<HTMLElement>('[data-chat-composer]')?.focus()
@@ -219,7 +241,7 @@ watch(
       return
     }
     announcement.value = said(changesNeedApproval(pending))
-    if (mayMoveFocus()) focusTarget(pendingCallIds()[0])?.focus()
+    if (mayMoveFocus()) focusDecision(pendingCallIds()[0], true)
   },
   { flush: 'post' },
 )
@@ -257,7 +279,7 @@ watch(
     // The next open card after the one just answered, wrapping to the first.
     const order = [...states.keys()]
     const after = order.slice(order.indexOf(decidedId) + 1).find((id) => pending.includes(id))
-    focusTarget(after ?? pending[0])?.focus()
+    focusDecision(after ?? pending[0])
   },
   { flush: 'post' },
 )
@@ -321,7 +343,7 @@ watch(
             <p
               v-if="approvalGroups.get(message.id)?.headerAt === index"
               data-testid="approval-group-header"
-              class="text-xs font-medium tabular-nums"
+              class="scroll-mt-3 text-xs font-medium tabular-nums"
             >
               {{ approvalGroups.get(message.id)?.header }}
             </p>
