@@ -20,9 +20,12 @@ model key) and exposes the mock workspace over HTTP.
 [docs/tool-inventory.md](../../docs/tool-inventory.md): `list_issues`, `search_issues`,
 `get_sprint_status`, `get_deployment_history`, `get_burndown`, and `diff_release_notes`.
 
-Four write tools are registered and gated: `create_issue`, `update_issue_status`,
+Five write tools are registered and gated: `create_issue`, `update_issue_status`, `assign_issue`,
 `create_release_notes`, and `run_deployment`, a long-running async generator whose stages stream
-to the client as preliminary tool results.
+to the client as preliminary tool results. `assign_issue` takes a roster id (`u-dana`) or `null` to
+unassign; the model resolves "Dana" or "@dana" from the roster in the system prompt, and the
+workspace refuses an id the roster does not have (`USER_NOT_FOUND`) or the assignee the issue
+already has (`INVALID_INPUT`).
 
 ### The reset, undo and cancel endpoints are deliberately not gated
 
@@ -41,10 +44,11 @@ once a day regardless
 ([ADR-0014](../../docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
 
 `POST /api/workspace/undo` is open on the same terms: anyone who can press Reset can already do
-more than an undo can. It takes only `{ changeId }` — the id an applied `create_issue` or
-`update_issue_status` result carries — and the workspace looks up what that write changed in its
-own record, taken as the write landed, then applies the inverse: the previous status (with its
-completion and blocked reason), or the created issue removed. Nothing about the before-state comes
+more than an undo can. It takes only `{ changeId }` — the id an applied `create_issue`,
+`update_issue_status` or `assign_issue` result carries — and the workspace looks up what that write
+changed in its own record, taken as the write landed, then applies the inverse: the previous status
+(with its completion and blocked reason), the previous assignee (nobody included), or the created
+issue removed. Nothing about the before-state comes
 from the client. It is one-shot and refuses with `409 UNDO_CONFLICT` once the issue no longer
 reads what the write left, when the change was already undone, or when there is no record of it
 (a reset clears them all, and release notes and deployments are never recorded); a malformed or
@@ -102,8 +106,8 @@ tokens are spent.
 
 ## Where the tools come from
 
-The four issue tools — `list_issues`, `search_issues`, `create_issue`,
-`update_issue_status` — are sourced from `apps/mcp-issues` over MCP through a service binding, so
+The five issue tools — `list_issues`, `search_issues`, `create_issue`,
+`update_issue_status`, `assign_issue` — are sourced from `apps/mcp-issues` over MCP through a service binding, so
 the in-app agent and an external host call one implementation rather than two that drift. The other
 six are still defined locally, until the deploys and analytics servers exist.
 
