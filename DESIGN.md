@@ -364,7 +364,8 @@ decision or a result lives.
 - **Primary:** an Ink fill with Bright Paper text, reserved for the single affirmative action in a
   region (Send, Approve), or for the safe default (Deny) when the affirmative cannot land. A
   message holding several open approval cards is one region: only the first undecided card's
-  Approve is Ink, and the others decide in outline.
+  Approve is Ink, and the others decide in outline. While the group header offers "Approve all",
+  that button is the region's Ink and every card decides in outline.
 - **Outline:** a Rule border on Paper, for secondary or abortive actions (Reset board, Stop reply,
   Deny, Cancel deploy). The composer's Stop names what it stops ("Stop reply"), so it is not
   mistaken for a deployment card's Cancel.
@@ -521,6 +522,26 @@ transcript's status line announces.
 4.5:1 on the bubble's Paper Tint): "5 changes to review · 23 pts", counting the open
 cards and the board points of the issues they would move (the points are left off when none are
 known). It goes once every card is decided. Each card keeps its own decision.
+
+**Approve all.** When two or more of the open cards on the last message are board writes that can
+land (a status change for a key the board holds, or a new issue), the header line carries a
+small primary button at its end, "Approve all 5", or "Approve remaining 4" once some were
+answered one by one. Its count is exactly what it answers, and it is the region's one Ink while
+shown. Deploys, release notes and a key the board does not hold are never in it: a 12px line in
+the bubble's text colour under the header names them ("DS-42 needs its own decision.",
+identifiers in mono). The press answers each card on its own, so each keeps its own record
+line, time and "from". The status line says it once, when the last of them has turned ("4
+changes approved by you at 14:05."), and focus moves to the next card it left, or the composer.
+
+**Undo.** An applied status change or new issue carries a ghost "Undo" (28px, never Ink) after
+its record line; release notes and deployments have none. It sends only the workspace's change
+id, so what goes back is the server's record, not the card's. Once undone, a second Graphite line
+follows the record, led by a mono ↶ hidden from screen readers: "↶ Undone by you at 14:05 —
+DS-9 back to In progress." (or "— DS-14 removed from the board."), and the board re-reads, so a
+restored card takes its Go Green ring. A refusal reads in Stop Red in the board's words ("That
+change to DS-9 can’t be undone: the board has moved on."), and the Undo does not come back. Both
+are said on the status line, and focus lands on the new line. A network failure toasts and keeps
+the Undo.
 
 ### Deployment Progress (signature)
 
