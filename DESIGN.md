@@ -325,7 +325,7 @@ outline would be clipped. That rule lives once in `main.css`, not per component.
 
 Two more rings belong to the board, both 1px and drawn inside the card's own edge, so a marked
 card keeps its footprint and stacked cards never merge. A **dashed** `--ring` outline, in place of
-the 10% hairline, marks an issue a pending approval would move, and a **solid** Go Green
+the 10% hairline, marks an issue a pending approval would move or hand on, and a **solid** Go Green
 (`--success`) ring marks, for 1.5s, an issue the last read of the board moved (see Board cards).
 Neither is solid Graphite, so neither reads as focus.
 
@@ -398,11 +398,12 @@ decision or a result lives.
 ### Cards / Containers
 
 - **Board cards:** 14px corners on Paper with a 1px ring at 10%, 12px padding, a mono key and an
-  outline points badge on top, and the title in 14px medium.
+  outline points badge on top, and the title in 14px medium. The assignee's @handle follows as a
+  caption, in the backlog too, since an issue there can be handed on.
 - **Empty column:** a compact slot one line tall under the heading, 14px corners and a 1px Rule
   border on Paper, with "No issues" in 12px Graphite (4.73:1) inside it. A slot, not a caption, so
   the column keeps a shape beside its neighbours and no text is left floating under a heading. It
-  is solid, never dashed, since dashes mean a pending move, and it takes no Paper Tint fill, where
+  is solid, never dashed, since dashes mean a pending change, and it takes no Paper Tint fill, where
   Graphite text falls to 4.34:1.
 - **Stat cards:** four tiles, Committed, Completed, Remaining and Days left, each a Graphite label
   over a 24px tabular value. Remaining carries the row's one signal as a 12px Graphite sub-line:
@@ -428,6 +429,13 @@ decision or a result lives.
   screen readers hear "Awaiting approval to move to Done"). It is read from the chat's open
   `update_issue_status` cards, matching keys the way the api does (trimmed, any case), and it goes
   the moment the card is answered. New issues have no card to mark.
+- **Pending reassignment (board card):** while an approval card asks to hand an issue to someone
+  else, its board card takes the same dashed ring, and stays in its column, since only a status
+  change says where a card would go. Under the current assignee, a 12px medium caption in the text
+  colour names the new one ("→ @dana", or "→ Unassigned"; screen readers hear "Awaiting approval
+  to assign to @dana" or "Awaiting approval to unassign"), so "@ben" then "→ @dana" reads as the
+  hand-on. It is read from the chat's open `assign_issue` cards with the same key matching, and it
+  goes the moment the card is answered.
 - **Changed (board card):** when a read of the board finds an issue's status changed since the
   last read, the card is marked for 1.5s: a 1px solid Go Green (`--success`) ring inside its edge
   (offset -1px) holds, then fades on an exponential ease-out. It takes no background tint, since
@@ -491,24 +499,27 @@ hairline underneath and no fill. There are no routes to navigate besides a 404.
 
 ### Approval Card (signature)
 
-The record of a decision. It opens on a 14px medium headline (the one 14px line inside chat
-cards), with no label above it: "Approval required" would be untrue on a decided card. Under it
-sit the issue title and a quiet 12px Graphite mono line naming the tool, and the raw arguments are
-one `<details>` away. While pending, it holds a reason input, an outline Deny and a
-primary Approve, which is outline too on every open card but the first in its message. When a
-status change targets a key the board does not hold, a 12px Stop Red line says so under the
-headline ("DS-42 isn’t on the board.", the key in mono), the decision group is described by it,
-Deny takes the Ink and Approve drops to outline. Approve still works, so the write can return its
-typed error. When resolved, the controls give way to one line in Graphite, and in Stop Red only
-when an approved write failed. It leads with a glyph from the deployment card's language (● applied,
-in Go Green; ◐ still running; – denied or cancelled; ✕ failed), drawn in mono and hidden from
-screen readers, then the words and the time of the decision on a 24-hour clock in the reader's locale:
-"● Approved by you at 14:02 — applied." or "– Denied by you at 14:03: “Still blocked”.". A typed
-error is explained by the ErrorCard right below, code and all, so the line stays short and on one
-line: "✕ Approved by you at 14:02 — not applied.". The status line, which does not read the
-ErrorCard, adds the code: "… — not applied (ISSUE_NOT_FOUND)." A status change keeps its "from" after the decision
-("DS-9: In progress → Done"): the board's status is captured with the time when the person
-answers, since the board moves on once the write lands.
+The record of a decision. It opens on a 14px medium headline (the one 14px line inside chat cards),
+with no label above it: "Approval required" would be untrue on a decided card. Under it sit the
+issue title and a quiet 12px Graphite mono line naming the tool, and the raw arguments are one
+`<details>` away. While pending, it holds a reason input, an outline Deny and a primary Approve,
+which is outline too on every open card but the first in its message. When a status change or
+reassignment targets a key the board does not hold, or a reassignment names an id nobody on the team
+has, a 12px Stop Red line says so under the headline ("DS-42 isn’t on the board.", "No one on the
+team has the id u-zed.", identifiers in mono), the decision group is described by it, Deny takes the
+Ink and Approve drops to outline. Approve still works, so the write can return its typed error. When
+resolved, the controls give way to one line in Graphite, and in Stop Red only when an approved write
+failed. It leads with a glyph from the deployment card's language (● applied, in Go Green; ◐ still
+running; – denied or cancelled; ✕ failed), drawn in mono and hidden from screen readers, then the
+words and the time of the decision on a 24-hour clock in the reader's locale: "● Approved by you at
+14:02 — applied." or "– Denied by you at 14:03: “Still blocked”.". A typed error is explained by the
+ErrorCard right below, code and all, so the line stays short and on one line: "✕ Approved by you at
+14:02 — not applied.". The status line, which does not read the ErrorCard, adds the code: "… — not
+applied (ISSUE_NOT_FOUND)." A status change keeps its "from" after the decision ("DS-9: In progress
+→ Done"): the board's status is captured with the time when the person answers, since the board
+moves on once the write lands. A reassignment reads the same way, with people named by @handle and
+nobody as "Unassigned" ("DS-12: Unassigned → @dana"), and keeps its "from" assignee by the same
+capture.
 
 Decisions are followed by focus and by voice. The pending controls are a named group ("Decision:
 DS-7: In review → Done"). When a turn ends waiting on approvals, focus moves to the first open
@@ -524,24 +535,25 @@ cards and the board points of the issues they would move (the points are left of
 known). It goes once every card is decided. Each card keeps its own decision.
 
 **Approve all.** When two or more of the open cards on the last message are board writes that can
-land (a status change for a key the board holds, or a new issue), the header line carries a
-small primary button at its end, "Approve all 5", or "Approve remaining 4" once some were
+land (a status change for a key the board holds, a new issue, or a reassignment of an issue the
+board holds to someone on the team, or to nobody, who does not already have it), the header line
+carries a small primary button at its end, "Approve all 5", or "Approve remaining 4" once some were
 answered one by one. Its count is exactly what it answers, and it is the region's one Ink while
-shown. Deploys, release notes and a key the board does not hold are never in it: a 12px line in
-the bubble's text colour under the header names them ("DS-42 needs its own decision.",
-identifiers in mono). The press answers each card on its own, so each keeps its own record
-line, time and "from". The status line says it once, when the last of them has turned ("4
+shown. Deploys, release notes, a key the board does not hold and a reassignment that cannot land are
+never in it: a 12px line in the bubble's text colour under the header names them ("DS-42 needs its
+own decision.", identifiers in mono). The press answers each card on its own, so each keeps its own
+record line, time and "from". The status line says it once, when the last of them has turned ("4
 changes approved by you at 14:05."), and focus moves to the next card it left, or the composer.
 
-**Undo.** An applied status change or new issue carries a ghost "Undo" (24px, never Ink) after
-its record line; release notes and deployments have none. It sends only the workspace's change
-id, so what goes back is the server's record, not the card's. Once undone, a second Graphite line
-follows the record, led by a mono ↶ hidden from screen readers: "↶ Undone by you at 14:05 —
-DS-9 back to In progress." (or "— DS-14 removed from the board."), and the board re-reads, so a
-restored card takes its Go Green ring. A refusal reads in Stop Red in the board's words ("That
-change to DS-9 can’t be undone: the board has moved on."), and the Undo does not come back. Both
-are said on the status line, and focus lands on the new line. A network failure toasts and keeps
-the Undo.
+**Undo.** An applied status change, reassignment or new issue carries a ghost "Undo" (24px, never
+Ink) after its record line; release notes and deployments have none. It sends only the workspace's
+change id, so what goes back is the server's record, not the card's. Once undone, a second Graphite
+line follows the record, led by a mono ↶ hidden from screen readers: "↶ Undone by you at 14:05 —
+DS-9 back to In progress." (or "— DS-12 back to unassigned.", "— DS-7 back to @ben.", "— DS-14
+removed from the board."), and the board re-reads, so a restored card takes its Go Green ring. A
+refusal reads in Stop Red in the board's words ("That change to DS-9 can’t be undone: the board has
+moved on."), and the Undo does not come back. Both are said on the status line, and focus lands on
+the new line. A network failure toasts and keeps the Undo.
 
 ### Deployment Progress (signature)
 
