@@ -3,10 +3,18 @@
  * without spending Groq/Gemini quota. It speaks the LanguageModelV3 streaming
  * protocol, so `streamText` drives it exactly like a provider. On a user turn
  * it picks ONE tool by keyword (restricted to the tools the caller registered);
- * on a tool turn it streams a short summary grounded in the tool output.
+ * on a tool turn it streams a short summary grounded in the tool output. The
+ * summary follows the system prompt's rules for prose: board labels for
+ * statuses, a takeaway rather than a copy of the cards above it, and a failed
+ * write ends on the question that offers the fix.
  */
 import { simulateReadableStream } from 'ai'
-import { ISSUE_STATUSES, type IssueStatus, type ToolResult } from '@devsprint/shared'
+import {
+  ISSUE_STATUS_LABELS,
+  ISSUE_STATUSES,
+  type IssueStatus,
+  type ToolResult,
+} from '@devsprint/shared'
 import type {
   BurndownData,
   CreateIssueData,
@@ -19,6 +27,7 @@ import type {
   SprintStatusData,
   UpdateIssueStatusData,
 } from '@devsprint/shared/tools'
+import { WRITE_TOOL_NAMES } from '@devsprint/shared/tools'
 import { utcDateOf } from '../workspace/dates'
 import type {
   LanguageModelV3,
@@ -39,6 +48,17 @@ export type MockDecision = ({ kind: 'tool-call' } & MockToolCall) | { kind: 'tex
 /** `1 issue` / `2 issues` — the summaries are read by a person. */
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`
+}
+
+/** "DS-7", "DS-7 and DS-8", "DS-7, DS-8 and DS-9". */
+function listKeys(keys: readonly string[]): string {
+  if (keys.length <= 1) return keys.join('')
+  return `${keys.slice(0, -1).join(', ')} and ${keys.at(-1)}`
+}
+
+/** The board's word for a status, which is what a person reads everywhere else. */
+function label(status: IssueStatus): string {
+  return ISSUE_STATUS_LABELS[status]
 }
 
 /** Splits text into whitespace-preserving tokens for a word-by-word stream. */
@@ -293,20 +313,26 @@ function summarizeSprintStatus({ sprint, stats }: SprintStatusData): string {
   return `${sprint.name}: ${open} open issues, ${stats.remainingPoints} of ${stats.committedPoints} points remaining, ${stats.daysRemaining} days left. ${blocked}`
 }
 
+/**
+ * The issue table already lists every row, so the answer is the shape of it:
+ * how much is there, and which of it is stuck.
+ */
 function summarizeIssues({ issues }: ListIssuesData): string {
   if (issues.length === 0) return 'No issues match that filter.'
-  const items = issues.map(
-    (issue) => `${issue.key} (${issue.status}, ${issue.points} pts) ${issue.title}`,
-  )
-  return `${plural(issues.length, 'issue')}: ${items.join('; ')}.`
+  const blocked = issues.filter((issue) => issue.status === 'blocked').map((issue) => issue.key)
+  const risk = blocked.length > 0 ? `Blocked: ${listKeys(blocked)}.` : ''
+  // A list of only blocked issues says nothing the risk line does not.
+  if (blocked.length === issues.length) return risk
+  const points = issues.reduce((sum, issue) => sum + issue.points, 0)
+  return [`${plural(issues.length, 'issue')}, ${plural(points, 'point')}.`, risk]
+    .filter(Boolean)
+    .join(' ')
 }
 
 function summarizeSearch({ matches }: SearchIssuesData): string {
-  if (matches.length === 0) return 'No matching issues.'
-  const items = matches.map(
-    (match) => `${match.key} "${match.title}" (${match.status}, score ${match.score})`,
-  )
-  return `Best matches: ${items.join('; ')}.`
+  const [best] = matches
+  if (best === undefined) return 'No matching issues.'
+  return `Best match: ${best.key}, “${best.title}”.`
 }
 
 function summarizeDeployments({ deployments }: DeploymentHistoryData): string {
@@ -322,30 +348,41 @@ function summarizeBurndown(data: BurndownData): string {
   const asOfDate = utcDateOf(data.asOf)
   const today = data.days.filter((day) => day.date <= asOfDate).at(-1) ?? data.days[0]
   if (!today) return `Burndown for ${data.sprintId}: the sprint has no days.`
+  // The chart draws both lines; the takeaway is the gap, in whole points.
+  const gap = Math.round(Math.abs(today.remaining - today.ideal))
   const verdict =
-    today.remaining > today.ideal
-      ? 'behind the ideal line'
-      : today.remaining < today.ideal
-        ? 'ahead of the ideal line'
-        : 'on the ideal line'
-  return `Burndown for ${data.sprintId} as of ${today.date}: ${data.committedPoints - today.remaining} of ${data.committedPoints} points done, ${today.remaining} remaining vs ${today.ideal} ideal — ${verdict}.`
+    gap === 0
+      ? 'on the ideal line'
+      : `${today.remaining > today.ideal ? 'behind' : 'ahead of'} the ideal line by ${plural(gap, 'point')}`
+  return `${data.committedPoints - today.remaining} of ${data.committedPoints} points done, ${verdict}.`
 }
 
 function summarizeDiff(data: ReleaseNotesDiffData): string {
+  // The diff card names each section; the answer says how big the change is
+  // and what the user can do with it.
   if (data.changedSections.length === 0) {
     return `The draft matches ${data.baseVersion} section for section.`
   }
-  const groups = (['added', 'modified', 'removed'] as const).flatMap((changeType) => {
-    const headings = data.changedSections
-      .filter((section) => section.changeType === changeType)
-      .map((section) => `"${section.heading}"`)
-    return headings.length === 0 ? [] : [`${changeType}: ${headings.join(', ')}`]
-  })
-  return `Compared with ${data.baseVersion} — ${groups.join('; ')}.`
+  return `The draft changes ${plural(data.changedSections.length, 'section')} against ${data.baseVersion}. Ask me to save it when it reads right.`
 }
 
-function summarizeStatusChange(data: UpdateIssueStatusData): string {
-  return `${data.issue.key} moved ${data.previousStatus} → ${data.issue.status}.`
+/**
+ * Every status change applied this turn, in one sentence. Each approval card
+ * already shows its own from → to, so the answer is the tally.
+ */
+function summarizeStatusChanges(applied: UpdateIssueStatusData[], requested: number): string {
+  const [first] = applied
+  if (first === undefined) return ''
+  const target = first.issue.status
+  if (applied.some((change) => change.issue.status !== target)) {
+    return applied
+      .map((change) => `${change.issue.key} is now ${label(change.issue.status)}.`)
+      .join(' ')
+  }
+  if (applied.length === 1) return `${first.issue.key} is now ${label(target)}.`
+  const tally =
+    applied.length === requested ? `All ${applied.length}` : `${applied.length} of the ${requested}`
+  return `${tally} issues are now ${label(target)}.`
 }
 
 function summarizeCreatedIssue(data: CreateIssueData): string {
@@ -358,18 +395,27 @@ function summarizeCreatedReleaseNotes(data: CreateReleaseNotesData): string {
 }
 
 function summarizeDeployment(data: RunDeploymentData): string {
+  // The deployment card shows every stage, so the answer is only the outcome.
   const { deployment } = data
-  const reached = deployment.stages
-    .filter((stage) => stage.status === 'succeeded')
-    .map((stage) => stage.name)
-  const stages = reached.length > 0 ? ` Completed: ${reached.join(', ')}.` : ''
-  return `${deployment.version} → ${deployment.environment}: ${deployment.status}.${stages}`
+  if (deployment.status === 'succeeded') {
+    return `Released ${deployment.version} to ${deployment.environment}.`
+  }
+  const ended =
+    deployment.status === 'cancelled'
+      ? 'was cancelled'
+      : deployment.status === 'failed'
+        ? 'failed'
+        : `is ${deployment.status}`
+  return `${deployment.version} was not released to ${deployment.environment}: the run ${ended}.`
 }
 
-/** One grounded sentence per tool; the `ok: false` envelope is surfaced by code. */
+/**
+ * One grounded sentence per tool. A failure is said once, in words: the error
+ * card beside it already shows the code.
+ */
 export function summarizeToolOutput(toolName: string, output: unknown): string {
   if (!isEnvelope(output)) return `${toolName} returned an unexpected result.`
-  if (!output.ok) return `${toolName} failed with ${output.error.code}: ${output.error.message}`
+  if (!output.ok) return output.error.message
   // The mock only ever runs against our own tools, so the payload shape follows from the name.
   switch (toolName) {
     case 'get_sprint_status':
@@ -385,7 +431,7 @@ export function summarizeToolOutput(toolName: string, output: unknown): string {
     case 'diff_release_notes':
       return summarizeDiff(output.data as ReleaseNotesDiffData)
     case 'update_issue_status':
-      return summarizeStatusChange(output.data as UpdateIssueStatusData)
+      return summarizeStatusChanges([output.data as UpdateIssueStatusData], 1)
     case 'create_issue':
       return summarizeCreatedIssue(output.data as CreateIssueData)
     case 'create_release_notes':
@@ -420,27 +466,38 @@ function unwrapOutput(output: ToolResultOutput): unknown {
   }
 }
 
+/** Gated tools: a failure there means nothing on the board changed. */
+const WRITE_TOOLS: ReadonlySet<string> = new Set(WRITE_TOOL_NAMES)
+
 /**
  * A denied call never runs, and the model has to say so rather than imply the
  * write happened — scenario S-B turns on the final answer admitting the denial.
+ * A failed write is said once, in the user's terms (S-E): the approval card
+ * and the error card around it already carry the detail.
  */
 function summarizeToolResultPart(
   part: { toolName: string; toolCallId: string; output: ToolResultOutput },
   inputByToolCallId: ReadonlyMap<string, unknown>,
 ): string {
+  // A tool result carries no input, so a sentence about a write has to name
+  // its subject by looking back at the call that asked for it.
+  const target = () => describeWriteTarget(part.toolName, inputByToolCallId.get(part.toolCallId))
   if (part.output.type === 'execution-denied') {
-    // A tool result carries no input, so the denial sentence has to name its
-    // subject by looking back at the call the user turned down.
-    const target = describeWriteTarget(part.toolName, inputByToolCallId.get(part.toolCallId))
     const reason = part.output.reason
     return reason === undefined
-      ? `${target} was not approved, so nothing changed.`
-      : `${target} was not approved (${reason}), so nothing changed.`
+      ? `${target()} was not approved, so nothing changed.`
+      : `${target()} was not approved (${reason}), so nothing changed.`
   }
-  return summarizeToolOutput(part.toolName, unwrapOutput(part.output))
+  const output = unwrapOutput(part.output)
+  if (WRITE_TOOLS.has(part.toolName) && isEnvelope(output) && !output.ok) {
+    return output.error.code === 'ISSUE_NOT_FOUND'
+      ? `${target()} isn't on the board, so nothing changed.`
+      : `${output.error.message} Nothing changed.`
+  }
+  return summarizeToolOutput(part.toolName, output)
 }
 
-/** What a rejected write would have touched, for the denial sentence. */
+/** What a write would have touched, for the denial and failure sentences. */
 function describeWriteTarget(toolName: string, input: unknown): string {
   if (typeof input === 'object' && input !== null) {
     if ('issueKey' in input && typeof input.issueKey === 'string') return input.issueKey
@@ -452,14 +509,62 @@ function describeWriteTarget(toolName: string, input: unknown): string {
   return toolName
 }
 
-function summarizeToolMessage(
-  message: ToolMessage,
+/** Steps the mock derives from a `list_issues` result earlier in the turn. */
+const FED_BY_A_LIST: ReadonlySet<string> = new Set(['update_issue_status', 'diff_release_notes'])
+
+/** The applied status change a result carries, if that is what it is. */
+function appliedStatusChange(part: {
+  toolName: string
+  output: ToolResultOutput
+}): UpdateIssueStatusData | undefined {
+  if (part.toolName !== 'update_issue_status') return undefined
+  const output = unwrapOutput(part.output)
+  return isEnvelope(output) && output.ok ? (output.data as UpdateIssueStatusData) : undefined
+}
+
+/**
+ * The turn's answer, from every tool result gathered since the user spoke.
+ *
+ * - A list that fed a later step speaks through that step: the close-out's
+ *   list became five approval cards, and S-A's list became the draft the diff
+ *   card shows. Its table is still on screen.
+ * - Applied status changes become one tally, where the first one landed.
+ * - When a failed write was searched for, the search is the question that
+ *   closes the answer rather than a sentence of its own.
+ */
+function composeAnswer(
+  gathered: ToolMessage[],
   inputByToolCallId: ReadonlyMap<string, unknown>,
 ): string {
-  const summaries = message.content.flatMap((part) =>
-    part.type === 'tool-result' ? [summarizeToolResultPart(part, inputByToolCallId)] : [],
-  )
-  return summaries.length > 0 ? summaries.join(' ') : 'The tool returned no result.'
+  const question = recoveryQuestion(gathered)
+  const sentences: string[] = []
+  const applied: UpdateIssueStatusData[] = []
+  let requested = 0
+  let tallyAt = -1
+  gathered.forEach((message, index) => {
+    const fedALaterStep = gathered
+      .slice(index + 1)
+      .some((later) =>
+        later.content.some(
+          (part) => part.type === 'tool-result' && FED_BY_A_LIST.has(part.toolName),
+        ),
+      )
+    for (const part of message.content) {
+      if (part.type !== 'tool-result') continue
+      if (part.toolName === 'update_issue_status') requested += 1
+      const change = appliedStatusChange(part)
+      if (change !== undefined) {
+        if (tallyAt < 0) tallyAt = sentences.length
+        applied.push(change)
+        continue
+      }
+      if (part.toolName === 'list_issues' && fedALaterStep) continue
+      if (part.toolName === 'search_issues' && question.length > 0) continue
+      sentences.push(summarizeToolResultPart(part, inputByToolCallId))
+    }
+  })
+  if (applied.length > 0) sentences.splice(tallyAt, 0, summarizeStatusChanges(applied, requested))
+  return [...sentences, ...question].join(' ')
 }
 
 /** Tool call id → the input the agent asked for, gathered from the transcript. */
@@ -770,7 +875,7 @@ function recoveryQuestion(gathered: ToolMessage[]): string[] {
       const output = unwrapOutput(part.output)
       if (!isEnvelope(output) || !output.ok) continue
       const [best] = (output.data as SearchIssuesData).matches
-      if (best !== undefined) return [`Did you mean ${best.key} "${best.title}" (${best.status})?`]
+      if (best !== undefined) return [`Did you mean ${best.key}, “${best.title}”?`]
     }
   }
   return []
@@ -897,11 +1002,7 @@ export function scriptChunks(options: LanguageModelV3CallOptions): LanguageModel
     } else if (recovery.length > 0) {
       body = toolCallChunks(recovery)
     } else {
-      const inputs = inputsByToolCallId(options.prompt)
-      const summary = [
-        ...gathered.map((message) => summarizeToolMessage(message, inputs)),
-        ...recoveryQuestion(gathered),
-      ].join(' ')
+      const summary = composeAnswer(gathered, inputsByToolCallId(options.prompt))
       body = textChunks(summary.length > 0 ? summary : 'I have nothing to report.')
     }
   }

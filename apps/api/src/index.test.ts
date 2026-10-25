@@ -541,11 +541,13 @@ describe('POST /api/chat', () => {
     )?.input
     expect(listInput).toMatchObject({ sprintId: 'sprint-12', status: 'done' })
 
-    // The answer is grounded in both results: sprint health and the shipped issues.
+    // The answer is grounded in the results: sprint health, which has no card,
+    // then the diff's takeaway. The shipped issues are the table and the draft
+    // above it, so the prose does not read them back.
     const answer = textOf(chunks)
     expect(answer).toContain('23 of 31 points remaining')
-    expect(answer).toContain('DS-5')
-    expect(answer).toContain('DS-6')
+    expect(answer).toContain('against v1.4.2')
+    expect(answer).not.toContain('DS-5')
   })
 
   it('aborting the request ends the agent loop instead of running it out', async () => {

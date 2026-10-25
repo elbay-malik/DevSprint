@@ -158,7 +158,13 @@ describe('S-B — batch write with per-issue approval gates', () => {
     expect(answer).toMatch(
       /\bnot (approved|completed|closed|updated|done|changed)\b|vendor sandbox/i,
     )
-    if (!live) expect(answer.toLowerCase()).toContain('not approved')
+    if (!live) {
+      // The approval cards already show each from → to, so the answer is the
+      // tally plus the denial, in the board's words rather than the enum.
+      expect(answer).toBe(
+        '4 of the 5 issues are now Done. DS-11 was not approved (Still blocked on vendor sandbox), so nothing changed.',
+      )
+    }
   })
 })
 
@@ -271,7 +277,12 @@ describe('S-E — a typed error, recovered by searching', () => {
       const recovered = run.turns.find((turn) =>
         turn.toolCalls.some((c) => c.name === 'search_issues'),
       )
-      expect(plain(recovered?.text ?? '')).toContain('Did you mean DS-7')
+      // One sentence on the failure, then the question that offers the fix.
+      // The search's table and the error card carry the rest.
+      expect(plain(recovered?.text ?? '')).toBe(
+        "DS-42 isn't on the board, so nothing changed. Did you mean DS-7, “Billing export CSV download”?",
+      )
+      expect(plain(run.turns.at(-1)?.text ?? '')).toBe('DS-7 is now Done.')
 
       const approvals = run.turns.flatMap((turn) => turn.approvals)
       expect(approvals).toHaveLength(2)

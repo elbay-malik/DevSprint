@@ -158,10 +158,10 @@ test.describe('S-B — batch write with per-issue approval gates', () => {
     await turnSettled(page)
 
     // "The agent's final text mentions the denial" and "does not claim 5
-    // issues were closed".
+    // issues were closed". The cards show each move, so the answer is the tally.
     const answer = assistantText(page).last()
     await expect(answer).toContainText(
-      'DS-11 was not approved (Still blocked on vendor sandbox), so nothing changed.',
+      '4 of the 5 issues are now Done. DS-11 was not approved (Still blocked on vendor sandbox), so nothing changed.',
     )
     await expect(answer).not.toContainText(/5 issues (were )?(closed|done)/i)
 
@@ -226,7 +226,7 @@ test.describe('S-C — long-running deployment with live progress', () => {
       )
     }
     await turnSettled(page)
-    await expect(assistantText(page).last()).toContainText('v1.5.0-rc.1 → staging: succeeded.')
+    await expect(assistantText(page).last()).toContainText('Released v1.5.0-rc.1 to staging.')
 
     // "The approval response strictly precedes the first progress part": the
     // first preliminary result only ever arrives on the resumed request.
@@ -353,8 +353,9 @@ test.describe('S-E — error recovery', () => {
       'DS-7',
     )
     await turnSettled(page)
+    // One sentence on the failure, then the question that offers the fix.
     await expect(assistantText(page).last()).toContainText(
-      'Did you mean DS-7 "Billing export CSV download" (in_review)?',
+      "DS-42 isn't on the board, so nothing changed. Did you mean DS-7, “Billing export CSV download”?",
     )
 
     // Steps 6–8: confirming raises a second card; the first is not reused.

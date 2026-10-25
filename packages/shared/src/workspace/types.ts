@@ -9,6 +9,19 @@
 export const ISSUE_STATUSES = ['todo', 'in_progress', 'in_review', 'blocked', 'done'] as const
 export type IssueStatus = (typeof ISSUE_STATUSES)[number]
 
+/**
+ * The board's column names, which is what the copilot calls a status when it
+ * talks to a person. The raw `in_review` is for tool arguments only. The web
+ * app holds the same words in features/workspace/lib/status-labels.ts.
+ */
+export const ISSUE_STATUS_LABELS: Record<IssueStatus, string> = {
+  todo: 'Todo',
+  in_progress: 'In progress',
+  in_review: 'In review',
+  blocked: 'Blocked',
+  done: 'Done',
+}
+
 export type IssueType = 'feature' | 'bug' | 'chore' | 'spike'
 export type Priority = 'low' | 'medium' | 'high' | 'urgent'
 export type SprintState = 'planned' | 'active' | 'completed'

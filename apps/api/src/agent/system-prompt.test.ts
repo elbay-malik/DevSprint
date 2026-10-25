@@ -43,6 +43,30 @@ describe('buildSystemPrompt', () => {
     expect(prompt).not.toMatch(/in markdown\./)
   })
 
+  it('names statuses with the board labels, not the enum', () => {
+    // A live model echoed the tool payload ("in_review → done") into a chat
+    // that shows "In review" on every card and column around it.
+    expect(prompt).toContain('Todo, In progress, In review, Blocked, Done')
+    expect(prompt).toMatch(/never by its raw value such as\s+in_review/)
+  })
+
+  it('asks for the takeaway instead of a second copy of the cards', () => {
+    expect(prompt).toMatch(/Do not\s+list what a card shows again/)
+    for (const card of ['issue table', 'burndown chart', 'release-notes diff', 'deployment card']) {
+      expect(prompt).toContain(card)
+    }
+    expect(prompt).toMatch(/approval card with its outcome/)
+    expect(prompt).toMatch(/one- or two-sentence takeaway/)
+  })
+
+  it('ends a failed write on one sentence and a question that offers the fix (S-E)', () => {
+    expect(prompt).toMatch(/say what happened in one plain sentence/)
+    expect(prompt).toMatch(/After a failed write, end with one direct question/)
+    expect(prompt).toContain('Did you\n  mean DS-7, “Billing export CSV download”?')
+    // The recovery search the scenario turns on is still asked for.
+    expect(prompt).toMatch(/ISSUE_NOT_FOUND, call search_issues/)
+  })
+
   it('has "on track?" name the blockers, which the burndown cannot (S-D)', () => {
     expect(prompt).toMatch(/on track.*blocked issues/s)
   })

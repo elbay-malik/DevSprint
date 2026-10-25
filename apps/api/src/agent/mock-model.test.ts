@@ -172,18 +172,84 @@ describe('summarizeToolOutput', () => {
   })
 
   it('reads the burndown against the demo clock, not the last bucket', () => {
+    // At 2026-07-01 the ideal line is at 9.54 and the sprint at 23; the last
+    // bucket would read 23 behind. The gap is rounded to whole points.
     const summary = summarizeToolOutput('get_burndown', getBurndown(workspace, {}))
-    expect(summary).toContain('2026-07-01')
-    expect(summary).toContain('behind the ideal line')
+    expect(summary).toBe('8 of 31 points done, behind the ideal line by 13 points.')
   })
 
-  it('surfaces the error code of a failed call', () => {
+  it('says a failure in words and leaves the code to the error card', () => {
     const summary = summarizeToolOutput('list_issues', {
       ok: false,
       error: { code: 'SPRINT_NOT_FOUND', message: "No sprint with id 'sprint-99'." },
     })
-    expect(summary).toContain('SPRINT_NOT_FOUND')
-    expect(summary).toContain('sprint-99')
+    expect(summary).toBe("No sprint with id 'sprint-99'.")
+    expect(summary).not.toContain('list_issues')
+  })
+
+  it('names statuses by their board labels, never the enum', () => {
+    const issue = workspace.issues.find((candidate) => candidate.key === 'DS-7')!
+    const summary = summarizeToolOutput('update_issue_status', {
+      ok: true,
+      data: { issue: { ...issue, status: 'done' }, previousStatus: 'in_review' },
+    })
+    expect(summary).toBe('DS-7 is now Done.')
+    expect(summary).not.toMatch(/in_review|\bdone\b/)
+  })
+
+  it('gives the issue table a takeaway instead of reading its rows back', () => {
+    const issues = workspace.issues.filter((issue) => issue.sprintId === 'sprint-12')
+    const summary = summarizeToolOutput('list_issues', { ok: true, data: { issues } })
+    expect(summary).toBe('7 issues, 31 points. Blocked: DS-11.')
+    // Only blocked issues: the count would just repeat the risk.
+    const blocked = issues.filter((issue) => issue.status === 'blocked')
+    expect(summarizeToolOutput('list_issues', { ok: true, data: { issues: blocked } })).toBe(
+      'Blocked: DS-11.',
+    )
+  })
+
+  it('names only the best search match, which the table already ranks', () => {
+    const summary = summarizeToolOutput('search_issues', {
+      ok: true,
+      data: {
+        matches: [
+          { key: 'DS-7', title: 'Billing export CSV download', status: 'in_review', score: 0.56 },
+          { key: 'DS-3', title: 'Billing page layout', status: 'done', score: 0.11 },
+        ],
+      },
+    })
+    expect(summary).toBe('Best match: DS-7, “Billing export CSV download”.')
+    expect(summary).not.toMatch(/score|0\.56|in_review/)
+  })
+
+  it('sizes a release-notes diff and says what comes next', () => {
+    const summary = summarizeToolOutput('diff_release_notes', {
+      ok: true,
+      data: {
+        baseVersion: 'v1.4.2',
+        before: '',
+        after: '',
+        changedSections: [
+          { heading: 'Shipped', changeType: 'added' },
+          { heading: 'Fixed', changeType: 'removed' },
+        ],
+      },
+    })
+    expect(summary).toBe(
+      'The draft changes 2 sections against v1.4.2. Ask me to save it when it reads right.',
+    )
+  })
+
+  it('reports a deployment by its outcome, not its stages', () => {
+    const run = (status: string) =>
+      summarizeToolOutput('run_deployment', {
+        ok: true,
+        data: {
+          deployment: { version: 'v1.5.0-rc.1', environment: 'staging', status, stages: [] },
+        },
+      })
+    expect(run('succeeded')).toBe('Released v1.5.0-rc.1 to staging.')
+    expect(run('cancelled')).toBe('v1.5.0-rc.1 was not released to staging: the run was cancelled.')
   })
 
   it('does not crash on a non-envelope payload', () => {
