@@ -159,17 +159,26 @@ test('the chat follows new tokens, and lets go when you scroll up', async ({ pag
     .toBe(true)
   expect(await viewport.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
 
-  // Scrolling up releases the anchor, so reading back through a transcript is
-  // not fought by every delta that arrives.
-  await viewport.evaluate((el) => {
+  // A new request follows again (ChatPane.vue: answering the last approval
+  // card is one), so the anchor is let go mid-stream, the way a reader does
+  // it: the second turn is under way, then they scroll up.
+  await ask('Summarize Sprint 12 and draft release notes for v1.5.0.')
+  await expect(page.getByTestId('chat-stop')).toBeVisible()
+  // The scroll event is sent with the move, so a delta landing before the
+  // browser's own one cannot read as the reader still being at the bottom.
+  const heightWhenReleased = await viewport.evaluate((el) => {
     el.scrollTop = 0
+    el.dispatchEvent(new Event('scroll'))
+    return el.scrollHeight
   })
 
-  // A second turn with a distinctive answer, so this waits for the stream to
-  // have actually rendered rather than for a fixed number of milliseconds —
-  // under load a sleep either races the tokens or hides the bug.
-  await ask('Search for DS-42')
-  await expect(page.getByTestId('chat-pane')).toContainText('No matching issues')
+  // Waits for the stream to have actually rendered rather than for a fixed
+  // number of milliseconds: under load a sleep either races the tokens or
+  // hides the bug.
+  await expect(page.getByTestId('release-notes-diff')).toHaveCount(2)
+  await expect(page.getByRole('button', { name: 'Send' })).toBeVisible()
+  // It grew below the reader, and did not pull them down to it.
+  expect(await viewport.evaluate((el) => el.scrollHeight)).toBeGreaterThan(heightWhenReleased)
   expect(await viewport.evaluate((el) => el.scrollTop)).toBeLessThan(100)
 })
 
