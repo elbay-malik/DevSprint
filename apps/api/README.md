@@ -10,6 +10,7 @@ model key) and exposes the mock workspace over HTTP.
 | `/api/health`                 | GET    | Liveness probe — `{ "ok": true }`                                       |
 | `/api/workspace`              | GET    | The current workspace snapshot; the SPA hydrates its board from it      |
 | `/api/workspace/reset`        | POST   | Restores the seed board — the demo's manual reset control               |
+| `/api/workspace/undo`         | POST   | Reverses one approved board write, `{ changeId }` — a card's Undo       |
 | `/api/deployments/:id/cancel` | POST   | Ends a running deployment — the progress card's Cancel button           |
 | `/api/chat`                   | POST   | AI SDK v6 UI message stream — tool calls, tool results, streamed answer |
 
@@ -23,7 +24,7 @@ Four write tools are registered and gated: `create_issue`, `update_issue_status`
 `create_release_notes`, and `run_deployment`, a long-running async generator whose stages stream
 to the client as preliminary tool results.
 
-### The reset and cancel endpoints are deliberately not gated
+### The reset, undo and cancel endpoints are deliberately not gated
 
 `POST /api/workspace/reset` restores the seed without an approval card, so "every write is gated"
 would be an overclaim — every write **the agent can make** is gated. Reset is a demo control, not
@@ -38,6 +39,18 @@ covers `/api/chat` only
 stays unthrottled. The worst it can do is restore the seed board, and the board also resets itself
 once a day regardless
 ([ADR-0014](../../docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
+
+`POST /api/workspace/undo` is open on the same terms: anyone who can press Reset can already do
+more than an undo can. It takes only `{ changeId }` — the id an applied `create_issue` or
+`update_issue_status` result carries — and the workspace looks up what that write changed in its
+own record, taken as the write landed, then applies the inverse: the previous status (with its
+completion and blocked reason), or the created issue removed. Nothing about the before-state comes
+from the client. It is one-shot and refuses with `409 UNDO_CONFLICT` once the issue no longer
+reads what the write left, when the change was already undone, or when there is no record of it
+(a reset clears them all, and release notes and deployments are never recorded); a malformed or
+oversized id is a `400 INVALID_INPUT`. The record is capped at 300 changes, oldest out first. Each
+undo is logged as one JSON line, beside the agent's step log. It is not a tool, for the same reason
+reset is not: it is a person's action, and the copilot re-reads the board before it answers.
 
 `POST /api/deployments/:id/cancel` is the same story for a different reason: it comes from a
 button, not the agent, so routing it through a tool would make whether a deploy stops depend on the
