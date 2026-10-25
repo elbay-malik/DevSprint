@@ -12,6 +12,7 @@
  * and ask it (it costs quota and is not deterministic, so it is not CI's job).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { CLAIMS_ALL_FIVE_DONE } from './claims'
 import { runScenario } from './harness'
 import { resetApprovalSigningState } from '../agent/approvals'
 
@@ -150,9 +151,7 @@ describe('S-B — batch write with per-issue approval gates', () => {
     // "The agent's final text mentions the denial (and does not claim 5 closed)."
     const answer = plain(run.turns.at(-1)?.text ?? '')
     expect(answer).toContain('DS-11')
-    expect(answer).not.toMatch(
-      /\b(all (5|five)|5|five) issues (were |have been )?(closed|done|completed)\b/i,
-    )
+    expect(answer).not.toMatch(CLAIMS_ALL_FIVE_DONE)
     // Any model must own the denial: say DS-11 was not done, or give the
     // user's reason back. The mock's exact sentence is its own tier.
     expect(answer).toMatch(
@@ -258,12 +257,25 @@ describe('S-E — a typed error, recovered by searching', () => {
     const approvedTools = run.turns.flatMap((turn) => turn.approvals.map((a) => a.toolName))
     expect(approvedTools).toContain('update_issue_status')
 
+    // A search match is a guess, so the turn that found DS-7 asks about it
+    // rather than requesting the write: it ends on the question, and DS-7 is
+    // changed only after "Yes, that one." (system prompt, the failed-write and
+    // gated-write rules).
+    const searched = run.turns.find((turn) =>
+      turn.toolCalls.some((call) => call.name === 'search_issues'),
+    )
+    expect(
+      searched?.toolCalls.some(
+        (call) => call.name === 'update_issue_status' && call.input.issueKey === 'DS-7',
+      ),
+    ).toBe(false)
+    expect(plain(searched?.text ?? '').trim()).toMatch(/\?$/)
+
     if (!live) {
       // The scripted choreography, exactly as the step table writes it: try,
       // fail with a typed error, search, ask, then a second, separate card. A
-      // live model may check before it writes and offer DS-7 straight as an
-      // approval card, which is what the system prompt asks for ("the approval
-      // card is the confirmation"), so this tier is the mock's alone.
+      // live model may search before it ever writes, so there is no failed
+      // DS-42 card to assert on, and this tier is the mock's alone.
       expect(run.trajectory[0]).toBe('update_issue_status')
       const failed = run.turns
         .flatMap((turn) => turn.results)
@@ -280,7 +292,7 @@ describe('S-E — a typed error, recovered by searching', () => {
       // One sentence on the failure, then the question that offers the fix.
       // The search's table and the error card carry the rest.
       expect(plain(recovered?.text ?? '')).toBe(
-        "DS-42 isn't on the board, so nothing changed. Did you mean DS-7, “Billing export CSV download”?",
+        'DS-42 isn’t on the board, so nothing changed. Did you mean DS-7, “Billing export CSV download”?',
       )
       expect(plain(run.turns.at(-1)?.text ?? '')).toBe('DS-7 is now Done.')
 

@@ -67,6 +67,14 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toMatch(/ISSUE_NOT_FOUND, call search_issues/)
   })
 
+  it('keeps "the card is the confirmation" to writes the user asked for (S-E)', () => {
+    // Unscoped, it pulled against "a search match is a guess, so ask": a live
+    // model could follow either and request DS-7 straight off the search.
+    expect(prompt).toMatch(/When the user asks for a write in so many\s+words, call it/)
+    expect(prompt).toMatch(/A write you inferred, such as a search match, is a\s+question first/)
+    expect(prompt).not.toMatch(/Call them when asked/)
+  })
+
   it('has "on track?" name the blockers, which the burndown cannot (S-D)', () => {
     expect(prompt).toMatch(/on track.*blocked issues/s)
   })

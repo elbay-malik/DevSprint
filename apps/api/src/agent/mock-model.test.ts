@@ -179,12 +179,33 @@ describe('summarizeToolOutput', () => {
   })
 
   it('says a failure in words and leaves the code to the error card', () => {
-    const summary = summarizeToolOutput('list_issues', {
-      ok: false,
-      error: { code: 'SPRINT_NOT_FOUND', message: "No sprint with id 'sprint-99'." },
-    })
-    expect(summary).toBe("No sprint with id 'sprint-99'.")
+    const summary = summarizeToolOutput(
+      'list_issues',
+      {
+        ok: false,
+        error: {
+          code: 'SPRINT_NOT_FOUND',
+          message: "No sprint with id 'sprint-99'. Known sprints: sprint-11, sprint-12.",
+        },
+      },
+      { sprintId: 'sprint-99' },
+    )
+    // One plain sentence, not the api's model-facing list of ids to pick from.
+    expect(summary).toBe('There is no sprint sprint-99.')
     expect(summary).not.toContain('list_issues')
+    expect(summary).not.toContain('Known sprints')
+  })
+
+  it('says a failed deployment write without the api’s wording', () => {
+    const summary = summarizeToolOutput(
+      'run_deployment',
+      {
+        ok: false,
+        error: { code: 'VERSION_EXISTS', message: "Version 'v1.4.2' was already deployed." },
+      },
+      { version: 'v1.4.2', environment: 'production' },
+    )
+    expect(summary).toBe('v1.4.2 is already live in production.')
   })
 
   it('names statuses by their board labels, never the enum', () => {

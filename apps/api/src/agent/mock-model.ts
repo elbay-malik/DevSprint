@@ -15,6 +15,7 @@ import {
   paceAgainstIdeal,
   utcDateOf,
   type IssueStatus,
+  type ToolErrorCode,
   type ToolResult,
 } from '@devsprint/shared'
 import type {
@@ -412,12 +413,50 @@ function summarizeDeployment(data: RunDeploymentData): string {
 }
 
 /**
+ * A failure in one plain sentence, from the code and the call's own arguments.
+ * The api's message is written for a model to act on ("Known sprints:
+ * sprint-11, sprint-12."), and read back to the person it is a debug line.
+ */
+function describeFailure(toolName: string, code: ToolErrorCode, input: unknown): string {
+  const args = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>
+  const arg = (name: string) => (typeof args[name] === 'string' ? args[name] : undefined)
+  switch (code) {
+    case 'ISSUE_NOT_FOUND':
+      return `${arg('issueKey') ?? 'That issue'} isn’t on the board.`
+    case 'SPRINT_NOT_FOUND': {
+      const sprint = arg('sprintId')
+      return sprint === undefined ? 'There is no active sprint.' : `There is no sprint ${sprint}.`
+    }
+    case 'USER_NOT_FOUND':
+      return `No one on the team has the id ${arg('assigneeId') ?? 'given'}.`
+    case 'VERSION_EXISTS': {
+      const version = arg('version') ?? 'That version'
+      return toolName === 'run_deployment'
+        ? `${version} is already live in ${arg('environment') ?? 'that environment'}.`
+        : `Release notes for ${version} already exist.`
+    }
+    case 'DEPLOY_IN_PROGRESS':
+      return 'A deployment is already running there.'
+    case 'DEPLOY_ALREADY_SETTLED':
+      return 'That deployment had already finished.'
+    case 'STAGE_FAILED':
+      return 'A deployment stage failed.'
+    case 'WORKSPACE_FULL':
+      return 'The board is full; a reset clears it.'
+    case 'INVALID_INPUT':
+      return 'The board couldn’t accept that request.'
+    default:
+      return 'That didn’t go through.'
+  }
+}
+
+/**
  * One grounded sentence per tool. A failure is said once, in words: the error
  * card beside it already shows the code.
  */
-export function summarizeToolOutput(toolName: string, output: unknown): string {
+export function summarizeToolOutput(toolName: string, output: unknown, input?: unknown): string {
   if (!isEnvelope(output)) return `${toolName} returned an unexpected result.`
-  if (!output.ok) return output.error.message
+  if (!output.ok) return describeFailure(toolName, output.error.code, input)
   // The mock only ever runs against our own tools, so the payload shape follows from the name.
   switch (toolName) {
     case 'get_sprint_status':
@@ -491,12 +530,13 @@ function summarizeToolResultPart(
       : `${target()} was not approved (${reason}), so nothing changed.`
   }
   const output = unwrapOutput(part.output)
+  const input = inputByToolCallId.get(part.toolCallId)
   if (WRITE_TOOLS.has(part.toolName) && isEnvelope(output) && !output.ok) {
     return output.error.code === 'ISSUE_NOT_FOUND'
-      ? `${target()} isn't on the board, so nothing changed.`
-      : `${output.error.message} Nothing changed.`
+      ? `${target()} isn’t on the board, so nothing changed.`
+      : `${describeFailure(part.toolName, output.error.code, input)} Nothing changed.`
   }
-  return summarizeToolOutput(part.toolName, output)
+  return summarizeToolOutput(part.toolName, output, input)
 }
 
 /** What a write would have touched, for the denial and failure sentences. */
