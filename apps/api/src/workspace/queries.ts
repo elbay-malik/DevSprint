@@ -7,6 +7,10 @@
  */
 import {
   ISSUE_STATUSES,
+  daysLeftIn,
+  eachUtcDay,
+  idealRemaining,
+  utcDateOf,
   type Issue,
   type IssueStatus,
   type ReleaseNote,
@@ -33,7 +37,6 @@ import type {
   SearchIssuesMatch,
   SprintStatusData,
 } from '@devsprint/shared/tools'
-import { daysBetween, eachUtcDay, utcDateOf } from './dates'
 
 function ok<T>(data: T): ToolResult<T> {
   return { ok: true, data }
@@ -296,7 +299,7 @@ export function getSprintStatus(
       committedPoints,
       completedPoints,
       remainingPoints: committedPoints - completedPoints,
-      daysRemaining: Math.max(0, daysBetween(utcDateOf(workspace.now), sprint.endDate)),
+      daysRemaining: daysLeftIn(sprint, workspace.now),
       issueCountsByStatus,
       blockedIssueKeys: issues
         .filter((issue) => issue.status === 'blocked')
@@ -374,8 +377,7 @@ export function getBurndown(
       completionDates
         .filter((completion) => completion.date <= date)
         .reduce((sum, completion) => sum + completion.points, 0),
-    // A one-day sprint has no slope to interpolate; it is simply burned down by its only day.
-    ideal: lastIndex === 0 ? 0 : round2(committedPoints * (1 - index / lastIndex)),
+    ideal: idealRemaining(committedPoints, index, lastIndex),
   }))
 
   return ok({ sprintId: sprint.id, unit: 'points', committedPoints, asOf: workspace.now, days })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { daysBetween, eachUtcDay, utcDateOf } from './dates'
+import { daysBetween, eachUtcDay, utcDateOf } from '../src/workspace/dates'
 
 describe('utc date helpers', () => {
   it('takes the UTC calendar day of a timestamp', () => {

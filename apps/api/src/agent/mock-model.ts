@@ -12,6 +12,8 @@ import { simulateReadableStream } from 'ai'
 import {
   ISSUE_STATUS_LABELS,
   ISSUE_STATUSES,
+  paceAgainstIdeal,
+  utcDateOf,
   type IssueStatus,
   type ToolResult,
 } from '@devsprint/shared'
@@ -28,7 +30,6 @@ import type {
   UpdateIssueStatusData,
 } from '@devsprint/shared/tools'
 import { WRITE_TOOL_NAMES } from '@devsprint/shared/tools'
-import { utcDateOf } from '../workspace/dates'
 import type {
   LanguageModelV3,
   LanguageModelV3CallOptions,
@@ -348,12 +349,13 @@ function summarizeBurndown(data: BurndownData): string {
   const asOfDate = utcDateOf(data.asOf)
   const today = data.days.filter((day) => day.date <= asOfDate).at(-1) ?? data.days[0]
   if (!today) return `Burndown for ${data.sprintId}: the sprint has no days.`
-  // The chart draws both lines; the takeaway is the gap, in whole points.
-  const gap = Math.round(Math.abs(today.remaining - today.ideal))
+  // The chart draws both lines; the takeaway is the gap, in whole points,
+  // measured the way the board's stat row measures it.
+  const pace = paceAgainstIdeal(today.remaining, today.ideal)
   const verdict =
-    gap === 0
+    pace.direction === 'on_track'
       ? 'on the ideal line'
-      : `${today.remaining > today.ideal ? 'behind' : 'ahead of'} the ideal line by ${plural(gap, 'point')}`
+      : `${pace.direction === 'behind' ? 'behind' : 'ahead of'} the ideal line by ${plural(pace.points, 'point')}`
   return `${data.committedPoints - today.remaining} of ${data.committedPoints} points done, ${verdict}.`
 }
 
