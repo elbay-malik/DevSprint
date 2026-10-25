@@ -15,8 +15,8 @@ colors:
   stop-red-dark: 'oklch(0.704 0.191 22.216)'
   go-green: 'oklch(0.508 0.118 165.612)'
   go-green-dark: 'oklch(0.765 0.177 163.223)'
-  trace-blue: '#2a78d6'
-  trace-blue-dark: '#3987e5'
+  trace-blue: 'oklch(0.55 0.163 255.53)'
+  trace-blue-dark: 'oklch(0.622 0.161 255.05)'
 typography:
   headline:
     fontFamily: 'Geist Variable, sans-serif'
@@ -184,10 +184,12 @@ An achromatic ink-and-paper ramp, with three signal hues that each carry a meani
   hover fills. In dark mode, Charcoal.
 - **Rule** (oklch(0.922 0 0)): every border, divider and input stroke. In dark mode, Paper at 10%
   for borders and 15% for inputs.
-- **Pencil** (oklch(0.708 0 0)): the focus ring source, used at 50%. In dark mode it becomes the
-  secondary text colour, and Graphite takes over the focus ring.
+- **Pencil** (oklch(0.708 0 0)): the dark-mode secondary text colour and the dark-mode focus ring
+  (`--ring`), at 5.8:1 or more on every dark surface.
 - **Graphite** (oklch(0.556 0 0)): secondary text everywhere, meaning captions, labels, keys,
-  column headings, the ideal line in the chart, and pending or skipped states.
+  column headings, the ideal line in the chart, and pending or skipped states. It is also the
+  light-mode focus ring (`--ring`): 4.73:1 on Paper and 4.34:1 on Paper Tint. The ring is each
+  theme's secondary-text step, so a solid focus indicator clears 3:1 wherever a control sits.
 - **Charcoal** (oklch(0.269 0 0)): dark-mode tints and badges.
 - **Deep Ink** (oklch(0.145 0 0)): body text on Paper, and the dark-mode page.
 - **Bright Paper** (oklch(0.985 0 0)): text on Ink, and dark-mode body text.
@@ -195,13 +197,15 @@ An achromatic ink-and-paper ramp, with three signal hues that each carry a meani
 ### Signals
 
 - **Stop Red** (oklch(0.577 0.245 27.325); dark oklch(0.704 0.191 22.216)): failure. Error codes,
-  failed stages and removed sections. On the error card it is tinted (a 40% border on a 40% Paper
-  Tint fill), so an error reads as information, not an alarm. Token: `--destructive`.
+  failed stages and removed sections. On the error card it is tinted (a 40% border on Paper), so an
+  error reads as information, not an alarm. Token: `--destructive`.
 - **Go Green** (oklch(0.508 0.118 165.612); dark oklch(0.765 0.177 163.223)): success and
   completion. Succeeded stages and runs, added sections, and "ok" tool states. Token: `--success`
   (`text-success`).
-- **Trace Blue** (#2a78d6; dark #3987e5): the measured data line. Used only for the "Remaining"
-  series of the burndown chart. Token: `--chart-1`.
+- **Trace Blue** (oklch(0.55 0.163 255.53), #2070ce; dark oklch(0.622 0.161 255.05), #3987e5): the
+  measured data line. Used only for the "Remaining" series of the burndown chart and its end
+  label, which is small text, so the light value holds 4.91:1 on Paper (dark 5.44:1). Token:
+  `--chart-1`.
 
 **Brand accent: open.** No brand colour exists today, and none is to be invented. A single brand
 accent may be introduced later, by decision. Until then, hue on chrome is off-system.
@@ -234,7 +238,9 @@ instrument readout: wherever something can be copied, matched or referenced, it 
   tracked, and no label sits above a heading: the heading carries its own weight.
 - **Mono** (400, 12px): issue keys, tool names, versions, environments, stage names, error codes,
   log lines and inline code (at 0.85em).
-- Chart axis labels are 10px tabular, the one size below Caption.
+- Chart labels (axis values, dates, "today" and the line-end values) are 11px tabular at real
+  size, the one size below Caption. The chart's viewBox follows the width it is drawn at, so an
+  SVG unit is a CSS pixel and no label shrinks in a narrow column.
 
 ### Named Rules
 
@@ -271,8 +277,12 @@ card inset in a Paper Tint bubble, or Ink cards on a Deep Ink page in dark mode)
 a drop shadow at rest. Lift is allowed as a response to state (hover, focus, drag) in future
 interactive surfaces, but today no component uses it.
 
-The only depth-like effect in use is the focus ring: 3px of Pencil at 50% (Graphite in dark
-mode), or inset on the scrolling board pane.
+The only depth-like effect in use is the focus ring. Buttons and inputs take a solid 1px border
+in `--ring` (Graphite; Pencil in dark mode) with a 3px halo of it at 50%. The border carries the
+3:1, since the halo alone is about 1.5:1. Disclosures (`<summary>`) and the focusable scroll
+regions (the board pane, the chat scroller) have no border to recolour, so they take a solid 2px
+`--ring` outline: offset 2px on disclosures, and drawn inside on scroll regions, where an outer
+outline would be clipped. That rule lives once in `main.css`, not per component.
 
 ### Named Rules
 
@@ -310,10 +320,13 @@ decision or a result lives.
 - **Outline:** a Rule border on Paper, for secondary or abortive actions (Reset board, Stop, Deny,
   Cancel deploy).
 - **Secondary / Ghost:** Paper Tint fill or transparent. They pair as a toggle, with
-  `aria-pressed`: secondary when on and ghost when off (the Published / Draft switch). Ghost is
-  also the theme toggle.
+  `aria-pressed`: secondary when on and ghost when off (the Published / Draft switch). The fill
+  alone is about 1.1:1 on Paper, so the pressed half also takes a 2px underline in its text
+  colour (Ink; Bright Paper in dark mode), keyed to `aria-pressed`. Ghost is also the theme
+  toggle.
 - **Hover / Focus / Press:** the fill shifts toward Paper Tint (outline, ghost) or to 80% (primary).
-  Focus shows a 3px Pencil ring at 50% with a Pencil border. A press nudges the button down 1px.
+  Focus shows a solid `--ring` border with a 3px halo of it at 50%, in both themes (the outline
+  variant keeps the ring border in dark mode). A press nudges the button down 1px.
 
 ### Chips (Badges)
 
@@ -329,14 +342,17 @@ decision or a result lives.
 - **Chat cards:** a shared shell of 8px corners, a 1px Rule border on Paper, 8 by 12px padding and
   12px type, inset inside the Paper Tint assistant bubble. This covers the issue table, burndown,
   release-notes diff, deployment progress, approval and tool chip.
-- **Error card:** the same shell on a 40% Paper Tint fill with a 40% Stop Red border.
+- **Error card:** the same shell on Paper with a 40% Stop Red border. On Paper its 12px code and
+  tool name hold 4.76:1 and 4.73:1; on the bubble's Paper Tint they fell under 4.5:1.
+- **Markdown tables** the copilot writes sit in the same shell on Paper, so their Graphite headers
+  clear 4.5:1.
 - **Shadow strategy:** none (see Elevation & Depth).
 
 ### Inputs / Fields
 
 - **Style:** 32px tall, 10px corners, a 1px Rule stroke, transparent on Paper (the dark input
   colour at 30%, about 4.5% white, in dark mode), 14px text.
-- **Focus:** a Pencil border with a 3px Pencil ring at 50%.
+- **Focus:** a `--ring` border with a 3px `--ring` halo at 50%.
 - **Error / Disabled:** a Stop Red border and a 20% ring when invalid. At 50% opacity with no
   pointer when disabled, except the composer: while it is locked it stays at full opacity, and its
   placeholder names what to do ("Approve or deny the change above to continue…", counting the
@@ -366,7 +382,9 @@ announced politely to screen readers.
 ### Burndown Chart (signature)
 
 An inline SVG figure. "Remaining" is a 2px Trace Blue line and "Ideal" a 2px dashed Graphite line,
-over Rule gridlines and 10px tabular axis labels. Hovering moves the readout to the hovered day.
+over Rule gridlines and 11px tabular labels, drawn at real size: the viewBox takes the chart's
+drawn width, and the height stays 180px, so the plot keeps its height in any column. Hovering
+moves the readout to the hovered day.
 
 ## Do's and Don'ts
 

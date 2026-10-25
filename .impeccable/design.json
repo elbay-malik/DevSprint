@@ -204,7 +204,7 @@
       "trace-blue": {
         "role": "signal",
         "displayName": "Trace Blue",
-        "canonical": "#2a78d6",
+        "canonical": "oklch(0.55 0.163 255.53)",
         "tonalRamp": [
           "oklch(15% 0.15 255)",
           "oklch(25% 0.15 255)",
@@ -220,7 +220,7 @@
       "trace-blue-dark": {
         "role": "signal",
         "displayName": "Trace Blue (dark)",
-        "canonical": "#3987e5",
+        "canonical": "oklch(0.622 0.161 255.05)",
         "tonalRamp": [
           "oklch(15% 0.15 255)",
           "oklch(25% 0.15 255)",
@@ -272,7 +272,7 @@
       {
         "name": "focus-ring",
         "value": "0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent)",
-        "purpose": "Keyboard focus on buttons, inputs, badges, the chat scroll viewport; inset on the board pane."
+        "purpose": "The halo half of keyboard focus on buttons, inputs and badges, paired with a solid 1px border in --ring (Graphite; Pencil in dark), which carries the 3:1. Disclosures and the focusable scroll regions take a solid 2px --ring outline instead (inset on the board pane and the chat scroller)."
       }
     ],
     "motion": [
@@ -323,7 +323,7 @@
       "refersTo": "button-primary",
       "description": "The single affirmative action in a region: Send, Approve.",
       "html": "<button class=\"ds-btn-primary\">Approve</button>",
-      "css": ".ds-btn-primary { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; display: inline-flex; align-items: center; height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 10px; background: var(--primary, oklch(0.205 0 0)); color: var(--primary-foreground, oklch(0.985 0 0)); font-size: 14px; font-weight: 500; cursor: pointer; transition: all 150ms; } .ds-btn-primary:hover { background: color-mix(in oklch, var(--primary, oklch(0.205 0 0)) 80%, transparent); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.708 0 0)) 50%, transparent); border-color: var(--ring, oklch(0.708 0 0)); } .ds-btn-primary:active { transform: translateY(1px); }"
+      "css": ".ds-btn-primary { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; display: inline-flex; align-items: center; height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 10px; background: var(--primary, oklch(0.205 0 0)); color: var(--primary-foreground, oklch(0.985 0 0)); font-size: 14px; font-weight: 500; cursor: pointer; transition: all 150ms; } .ds-btn-primary:hover { background: color-mix(in oklch, var(--primary, oklch(0.205 0 0)) 80%, transparent); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.556 0 0)) 50%, transparent); border-color: var(--ring, oklch(0.556 0 0)); } .ds-btn-primary:active { transform: translateY(1px); }"
     },
     {
       "name": "Outline Button",
@@ -331,15 +331,15 @@
       "refersTo": "button-outline",
       "description": "Secondary or abortive actions: Reset board, Stop, Deny, Cancel deploy.",
       "html": "<button class=\"ds-btn-outline\">Deny</button>",
-      "css": ".ds-btn-outline { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border: 1px solid var(--border, oklch(0.922 0 0)); border-radius: 8px; background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); font-size: 12.8px; font-weight: 500; cursor: pointer; transition: all 150ms; } .ds-btn-outline:hover { background: var(--muted, oklch(0.97 0 0)); } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.708 0 0)) 50%, transparent); border-color: var(--ring, oklch(0.708 0 0)); } .ds-btn-outline:active { transform: translateY(1px); }"
+      "css": ".ds-btn-outline { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border: 1px solid var(--border, oklch(0.922 0 0)); border-radius: 8px; background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); font-size: 12.8px; font-weight: 500; cursor: pointer; transition: all 150ms; } .ds-btn-outline:hover { background: var(--muted, oklch(0.97 0 0)); } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.556 0 0)) 50%, transparent); border-color: var(--ring, oklch(0.556 0 0)); } .ds-btn-outline:active { transform: translateY(1px); }"
     },
     {
       "name": "Toggle Pair (Secondary / Ghost)",
       "kind": "button",
       "refersTo": "button-secondary",
-      "description": "aria-pressed toggle: secondary when on, ghost when off (Published / Draft).",
+      "description": "aria-pressed toggle: secondary when on, ghost when off (Published / Draft). The pressed half also takes a 2px underline in its text colour, because the fill alone is about 1.1:1.",
       "html": "<div class=\"ds-toggle\" role=\"group\"><button class=\"ds-toggle-btn\" aria-pressed=\"false\">Published</button><button class=\"ds-toggle-btn\" aria-pressed=\"true\">Draft</button></div>",
-      "css": ".ds-toggle { display: inline-flex; gap: 4px; } .ds-toggle-btn { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; height: 28px; padding: 0 10px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--foreground, oklch(0.145 0 0)); font-size: 12.8px; font-weight: 500; cursor: pointer; } .ds-toggle-btn:hover { background: var(--muted, oklch(0.97 0 0)); } .ds-toggle-btn[aria-pressed=\"true\"] { background: var(--secondary, oklch(0.97 0 0)); } .ds-toggle-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.708 0 0)) 50%, transparent); }"
+      "css": ".ds-toggle { display: inline-flex; gap: 4px; } .ds-toggle-btn { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; height: 28px; padding: 0 10px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--foreground, oklch(0.145 0 0)); font-size: 12.8px; font-weight: 500; cursor: pointer; } .ds-toggle-btn:hover { background: var(--muted, oklch(0.97 0 0)); } .ds-toggle-btn[aria-pressed=\"true\"] { background: var(--secondary, oklch(0.97 0 0)); text-decoration: underline 2px; text-underline-offset: 4px; } .ds-toggle-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.556 0 0)) 50%, transparent); }"
     },
     {
       "name": "Input",
@@ -347,7 +347,7 @@
       "refersTo": "input",
       "description": "The composer and the deny-reason field.",
       "html": "<input class=\"ds-input\" placeholder=\"Ask the copilot…\" />",
-      "css": ".ds-input { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; height: 32px; width: 280px; padding: 4px 10px; border: 1px solid var(--input, oklch(0.922 0 0)); border-radius: 10px; background: transparent; color: var(--foreground, oklch(0.145 0 0)); font-size: 14px; transition: border-color 150ms, box-shadow 150ms; } .ds-input::placeholder { color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-input:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.708 0 0)) 50%, transparent); border-color: var(--ring, oklch(0.708 0 0)); }"
+      "css": ".ds-input { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; height: 32px; width: 280px; padding: 4px 10px; border: 1px solid var(--input, oklch(0.922 0 0)); border-radius: 10px; background: transparent; color: var(--foreground, oklch(0.145 0 0)); font-size: 14px; transition: border-color 150ms, box-shadow 150ms; } .ds-input::placeholder { color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-input:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.556 0 0)) 50%, transparent); border-color: var(--ring, oklch(0.556 0 0)); }"
     },
     {
       "name": "Badges",
@@ -371,7 +371,7 @@
       "refersTo": "chat-card",
       "description": "The record of a decision: eyebrow, 14px headline, reason, Deny and Approve.",
       "html": "<div class=\"ds-approval\"><p class=\"ds-eyebrow\">Approval required: <span class=\"ds-mono\">update_issue_status</span></p><p class=\"ds-headline\">DS-7: In review → Done</p><div class=\"ds-actions\"><input class=\"ds-reason\" placeholder=\"Reason (optional)\" /><button class=\"ds-deny\">Deny</button><button class=\"ds-approve\">Approve</button></div></div>",
-      "css": ".ds-approval { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 360px; padding: 8px 12px; border: 1px solid var(--border, oklch(0.922 0 0)); border-radius: 8px; background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); font-size: 12px; display: flex; flex-direction: column; gap: 8px; } .ds-eyebrow { margin: 0; color: var(--muted-foreground, oklch(0.556 0 0)); font-weight: 500; } .ds-mono { font-family: ui-monospace, monospace; } .ds-headline { margin: 0; font-size: 14px; font-weight: 500; } .ds-actions { display: flex; gap: 8px; align-items: center; } .ds-reason { flex: 1; height: 28px; padding: 0 10px; border: 1px solid var(--input, oklch(0.922 0 0)); border-radius: 10px; background: transparent; color: inherit; font-size: 12px; } .ds-deny, .ds-approve { height: 28px; padding: 0 10px; border-radius: 8px; font-size: 12.8px; font-weight: 500; cursor: pointer; } .ds-deny { border: 1px solid var(--border, oklch(0.922 0 0)); background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); } .ds-approve { border: 1px solid transparent; background: var(--primary, oklch(0.205 0 0)); color: var(--primary-foreground, oklch(0.985 0 0)); } .ds-deny:hover { background: var(--muted, oklch(0.97 0 0)); } .ds-approve:hover { background: color-mix(in oklch, var(--primary, oklch(0.205 0 0)) 80%, transparent); } .ds-deny:focus-visible, .ds-approve:focus-visible, .ds-reason:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.708 0 0)) 50%, transparent); }"
+      "css": ".ds-approval { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 360px; padding: 8px 12px; border: 1px solid var(--border, oklch(0.922 0 0)); border-radius: 8px; background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); font-size: 12px; display: flex; flex-direction: column; gap: 8px; } .ds-eyebrow { margin: 0; color: var(--muted-foreground, oklch(0.556 0 0)); font-weight: 500; } .ds-mono { font-family: ui-monospace, monospace; } .ds-headline { margin: 0; font-size: 14px; font-weight: 500; } .ds-actions { display: flex; gap: 8px; align-items: center; } .ds-reason { flex: 1; height: 28px; padding: 0 10px; border: 1px solid var(--input, oklch(0.922 0 0)); border-radius: 10px; background: transparent; color: inherit; font-size: 12px; } .ds-deny, .ds-approve { height: 28px; padding: 0 10px; border-radius: 8px; font-size: 12.8px; font-weight: 500; cursor: pointer; } .ds-deny { border: 1px solid var(--border, oklch(0.922 0 0)); background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); } .ds-approve { border: 1px solid transparent; background: var(--primary, oklch(0.205 0 0)); color: var(--primary-foreground, oklch(0.985 0 0)); } .ds-deny:hover { background: var(--muted, oklch(0.97 0 0)); } .ds-approve:hover { background: color-mix(in oklch, var(--primary, oklch(0.205 0 0)) 80%, transparent); } .ds-deny:focus-visible, .ds-approve:focus-visible, .ds-reason:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.556 0 0)) 50%, transparent); }"
     },
     {
       "name": "Deployment Progress",
@@ -385,9 +385,9 @@
       "name": "Error Card",
       "kind": "custom",
       "refersTo": "chat-card",
-      "description": "A typed tool error: information, not an alarm.",
+      "description": "A typed tool error: information, not an alarm. It sits on Paper like the other chat cards, so its 12px code and tool name hold 4.5:1.",
       "html": "<div class=\"ds-error\"><p class=\"ds-msg\">No issue with key 'DS-42'.</p><p class=\"ds-meta\"><span class=\"ds-tool\">update_issue_status</span> <span class=\"ds-code\">ISSUE_NOT_FOUND</span></p></div>",
-      "css": ".ds-error { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 360px; padding: 8px 12px; border: 1px solid color-mix(in oklch, var(--destructive, oklch(0.577 0.245 27.325)) 40%, transparent); border-radius: 8px; background: color-mix(in oklch, var(--muted, oklch(0.97 0 0)) 40%, transparent); font-size: 12px; } .ds-tool { font-family: ui-monospace, monospace; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-code { font-family: ui-monospace, monospace; font-weight: 500; color: var(--destructive, oklch(0.577 0.245 27.325)); } .ds-msg { margin: 0; color: var(--foreground, oklch(0.145 0 0)); } .ds-meta { margin: 4px 0 0; display: flex; gap: 8px; font-family: ui-monospace, monospace; color: var(--muted-foreground, oklch(0.556 0 0)); }"
+      "css": ".ds-error { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 360px; padding: 8px 12px; border: 1px solid color-mix(in oklch, var(--destructive, oklch(0.577 0.245 27.325)) 40%, transparent); border-radius: 8px; background: var(--background, oklch(1 0 0)); font-size: 12px; } .ds-tool { font-family: ui-monospace, monospace; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-code { font-family: ui-monospace, monospace; font-weight: 500; color: var(--destructive, oklch(0.577 0.245 27.325)); } .ds-msg { margin: 0; color: var(--foreground, oklch(0.145 0 0)); } .ds-meta { margin: 4px 0 0; display: flex; gap: 8px; font-family: ui-monospace, monospace; color: var(--muted-foreground, oklch(0.556 0 0)); }"
     },
     {
       "name": "Chat Bubbles",
