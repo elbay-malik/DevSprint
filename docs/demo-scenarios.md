@@ -5,9 +5,12 @@ trajectory-eval suite and the Phase 13 Playwright E2E spec: each "eval assertion
 meant to be transcribed 1:1 into eval checks and E2E expectations, not reinterpreted.
 
 All scenarios run against the deterministic seed defined in [domain-model.md](./domain-model.md) at
-the fixed demo clock `WORKSPACE_NOW = 2026-07-01T09:00:00Z`. The original plan gave each scenario
-(except S-F, which runs in an external MCP host) a one-click scripted-scenario button in the chat
-composer; that button is **not built**, so today a reviewer types the verbatim prompts below.
+the fixed demo clock `WORKSPACE_NOW = 2026-07-01T09:00:00Z`. Each scenario except S-F, which runs
+in an external MCP host, has a one-click suggestion in the empty transcript, above the composer. It
+is labelled by its outcome ("Close out the sprint") and sends the scenario's verbatim step-1
+prompt below (`apps/web/src/features/chat/lib/suggestions.ts`, checked against this file by its
+unit test). The suggestions go once the conversation starts; later prompts are typed. S-F's place
+is taken by the MCP endpoint, which the same empty state shows with a copy button.
 
 Current repo status: Phases 0–14 are implemented and deployed (ADR-0019). The live site runs a
 real model (`MODEL_PROVIDER=auto`: Groq `openai/gpt-oss-120b`, Gemini `gemini-3.8-flash` fallback,
@@ -22,8 +25,8 @@ suite by the stock MCP SDK client standing in for the external host; the scenari
 needs a real host; its other precondition, the deployed server, is live at
 `https://devsprint-mcp-issues.eleo-666.workers.dev/mcp`.
 
-Expected-UI details that are **not built**, marked where they appear: the composer's scenario
-buttons, the workspace pane's Sprint and Deploys tabs, the release-notes badge, full markdown in
+Expected-UI details that are **not built**, marked where they appear: the workspace pane's Sprint
+and Deploys tabs, the release-notes badge, full markdown in
 chat text (S-A step 4: a safe subset renders since ADR-0022, without `v-html` and without links,
 and the draft itself is readable in the diff card), and a distinct "interrupted" state
 for the stage a cancel lands in (S-C C2: that stage reads `skipped`, the same as an unreached one).
@@ -244,8 +247,8 @@ Conventions used in the step tables:
   deploy. (Only `apps/mcp-issues` was built; the deploys and analytics servers were not.)
 - **Preconditions:** Phase 6 deployed; the public issues MCP server URL (Streamable HTTP) is
   published in the README; fresh seed (highest existing issue key is DS-13); the DevSprint SPA is
-  open in a browser alongside the external host. This scenario has no composer button — it is
-  driven from the external host.
+  open in a browser alongside the external host. This scenario has no suggestion button — it is
+  driven from the external host, and the SPA's empty transcript shows the endpoint to copy.
 
 | Step | Actor                         | Action or prompt (verbatim)                                                                                                                   | Expected tool call                                                                                                  | Expected stream parts | Expected UI (workspace / chat)                                                     |
 | ---- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------- |

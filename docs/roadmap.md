@@ -10,8 +10,10 @@ Since the Phase 15 write-up: the public MCP endpoint is rate-limited, with an in
 for the agent (ADR-0020); deploys go MCP Worker → api → SPA, with `pnpm deploy:all --plan`
 (ADR-0019 status note); the live demo runs a real model, `MODEL_PROVIDER=auto` with Groq
 `openai/gpt-oss-120b` and a Gemini `gemini-3.8-flash` fallback (ADR-0021); chat renders a safe
-markdown subset without `v-html` (ADR-0022); and PRODUCT.md and DESIGN.md record the product and
-its design system.
+markdown subset without `v-html` (ADR-0022); PRODUCT.md and DESIGN.md record the product and
+its design system; and the composer buttons Phase 13 lists as unbuilt now exist, as one-click
+suggestions for the five chat scenarios in the empty transcript, with the MCP endpoint to copy for
+S-F.
 
 ## Phase table
 

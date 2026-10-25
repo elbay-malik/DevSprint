@@ -94,6 +94,22 @@
           "oklch(95% 0 0)"
         ]
       },
+      "lead": {
+        "role": "neutral",
+        "displayName": "Lead",
+        "canonical": "oklch(0.371 0 0)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(37% 0 0)",
+          "oklch(50% 0 0)",
+          "oklch(62% 0 0)",
+          "oklch(74% 0 0)",
+          "oklch(85% 0 0)",
+          "oklch(95% 0 0)"
+        ],
+        "token": "--bubble-user (dark)"
+      },
       "ink": {
         "role": "primary",
         "displayName": "Ink",
@@ -354,7 +370,7 @@
       "name": "Input",
       "kind": "input",
       "refersTo": "input",
-      "description": "The composer and the deny-reason field. Both are 16px below md (no iOS focus zoom). The composer is never disabled: while busy or locked it is read-only with aria-disabled, so it keeps focus, and its locked placeholder is the short \"Decide on the change above\".",
+      "description": "The composer and the deny-reason field. Both are 16px below md (no iOS focus zoom). The composer is never disabled: while a turn runs it is read-only with aria-disabled, so it keeps focus. While approvals are open it takes a draft and only Send is disabled; the locked placeholder is the short \"Decide on the change above\", and the full sentence is its aria-describedby, shown as a 12px Graphite line once a draft hides the placeholder. Up in an empty composer recalls the session's earlier prompts, as in a shell.",
       "html": "<input class=\"ds-input\" placeholder=\"Ask the copilot…\" />",
       "css": ".ds-input { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; height: 32px; width: 280px; padding: 4px 10px; border: 1px solid var(--input, oklch(0.922 0 0)); border-radius: 10px; background: transparent; color: var(--foreground, oklch(0.145 0 0)); font-size: 14px; transition: border-color 150ms, box-shadow 150ms; } .ds-input::placeholder { color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-input:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.556 0 0)) 50%, transparent); border-color: var(--ring, oklch(0.556 0 0)); }"
     },
@@ -365,6 +381,14 @@
       "description": "Secondary for counts and statuses, outline for points, tool names and changed sections. A release-notes diff lists its changed sections after a Graphite \"Sections:\" label as a sign and the heading (\"+ Added\", \"− Fixed\", \"~ Changed\"); only the sign takes a signal hue, and the word is in the title and read to screen readers.",
       "html": "<span class=\"ds-badge ds-badge-secondary\">In review</span> <span class=\"ds-badge ds-badge-outline ds-mono\">update_issue_status</span>",
       "css": ".ds-badge { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; display: inline-flex; align-items: center; height: 20px; padding: 2px 8px; border-radius: 2rem; font-size: 12px; font-weight: 500; border: 1px solid transparent; } .ds-badge-secondary { background: var(--secondary, oklch(0.97 0 0)); color: var(--secondary-foreground, oklch(0.205 0 0)); } .ds-badge-outline { border-color: var(--border, oklch(0.922 0 0)); color: var(--foreground, oklch(0.145 0 0)); } .ds-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }"
+    },
+    {
+      "name": "Suggestion Chips",
+      "kind": "button",
+      "refersTo": "suggestion-chip",
+      "description": "The empty transcript's first-run requests: a labelled group (\"Suggested requests\") of outline pills, 28px tall with 12px medium text, 8px apart and wrapping. Each is labelled by its outcome and sends a demo scenario's verbatim prompt, shown in its title. At most six, never Ink, and gone with the first message. Two 12px Graphite lines follow: the shared board's 00:00 UTC reset, and the MCP endpoint in mono with a ghost Copy.",
+      "html": "<div class=\"ds-suggest\" role=\"group\" aria-label=\"Suggested requests\"><button class=\"ds-chip\">Is the sprint on track?</button><button class=\"ds-chip\">Draft release notes</button><button class=\"ds-chip\">Close out the sprint</button><button class=\"ds-chip\">Deploy to staging</button><button class=\"ds-chip\">Fix a typo’d issue key</button></div>",
+      "css": ".ds-suggest { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 360px; display: flex; flex-wrap: wrap; gap: 8px; } .ds-chip { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border: 1px solid var(--border, oklch(0.922 0 0)); border-radius: 2rem; background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); font-size: 12px; font-weight: 500; cursor: pointer; transition: all 150ms; } .ds-chip:hover { background: var(--muted, oklch(0.97 0 0)); } .ds-chip:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.556 0 0)) 50%, transparent); border-color: var(--ring, oklch(0.556 0 0)); } .ds-chip:active { transform: translateY(1px); }"
     },
     {
       "name": "Board Card",
@@ -458,9 +482,9 @@
       "name": "Chat Bubbles",
       "kind": "custom",
       "refersTo": "bubble-assistant",
-      "description": "User in Ink at the end, assistant in Paper Tint at the start, cards inset inside. Each bubble is an <article> named for its speaker (You, Copilot) inside a silent role=log named Conversation; one polite status line announces the turn.",
+      "description": "User in Ink at the end (Lead, oklch(0.371 0 0), in dark mode, through --bubble-user, so it is not the brightest block on a dark screen), assistant in Paper Tint at the start, cards inset inside. Each bubble is an <article> named for its speaker (You, Copilot) inside a silent role=log named Conversation; one polite status line announces the turn.",
       "html": "<div class=\"ds-chat\"><div class=\"ds-bubble ds-user\">How many open issues are in the current sprint?</div><div class=\"ds-bubble ds-assistant\">Sprint 12: <strong>5 open issues</strong>, 23 of 31 points remaining.</div></div>",
-      "css": ".ds-chat { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 400px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; } .ds-bubble { max-width: 85%; padding: 8px 12px; border-radius: 10px; line-height: 1.43; } .ds-user { align-self: flex-end; background: var(--primary, oklch(0.205 0 0)); color: var(--primary-foreground, oklch(0.985 0 0)); } .ds-assistant { align-self: flex-start; background: var(--muted, oklch(0.97 0 0)); color: var(--foreground, oklch(0.145 0 0)); } .ds-assistant strong { font-weight: 600; }"
+      "css": ".ds-chat { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 400px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; } .ds-bubble { max-width: 85%; padding: 8px 12px; border-radius: 10px; line-height: 1.43; } .ds-user { align-self: flex-end; background: var(--bubble-user, oklch(0.205 0 0)); color: var(--bubble-user-foreground, oklch(0.985 0 0)); } .ds-assistant { align-self: flex-start; background: var(--muted, oklch(0.97 0 0)); color: var(--foreground, oklch(0.145 0 0)); } .ds-assistant strong { font-weight: 600; }"
     }
   ],
   "narrative": {
@@ -500,6 +524,7 @@
       "Do pair every state with a word, code or glyph, so it reads in greyscale.",
       "Do set identifiers in monospace and numbers in tabular figures.",
       "Do separate surfaces with a 1px ring at 10% or a tonal step, and keep 14px corners for board cards and 8px for chat cards.",
+      "Do keep the user's bubble on `--bubble-user`, not `--primary`, so dark mode does not light it up.",
       "Do spend the Ink-filled button once per region, on the affirmative action, or on the safe default (Deny) when the affirmative cannot land, and use outline for everything else. Several open approval cards in one message are one region: only the first undecided card's Approve is Ink.",
       "Do check every change in both themes at WCAG 2.2 AA.",
       "Do theme the browser's own surfaces: `color-scheme` per theme, an ink-tint selection, Rule-coloured scrollbars, a `theme-color` that follows the chosen theme (not only the OS), and the theme applied before first paint."

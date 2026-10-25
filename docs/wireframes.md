@@ -36,7 +36,6 @@ Section 5 are the canonical names for Phase 7; the board contents below are the 
 |                                                 |  +-------------------------------[Stop reply]+  |
 |                                                 |  | Ask the copilot...                [Send]  |  |
 |                                                 |  +-------------------------------------------+  |
-|                                                 |  (scenario buttons: [S-A] [S-B] ... [S-E])      |
 +-------------------------------------------------+-------------------------------------------------+
 ```
 
@@ -53,8 +52,22 @@ Annotations:
   `get_sprint_status` result. The board re-reads when a turn settles and when the reader returns
   to the tab (throttled, never mid-turn; it does not poll), and says when it was last read.
 - **Right pane — chat.** In-stream parts render in strict transcript order (see Section 2). The
-  composer sits at the bottom; scripted scenario buttons (S-A through S-E; S-F runs in an external
-  MCP host) fill the composer with the verbatim scenario prompt as a spend control.
+  composer sits at the bottom. Up in an empty composer recalls the session's earlier prompts, and
+  Down walks forward, as in a shell. While approval cards are open the composer takes a draft but
+  Send waits until they are answered. The empty transcript (before the first message, so not in
+  the sketch above) offers the five chat scenarios (S-A through S-E) as quiet pill suggestions,
+  each labelled by its outcome and sending the verbatim scenario prompt, then two Graphite lines:
+  the board is shared and resets at 00:00 UTC, and the MCP endpoint with a Copy button, since S-F
+  runs in an external MCP host:
+
+  ```
+  Ask how the sprint is going, or tell the copilot what to change.
+  (Is the sprint on track?) (Draft release notes) (Close out the sprint)
+  (Deploy to staging) (Fix a typo’d issue key)
+  Every visitor shares this board. It resets at 00:00 UTC.
+  Any MCP client can work on it too: https://…/mcp [Copy]
+  ```
+
 - **Header.** Sprint selector, demo reset, theme toggle. Reset restores the seed workspace for
   every visitor, so it asks "Reset for everyone?" inline before it does. Below `lg` a "Copilot ↓"
   control takes the reader down to the composer.
@@ -190,8 +203,9 @@ scenario specs).
   get_sprint_status and get_deployment_history. IssueTable, BurndownChart, ReleaseNotesDiff and
   DeploymentProgressCard (with a live Cancel, ADR-0013) render as cards, and ErrorCard handles any
   `ok: false` result. Stop aborts the loop mid-turn, and a call it interrupts is labelled
-  `stopped`. Every write is gated by an ApprovalCard that stays in the transcript, and the
-  composer is locked until outstanding cards are answered. Still unbuilt: the sprint selector, the
-  Board/Sprint/Deploys tabs and the scenario buttons.
+  `stopped`. Every write is gated by an ApprovalCard that stays in the transcript, and Send waits
+  until outstanding cards are answered (a draft can be typed meanwhile). The empty transcript
+  offers the scenario suggestions and the MCP endpoint. Still unbuilt: the sprint selector and the
+  Board/Sprint/Deploys tabs.
 - **Auto-scroll**: the chat pane follows new tokens with scroll-anchoring; a manual scroll-up
   releases the anchor (a jump-to-bottom affordance re-engages it).

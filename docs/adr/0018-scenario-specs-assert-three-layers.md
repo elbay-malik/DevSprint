@@ -122,3 +122,9 @@ Corrections to this ADR as written:
   (`apps/web/src/features/chat/lib/chat-text.ts`), still by interpolation with no `v-html` and no
   links. The list of unbuilt UI above, and the ADR-0016 reference "why chat text is not rendered as
   markdown", predate it.
+- **The composer buttons are no longer unbuilt.** The empty transcript offers S-A to S-E as
+  one-click suggestions that send each scenario's verbatim step-1 prompt
+  (`apps/web/src/features/chat/lib/suggestions.ts`, whose unit test reads the prompts back out of
+  `docs/demo-scenarios.md`), and S-F, which needs an outside host, gets the MCP endpoint to copy
+  instead. They sit in the transcript rather than the composer, and go once the conversation
+  starts. The scenario specs still type the prompts, as this ADR's verbatim-prompt rule has them.

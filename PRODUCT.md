@@ -97,7 +97,6 @@ storyboard; recording pending), then the ADRs and tests on GitHub.
 
 **Unbuilt or open**
 
-- The one-click scenario buttons in the composer.
 - The Sprint and Deploys tabs.
 - A release-notes badge.
 - A distinct "interrupted" deployment stage state.

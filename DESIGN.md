@@ -8,6 +8,7 @@ colors:
   pencil: 'oklch(0.708 0 0)'
   graphite: 'oklch(0.556 0 0)'
   charcoal: 'oklch(0.269 0 0)'
+  lead: 'oklch(0.371 0 0)'
   ink: 'oklch(0.205 0 0)'
   deep-ink: 'oklch(0.145 0 0)'
   bright-paper: 'oklch(0.985 0 0)'
@@ -139,6 +140,13 @@ components:
     typography: '{typography.body}'
     rounded: '{rounded.lg}'
     padding: '8px 12px'
+  suggestion-chip:
+    backgroundColor: '{colors.paper}'
+    textColor: '{colors.deep-ink}'
+    typography: '{typography.label}'
+    rounded: '{rounded.pill}'
+    padding: '0 10px'
+    height: '28px'
 ---
 
 # Design System: DevSprint Copilot
@@ -180,7 +188,9 @@ An achromatic ink-and-paper ramp, with three signal hues that each carry a meani
 
 - **Ink** (oklch(0.205 0 0)): the one affirmative action per region (Send, Approve), or the safe
   default (Deny) when the affirmative cannot land, and the user's own chat bubble. In dark mode the
-  roles invert: the primary fill becomes Rule (oklch(0.922 0 0)) with Ink text.
+  roles invert: the primary fill becomes Rule (oklch(0.922 0 0)) with Ink text. The user's bubble
+  does not follow it there: a Rule bubble was the brightest block on a dark screen, so in dark it
+  is Lead (see Neutral), through its own `--bubble-user` token.
 
 ### Neutral
 
@@ -197,6 +207,9 @@ An achromatic ink-and-paper ramp, with three signal hues that each carry a meani
   light-mode focus ring (`--ring`): 4.73:1 on Paper and 4.34:1 on Paper Tint. The ring is each
   theme's secondary-text step, so a solid focus indicator clears 3:1 wherever a control sits.
 - **Charcoal** (oklch(0.269 0 0)): dark-mode tints and badges.
+- **Lead** (oklch(0.371 0 0)): the user's chat bubble in dark mode (`--bubble-user`), one step
+  above the assistant's Charcoal (1.45:1 between them), with Bright Paper text at 9.9:1. It sits
+  below Pencil, so in dark the brightest blocks on screen are the primary buttons, not a bubble.
 - **Deep Ink** (oklch(0.145 0 0)): body text on Paper, and the dark-mode page.
 - **Bright Paper** (oklch(0.985 0 0)): text on Ink, and dark-mode body text.
 
@@ -279,6 +292,13 @@ the copilot follows, divided by a hairline, with a full screen of its own.
   approval.", and each recorded decision. A text-only bubble spans at most 85% of the column, so the two speakers stay distinct.
   An assistant bubble that holds cards spans the full column, because tables, charts and approval
   controls need the width. The user's bubble aligns to the end and the assistant's to the start.
+- **First run:** the empty transcript is the product's help. One 14px Graphite line says what to
+  ask, then a labelled group ("Suggested requests") of five suggestion chips, wrapping, and then
+  two 12px Graphite lines: "Every visitor shares this board. It resets at 00:00 UTC." and the
+  public MCP endpoint in mono, in the text colour, with a ghost Copy that reads "Copied" for 2s
+  (the status line says so too). All of it goes with the first message. The endpoint comes from
+  the build (`VITE_MCP_URL`), and the line is left out when a build has none. No label sits above
+  any of it.
 
 Viewport breakpoints are Tailwind's defaults; the workspace uses container sizes instead (42rem,
 56rem).
@@ -361,6 +381,12 @@ decision or a result lives.
   changed section, a sign and the heading ("+ Added", "− Fixed", "~ Changed"). The sign takes the
   tone; the word ("removed") is in the chip's title and read to screen readers after the heading.
 
+- **Suggestion chips:** the first-run requests. Outline pills, 28px tall, 12px medium text in the
+  text colour, 8px apart and wrapping, so five fit in two rows at 390px. Each is labelled by its
+  outcome in a few words ("Close out the sprint") and sends a demo scenario's verbatim prompt,
+  which its title shows. They are buttons, not badges: the only pills that act. No more than six,
+  and no Ink: they are suggestions, and the composer's Send keeps the region's one fill.
+
 ### Cards / Containers
 
 - **Board cards:** 14px corners on Paper with a 1px ring at 10%, 12px padding, a mono key and an
@@ -417,12 +443,16 @@ decision or a result lives.
   colour at 30%, about 4.5% white, in dark mode), 14px text.
 - **Focus:** a `--ring` border with a 3px `--ring` halo at 50%.
 - **Error / Disabled:** a Stop Red border and a 20% ring when invalid. At 50% opacity with no
-  pointer when disabled, except the composer, which is never disabled: while a turn runs or
-  approvals are open it is read-only with `aria-disabled`, so it keeps the focus it holds, and it
-  stays at full opacity. While locked, its placeholder names what to do in a form short enough to
-  fit at 390px ("Decide on the change above", or "Decide on the 5 changes above"), and the full
-  sentence ("Approve or deny the 5 changes above to continue.") is exposed to screen readers via
-  `aria-describedby`.
+  pointer when disabled, except the composer, which is never disabled: while a turn runs it is
+  read-only with `aria-disabled`, so it keeps the focus it holds, and it stays at full opacity.
+  While approvals are open it stays editable, so the next message can be drafted, and only Send is
+  disabled (Enter does nothing); the draft survives the turn the answers resume. Its placeholder
+  names what to do in a form short enough to fit at 390px ("Decide on the change above", or
+  "Decide on the 5 changes above"), and the full sentence ("Approve or deny the 5 changes above to
+  continue.") is its `aria-describedby`, shown as a 12px Graphite line under the field once a
+  draft hides the placeholder.
+- **History:** Up in an empty composer recalls the session's earlier prompts, newest first, and
+  Down walks forward to the empty field again, as in a shell. A typed draft is never replaced.
 - **Size on phones:** every field, the approval card's reason input included, is 16px below the
   medium breakpoint, so iOS does not zoom on focus. The reason input drops to 12px from md.
 
@@ -507,6 +537,8 @@ hovered day.
 - **Do** set identifiers in monospace and numbers in tabular figures.
 - **Do** separate surfaces with a 1px ring at 10% or a tonal step, and keep 14px corners for board
   cards and 8px for chat cards.
+- **Do** keep the user's bubble on `--bubble-user`, not `--primary`, so dark mode does not light it
+  up.
 - **Do** spend the Ink-filled button once per region, on the affirmative action, or on the safe
   default (Deny) when the affirmative cannot land, and use outline for everything else.
 - **Do** check every change in both themes at WCAG 2.2 AA.

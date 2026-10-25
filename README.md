@@ -104,8 +104,8 @@ tests are checked as well as run:
 - **Full markdown in chat.** Answers render bold, lists, tables and code, but never links, and
   never through `v-html`. A model repeating planted board text can't produce markup or a clickable
   URL ([ADR-0022](docs/adr/0022-a-safe-markdown-subset-in-chat.md)).
-- **A few planned UI pieces were never built:** the composer's one-click scenario buttons, the
-  Sprint and Deploys tabs, a release-notes badge, and a distinct "interrupted" stage state. The
+- **A few planned UI pieces were never built:** the Sprint and Deploys tabs, a release-notes
+  badge, and a distinct "interrupted" stage state. The
   [demo scenarios doc](docs/demo-scenarios.md) names each one, rather than describing them as if
   they existed.
 - **API previews.** PR previews cover the SPA only, against the production api. A preview of the
