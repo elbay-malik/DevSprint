@@ -47,13 +47,17 @@ Annotations:
   approved in chat adds a row to the Deploys tab while it streams.
 - **Board — five columns**, mapping 1:1 to `IssueStatus`: `todo` / `in_progress` / `in_review` /
   `blocked` / `done` ("In Prog" and "Blkd" are abbreviated only in this ASCII sketch). Cards show
-  the issue key and points; the stat cards above the board (Committed, Completed, Remaining,
-  Progress) are computed in the SPA from the workspace snapshot (`sprint-stats.ts`), not from a
-  `get_sprint_status` result.
+  the issue key and points; the stat cards above the board (Committed, Completed, Remaining with
+  its gap to the ideal burndown line, and Days left) are computed in the SPA from the workspace
+  snapshot (`sprint-stats.ts`, sharing the ideal line with `get_burndown`), not from a
+  `get_sprint_status` result. The board re-reads when a turn settles and when the reader returns
+  to the tab (throttled, never mid-turn; it does not poll), and says when it was last read.
 - **Right pane — chat.** In-stream parts render in strict transcript order (see Section 2). The
   composer sits at the bottom; scripted scenario buttons (S-A through S-E; S-F runs in an external
   MCP host) fill the composer with the verbatim scenario prompt as a spend control.
-- **Header.** Sprint selector, demo reset, theme toggle. Reset restores the seed workspace.
+- **Header.** Sprint selector, demo reset, theme toggle. Reset restores the seed workspace for
+  every visitor, so it asks "Reset for everyone?" inline before it does. Below `lg` a "Copilot ↓"
+  control takes the reader down to the composer.
 - **Stop button** ("Stop reply") is visible only while the agent is streaming; it aborts the
   agent loop mid-turn, and its label says it stops the reply, not a deployment. Scenario S-C variant C2 uses the card-level Cancel instead, which is a different
   mechanism as well as a different control: Stop aborts the request, Cancel posts to the api. It has
@@ -178,8 +182,9 @@ scenario specs).
   full screen of its own (`max-lg:h-dvh`). There are no tabs. From `lg` up, the panes share a
   locked viewport and each scrolls on its own.
 - **Current scope**: this wireframe is the TARGET layout. The repo ships the two panes, the header
-  with Reset board and the theme toggle, a four-stat row (Committed, Completed, Remaining,
-  Progress), the 5-column board plus backlog, and a composer backed by the real agent loop.
+  with Reset board (confirmed inline) and the theme toggle, a four-stat row (Committed, Completed,
+  Remaining with its pace against the ideal line, Days left), the 5-column board plus backlog, and
+  a composer backed by the real agent loop.
   Assistant text renders a safe markdown subset with no `v-html` (ChatText, ADR-0022).
   ToolCallChip is the fallback for every tool call and the permanent rendering for
   get_sprint_status and get_deployment_history. IssueTable, BurndownChart, ReleaseNotesDiff and

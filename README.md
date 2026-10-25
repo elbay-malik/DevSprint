@@ -26,10 +26,10 @@ its answers its own way, and may take a slightly different route than described 
 | `Deploy v1.5.0-rc.1 to staging.`                                                         | A gated deployment that streams build → test → migrate → release live, with a working Cancel                  |
 | `Is Sprint 12 on track? Show me the burndown.`                                           | A burndown chart drawn from the tool's own series, and a narration that names the blocker                     |
 | `Mark DS-42 as done — the billing export shipped this morning.`, then `Yes, that one.`   | A typed `ISSUE_NOT_FOUND` error, a search for what you meant, and a fresh approval for the fix                |
-| _In Claude Desktop or Cursor_: add the MCP server above, then ask it to create an issue  | The write lands on the same board. Reload the demo to see it in the backlog                                   |
+| _In Claude Desktop or Cursor_: add the MCP server above, then ask it to create an issue  | The write lands on the same board. Switch back to the demo and it appears in the backlog                      |
 
 The board is shared by every visitor and resets itself at midnight UTC. **Reset board** in the
-header restores it at any time.
+header restores it at any time, once you confirm it for everyone.
 
 ## How it works
 

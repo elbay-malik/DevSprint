@@ -118,3 +118,20 @@ midnight is **still unverified**. The board was also reset by hand several times
 would mask it, and nothing in the repo records an alarm firing in production. To check it, watch
 `wrangler tail devsprint-api` across a midnight, or look for the reset in Workers Observability,
 and record the result here.
+
+## Status note — 2026-10-25
+
+The SPA still does not poll, which is the reading of this ADR's shared board that the S-F browser
+spec cited. What changed is when it re-reads:
+
+- **It re-reads the board when the reader returns to the tab,** on window focus or on the page
+  turning visible, at most once every 5 seconds and never while a chat turn streams (it already
+  re-read when a turn settles). Writes made by another visitor or an outside MCP host now show up,
+  marked like an approved move, when the reviewer switches back, without a reload; the S-F spec
+  steps the page's clock and focuses the window instead of reloading. Nothing runs while the tab is
+  away (`apps/web/src/features/workspace/composables/useReadOnReturn.ts`).
+- **The board says when it was last read** ("Updated 2 min ago" beside a "Live board" badge, which
+  was "live" and read as the sprint's state), so a board another visitor left mid-state is
+  recognisable as current.
+- **Reset board asks "Reset for everyone?" first,** inline, because of the cost named under
+  Consequences above: either visitor's Reset discards the other's work.

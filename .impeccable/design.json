@@ -299,6 +299,11 @@
         "name": "liveness-pulse",
         "value": "animate-pulse, staggered 150ms / 300ms; static under prefers-reduced-motion",
         "purpose": "Typing dots and a running tool."
+      },
+      {
+        "name": "copilot-jump",
+        "value": "scrollIntoView smooth; instant under prefers-reduced-motion",
+        "purpose": "The phone-only Copilot jump in the header, down to the composer."
       }
     ],
     "breakpoints": [
@@ -333,7 +338,7 @@
       "name": "Outline Button",
       "kind": "button",
       "refersTo": "button-outline",
-      "description": "Secondary or abortive actions: Reset board, Stop reply, Deny, Cancel deploy. The composer's Stop names what it stops (\"Stop reply\"), so it is not mistaken for a deployment card's Cancel.",
+      "description": "Secondary or abortive actions: Reset board and its Confirm, the phone-only Copilot jump, Stop reply, Deny, Cancel deploy. The composer's Stop names what it stops (\"Stop reply\"), so it is not mistaken for a deployment card's Cancel.",
       "html": "<button class=\"ds-btn-outline\">Deny</button>",
       "css": ".ds-btn-outline { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border: 1px solid var(--border, oklch(0.922 0 0)); border-radius: 8px; background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); font-size: 12.8px; font-weight: 500; cursor: pointer; transition: all 150ms; } .ds-btn-outline:hover { background: var(--muted, oklch(0.97 0 0)); } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.556 0 0)) 50%, transparent); border-color: var(--ring, oklch(0.556 0 0)); } .ds-btn-outline:active { transform: translateY(1px); }"
     },
@@ -365,7 +370,7 @@
       "name": "Board Card",
       "kind": "card",
       "refersTo": "board-card",
-      "description": "An issue on the board: mono key, outline points badge, medium title, assignee. A pending approval for its status swaps the hairline for a 1px dashed --ring outline inside the card's edge and adds a \"→ Done\" caption; a status the last read changed adds a 1px Go Green (--success) ring inside the edge for 1.5s (static under reduced motion).",
+      "description": "An issue on the board, one item in its column's list: mono key, outline points badge (read as \"5 points\"), medium title, assignee. A pending approval for its status swaps the hairline for a 1px dashed --ring outline inside the card's edge and adds a \"→ Done\" caption; a status the last read changed adds a 1px Go Green (--success) ring inside the edge for 1.5s (static under reduced motion).",
       "html": "<div class=\"ds-board-card\"><div class=\"ds-row\"><span class=\"ds-key\">DS-7</span><span class=\"ds-pts\">5</span></div><p class=\"ds-title\">Billing export CSV download</p><p class=\"ds-meta\">@ben</p></div>",
       "css": ".ds-board-card { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 260px; padding: 12px; border-radius: 14px; background: var(--card, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground, oklch(0.145 0 0)) 10%, transparent); display: flex; flex-direction: column; gap: 6px; } .ds-row { display: flex; justify-content: space-between; align-items: center; } .ds-key { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-pts { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 2rem; border: 1px solid var(--border, oklch(0.922 0 0)); font-variant-numeric: tabular-nums; } .ds-title { margin: 0; font-size: 14px; font-weight: 500; line-height: 1.375; } .ds-meta { margin: 0; font-size: 12px; color: var(--muted-foreground, oklch(0.556 0 0)); }"
     },
@@ -384,6 +389,38 @@
       "description": "A board card whose status the last read of the board changed, marked for 1.5s: a 1px Go Green (--success) ring inside the card's edge (offset -1px) holds, then fades on an exponential ease-out. Green, because \"applied\" is a result, so it never reads as the Graphite focus ring; inside, so stacked cards never merge. No background tint, which would take the muted text under 4.5:1. Under reduced motion the ring stays still for the same 1.5s.",
       "html": "<div class=\"ds-board-card ds-changed\"><div class=\"ds-row\"><span class=\"ds-key\">DS-7</span><span class=\"ds-pts\">5</span></div><p class=\"ds-title\">Billing export CSV download</p><p class=\"ds-meta\">@ben</p></div>",
       "css": ".ds-board-card { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 260px; padding: 12px; border-radius: 14px; background: var(--card, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground, oklch(0.145 0 0)) 10%, transparent); display: flex; flex-direction: column; gap: 6px; } .ds-row { display: flex; justify-content: space-between; align-items: center; } .ds-key { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-pts { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 2rem; border: 1px solid var(--border, oklch(0.922 0 0)); font-variant-numeric: tabular-nums; } .ds-title { margin: 0; font-size: 14px; font-weight: 500; line-height: 1.375; } .ds-meta { margin: 0; font-size: 12px; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-changed { outline: 1px solid transparent; outline-offset: -1px; animation: ds-board-change 1.5s both; } @keyframes ds-board-change { 0% { outline-color: var(--success, oklch(0.508 0.118 165.612)); } 40% { outline-color: var(--success, oklch(0.508 0.118 165.612)); animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); } 100% { outline-color: transparent; } } @media (prefers-reduced-motion: reduce) { .ds-changed { animation: none; outline-color: var(--success, oklch(0.508 0.118 165.612)); } }"
+    },
+    {
+      "name": "Board Empty Column",
+      "kind": "card",
+      "refersTo": "board-card",
+      "description": "A column with no issues: under its heading (\"Todo\" and a count of 0), a compact slot one line tall, 14px corners and a 1px Rule border on Paper, with \"No issues\" in 12px Graphite. A slot rather than a caption, so the column keeps a shape and no text floats under a heading. Solid, never dashed (dashes mean a pending move), and no Paper Tint fill, where Graphite falls to 4.34:1.",
+      "html": "<div class=\"ds-col\"><p class=\"ds-col-head\">Todo <span class=\"ds-count\">0</span></p><p class=\"ds-empty\">No issues</p></div>",
+      "css": ".ds-col { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 200px; display: flex; flex-direction: column; gap: 8px; } .ds-col-head { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-count { font-size: 12px; padding: 2px 8px; border-radius: 2rem; background: var(--secondary, oklch(0.97 0 0)); color: var(--secondary-foreground, oklch(0.205 0 0)); font-variant-numeric: tabular-nums; } .ds-empty { margin: 0; padding: 6px 12px; border: 1px solid var(--border, oklch(0.922 0 0)); border-radius: 14px; font-size: 12px; color: var(--muted-foreground, oklch(0.556 0 0)); }"
+    },
+    {
+      "name": "Stat Card, Remaining",
+      "kind": "card",
+      "refersTo": "board-card",
+      "description": "One of four stat tiles (Committed, Completed, Remaining, Days left): a Graphite label over a 24px tabular value. Remaining adds a 12px Graphite sub-line, the gap to the burndown's ideal line on the board's clock in whole points (\"13 pts behind ideal\", \"On track\", \"7 pts ahead of ideal\"), from the same shared function the chart's ideal line uses. The word carries behind or ahead; no hue does.",
+      "html": "<div class=\"ds-stat\"><p class=\"ds-stat-label\">Remaining</p><p class=\"ds-stat-value\">23 pts</p><p class=\"ds-stat-pace\">13 pts behind ideal</p></div>",
+      "css": ".ds-stat { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 200px; padding: 16px; border-radius: 14px; background: var(--card, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground, oklch(0.145 0 0)) 10%, transparent); display: flex; flex-direction: column; gap: 4px; } .ds-stat p { margin: 0; } .ds-stat-label { font-size: 14px; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-stat-value { font-size: 24px; line-height: 32px; font-weight: 500; font-variant-numeric: tabular-nums; } .ds-stat-pace { font-size: 12px; color: var(--muted-foreground, oklch(0.556 0 0)); font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Board Status",
+      "kind": "badge",
+      "refersTo": "badge-secondary",
+      "description": "Beside the sprint's name: a secondary badge reading \"Live board\" while the board is the Worker's, \"Offline\" while it is the seed, so it reads as the connection and not as the sprint going live. While live, a 12px Graphite <time> follows: \"Updated just now\", \"Updated 2 min ago\", refreshed every 30s. The board re-reads when a turn settles and when the reader returns to the tab, at most once every 5s and never while a turn streams; it does not poll.",
+      "html": "<div class=\"ds-status\"><span class=\"ds-badge\">Live board</span><time class=\"ds-updated\">Updated 2 min ago</time></div>",
+      "css": ".ds-status { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; display: flex; align-items: center; gap: 8px; } .ds-badge { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 2rem; background: var(--secondary, oklch(0.97 0 0)); color: var(--secondary-foreground, oklch(0.205 0 0)); } .ds-updated { font-size: 12px; color: var(--muted-foreground, oklch(0.556 0 0)); }"
+    },
+    {
+      "name": "Reset Question",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Reset board asks first, inline and not in a modal, because the board is shared: the first click swaps the button for a named group, \"Reset for everyone?\" in 12px medium, an outline Confirm and a ghost Cancel, and moves focus to Confirm. Esc, Cancel, focus moving to another control, a press outside the group or 4s without an answer back out, returning focus to Reset board when it was inside. Reset board and Confirm are described by \"Restores the seed board for every visitor.\"",
+      "html": "<div class=\"ds-ask\" role=\"group\" aria-label=\"Reset for everyone?\"><span class=\"ds-q\">Reset for everyone?</span><button class=\"ds-btn ds-outline\">Confirm</button><button class=\"ds-btn ds-ghost\">Cancel</button></div>",
+      "css": ".ds-ask { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; display: flex; align-items: center; gap: 8px; color: var(--foreground, oklch(0.145 0 0)); } .ds-q { font-size: 12px; font-weight: 500; } .ds-btn { font: inherit; font-size: 12.8px; font-weight: 500; height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: inherit; } .ds-outline { border-color: var(--border, oklch(0.922 0 0)); background: var(--background, oklch(1 0 0)); }"
     },
     {
       "name": "Approval Card",

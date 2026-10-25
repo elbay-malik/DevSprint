@@ -267,7 +267,11 @@ the copilot follows, divided by a hairline, with a full screen of its own.
 - **Board and stats follow the pane, not the window.** The workspace is a size container. Below
   42rem of pane the board has 2 columns, from 42rem 3, and from 56rem all 5 statuses sit in one
   row. Stats go from 2 across to 4 at 42rem. Gaps are 12px, and the backlog sits below as its own
-  grid.
+  grid. A full Done column can push the backlog out of view, so the rule between the stats and the
+  board carries a ghost "Backlog 2 ↓" at its end, which moves focus to the backlog heading and so
+  scrolls whichever container holds it (the pane from lg up, the page below). Each column's cards
+  are a list (`ul role="list"`), and the count badges and points badges carry their unit for
+  screen readers only ("2 issues", "5 points").
 - **Chat:** the transcript is a `role="log"` named "Conversation" that does not speak itself
   (`aria-live="off"`), and each bubble is an `<article>` named for its speaker ("You" or
   "Copilot"). One always-mounted polite status line reports the turn instead of the stream: "The
@@ -361,6 +365,25 @@ decision or a result lives.
 
 - **Board cards:** 14px corners on Paper with a 1px ring at 10%, 12px padding, a mono key and an
   outline points badge on top, and the title in 14px medium.
+- **Empty column:** a compact slot one line tall under the heading, 14px corners and a 1px Rule
+  border on Paper, with "No issues" in 12px Graphite (4.73:1) inside it. A slot, not a caption, so
+  the column keeps a shape beside its neighbours and no text is left floating under a heading. It
+  is solid, never dashed, since dashes mean a pending move, and it takes no Paper Tint fill, where
+  Graphite text falls to 4.34:1.
+- **Stat cards:** four tiles, Committed, Completed, Remaining and Days left, each a Graphite label
+  over a 24px tabular value. Remaining carries the row's one signal as a 12px Graphite sub-line:
+  the gap to the burndown's ideal line on the board's clock, in whole points ("13 pts behind
+  ideal", "On track", "7 pts ahead of ideal"). It comes from the same shared function the chart's
+  ideal line is drawn with, so the tile and the chart agree on any day. It stays on the ramp: the
+  word says behind or ahead, and no hue does. Progress (Completed ÷ Committed) was dropped as a
+  restatement; Days left is the wireframe's fourth number and what makes the gap plannable.
+- **Board status:** beside the sprint's name, a secondary badge reads "Live board" while the board
+  is the Worker's and "Offline" while it is the seed, so it reads as the connection, not as the
+  sprint going live. A 12px Graphite `<time>` follows it while live: "Updated just now", "Updated
+  2 min ago", refreshed every 30s, with the exact time in its title. The board is re-read when a
+  turn settles and when the reader returns to the tab (window focus, or the page turning visible),
+  at most once every 5s and never while a turn streams, through the same read that marks a changed
+  card. It does not poll.
 - **Pending move (board card):** while an approval card asks to change an issue's status, its
   board card swaps its hairline for a 1px dashed `--ring` outline drawn inside its edge (offset
   -1px), so it keeps its footprint and aligns with the column heading, and takes a 12px medium
@@ -408,6 +431,19 @@ decision or a result lives.
 There is a single header bar: the wordmark in 14px semibold on the left, and the Reset board
 (outline) and theme toggle (ghost, glyphs ○ ● ◐ with an accessible label) on the right. It has a
 hairline underneath and no fill. There are no routes to navigate besides a 404.
+
+- **Copilot jump (below lg):** an outline "Copilot ↓" before Reset board. Stacked, the copilot
+  starts under the whole board, so this scrolls to the chat pane (smoothly, or at once under
+  reduced motion) and focuses the composer. It is hidden from lg up, where both panes share the
+  view.
+- **Reset board asks first, inline.** The board is shared, so the first click swaps the button for
+  a named group: "Reset for everyone?" in 12px medium, an outline Confirm and a ghost Cancel, with
+  focus moved to Confirm. Esc, Cancel, focus moving to another control, a press outside the group
+  or 4s without an answer back out, and focus returns to Reset board when it was inside the
+  question. Both Reset board and Confirm are described by "Restores the seed board for every
+  visitor.", which is also Reset board's title. While the reset runs the button reads
+  "Resetting…" with `aria-disabled`, so it keeps the focus Confirm hands back. No modal: the
+  question needs neither interruption nor protected focus.
 
 ### Approval Card (signature)
 
