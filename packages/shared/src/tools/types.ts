@@ -11,6 +11,7 @@ import type {
   ToolResult,
 } from '../workspace/types'
 import type {
+  AssignIssueInput,
   CreateIssueInput,
   CreateReleaseNotesInput,
   DiffReleaseNotesInput,
@@ -117,6 +118,12 @@ export interface UpdateIssueStatusData extends UndoableWrite {
   previousStatus: IssueStatus
 }
 
+export interface AssignIssueData extends UndoableWrite {
+  issue: Issue
+  /** Who held the issue before this write; null when nobody did. */
+  previousAssigneeId: string | null
+}
+
 export interface CreateReleaseNotesData {
   releaseNote: ReleaseNote
 }
@@ -135,7 +142,7 @@ export interface RunDeploymentData {
  * a draft is harmless to leave and a release cannot be un-shipped, so their
  * cards never offer one.
  */
-export const UNDOABLE_TOOL_NAMES = ['create_issue', 'update_issue_status'] as const
+export const UNDOABLE_TOOL_NAMES = ['create_issue', 'update_issue_status', 'assign_issue'] as const
 export type UndoableToolName = (typeof UNDOABLE_TOOL_NAMES)[number]
 
 export interface UndoChangeInput {
@@ -181,4 +188,5 @@ export type DevSprintUITools = {
     output: ToolResult<CreateReleaseNotesData>
   }
   run_deployment: { input: RunDeploymentInput; output: ToolResult<RunDeploymentData> }
+  assign_issue: { input: AssignIssueInput; output: ToolResult<AssignIssueData> }
 }

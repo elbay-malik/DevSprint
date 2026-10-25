@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createWorkspaceSeed, WORKSPACE_NOW, type Workspace } from '@devsprint/shared'
 import {
+  assignIssue,
   createIssue,
   createReleaseNotes,
   finishDeployment,
@@ -186,6 +187,78 @@ describe('updateIssueStatus', () => {
     expect(expectError(updateIssueStatus(seed(), { issueKey: 'DS-5', status: 'done' })).code).toBe(
       'INVALID_INPUT',
     )
+  })
+})
+
+describe('assignIssue', () => {
+  it('hands an unassigned issue to a teammate and reports who held it', () => {
+    const workspace = seed()
+
+    const data = expectOk(assignIssue(workspace, { issueKey: 'DS-12', assigneeId: 'u-dana' }))
+
+    expect(data.previousAssigneeId).toBeNull()
+    expect(data.issue).toMatchObject({
+      key: 'DS-12',
+      assigneeId: 'u-dana',
+      updatedAt: WORKSPACE_NOW,
+    })
+    expect(workspace.issues.find((issue) => issue.key === 'DS-12')?.assigneeId).toBe('u-dana')
+  })
+
+  it('reassigns, touching nothing but the assignee', () => {
+    const workspace = seed()
+    const before = structuredClone(workspace.issues.find((issue) => issue.key === 'DS-7')!)
+
+    const data = expectOk(assignIssue(workspace, { issueKey: 'ds-7', assigneeId: 'u-chidi' }))
+
+    expect(data.previousAssigneeId).toBe('u-ben')
+    expect(data.issue).toEqual({ ...before, assigneeId: 'u-chidi', updatedAt: WORKSPACE_NOW })
+  })
+
+  it('unassigns with null', () => {
+    const workspace = seed()
+
+    const data = expectOk(assignIssue(workspace, { issueKey: 'DS-11', assigneeId: null }))
+
+    expect(data.previousAssigneeId).toBe('u-dana')
+    expect(workspace.issues.find((issue) => issue.key === 'DS-11')?.assigneeId).toBeNull()
+  })
+
+  it('reports an unknown key and points at the recovery path', () => {
+    const workspace = seed()
+    const error = expectError(assignIssue(workspace, { issueKey: 'DS-42', assigneeId: 'u-dana' }))
+    expect(error.code).toBe('ISSUE_NOT_FOUND')
+    expect(error.message).toContain('search_issues')
+    expect(workspace).toEqual(seed())
+  })
+
+  it('refuses an assignee who is not on the roster, rather than writing the id', () => {
+    const workspace = seed()
+
+    const error = expectError(assignIssue(workspace, { issueKey: 'DS-12', assigneeId: 'u-zoe' }))
+
+    expect(error.code).toBe('USER_NOT_FOUND')
+    // The model is told who it could have meant.
+    expect(error.message).toContain('u-dana')
+    expect(workspace.issues.find((issue) => issue.key === 'DS-12')?.assigneeId).toBeNull()
+  })
+
+  it('refuses a no-op, to someone or to nobody, without touching the issue', () => {
+    const workspace = seed()
+
+    const same = expectError(assignIssue(workspace, { issueKey: 'DS-11', assigneeId: 'u-dana' }))
+    const nobody = expectError(assignIssue(workspace, { issueKey: 'DS-12', assigneeId: null }))
+
+    expect(same).toEqual({ code: 'INVALID_INPUT', message: 'DS-11 is already assigned to u-dana.' })
+    expect(nobody).toEqual({ code: 'INVALID_INPUT', message: 'DS-12 is already unassigned.' })
+    expect(workspace).toEqual(seed())
+  })
+
+  it('returns a snapshot, so a later write cannot rewrite an earlier result', () => {
+    const workspace = seed()
+    const first = expectOk(assignIssue(workspace, { issueKey: 'DS-12', assigneeId: 'u-dana' }))
+    assignIssue(workspace, { issueKey: 'DS-12', assigneeId: 'u-ben' })
+    expect(first.issue.assigneeId).toBe('u-dana')
   })
 })
 

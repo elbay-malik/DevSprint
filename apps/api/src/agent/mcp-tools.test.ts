@@ -71,7 +71,7 @@ describe('unwrapEnvelope', () => {
 })
 
 describe('createMcpIssueTools', () => {
-  it('builds exactly the four issue tools', async () => {
+  it('builds exactly the five issue tools', async () => {
     const server = fakeMcpServer(() => ({ ok: true, data: {} }))
     const tools = await createMcpIssueTools({ fetch: server.fetch })
 
@@ -84,6 +84,7 @@ describe('createMcpIssueTools', () => {
 
     expect(tools.create_issue?.needsApproval).toBe(true)
     expect(tools.update_issue_status?.needsApproval).toBe(true)
+    expect(tools.assign_issue?.needsApproval).toBe(true)
     // Reads must not sprout a gate just because they arrive over MCP.
     expect(tools.list_issues?.needsApproval).toBeUndefined()
     expect(tools.search_issues?.needsApproval).toBeUndefined()

@@ -15,6 +15,7 @@ import {
   startDeployment,
 } from './mutations'
 import {
+  assignIssueTracked,
   createIssueTracked,
   undoChange,
   updateIssueStatusTracked,
@@ -109,6 +110,7 @@ export function createLocalWorkspaceApi(store: WorkspaceStore): WorkspaceApi {
     diffReleaseNotes: (input) => Promise.resolve(diffReleaseNotes(store.get(), input)),
     createIssue: (input) => tracked(createIssueTracked(store.get(), input, stamp())),
     updateIssueStatus: (input) => tracked(updateIssueStatusTracked(store.get(), input, stamp())),
+    assignIssue: (input) => tracked(assignIssueTracked(store.get(), input, stamp())),
     undoChange: (input) => {
       const { changes, at } = stamp()
       return tracked(undoChange(store.get(), changes, input.changeId, at))

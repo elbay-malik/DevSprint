@@ -7,9 +7,9 @@ import { workspaceOf } from './workspace'
 
 /**
  * The publicly exposed issues MCP server (ADR-0002). An external host such as
- * Claude Desktop adds this URL as a remote server and gets the four issue
+ * Claude Desktop adds this URL as a remote server and gets the five issue
  * tools. It drives the same workspace the SPA shows, which is what scenario S-F
- * is there to prove. The in-app agent sources those same four tools from this
+ * is there to prove. The in-app agent sources those same five tools from this
  * endpoint through an MCP client, so both clients drive one implementation
  * rather than two that drift.
  *

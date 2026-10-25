@@ -8,6 +8,7 @@ import {
 import type {
   DailyModelUsage,
   WorkspaceApi,
+  AssignIssueInput,
   CreateIssueInput,
   CreateReleaseNotesInput,
   DiffReleaseNotesInput,
@@ -37,6 +38,7 @@ import {
   startDeployment,
 } from './mutations'
 import {
+  assignIssueTracked,
   createIssueTracked,
   undoChange,
   updateIssueStatusTracked,
@@ -358,7 +360,7 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
   // only once storage has taken the write — so a rejected write leaves no trace
   // in storage *or* in the cache.
   //
-  // The two issue writes also record what they changed as they land, whichever
+  // The three issue writes also record what they changed as they land, whichever
   // client made them, so an approved card can offer an undo (changes.ts).
 
   async createIssue(input: CreateIssueInput) {
@@ -371,6 +373,11 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
     return this.commit((draft, changes) =>
       updateIssueStatusTracked(draft, input, { changes, ...stamp }),
     )
+  }
+
+  async assignIssue(input: AssignIssueInput) {
+    const stamp = this.stamp()
+    return this.commit((draft, changes) => assignIssueTracked(draft, input, { changes, ...stamp }))
   }
 
   async undoChange(input: UndoChangeInput) {

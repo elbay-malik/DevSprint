@@ -4,8 +4,8 @@
  * descriptions are transcribed verbatim; keep both in sync.
  *
  * Tools 1–6 are read/query and rich-data: they always auto-execute. Tools 7–9
- * are gated writes — they only run after explicit human approval, with no
- * exceptions and no batching (docs/tool-inventory.md §3, ADR-0003). Tool 10,
+ * and 11 are gated writes — they only run after explicit human approval, with
+ * no exceptions and no batching (docs/tool-inventory.md §3, ADR-0003). Tool 10,
  * `run_deployment`, is gated the same way and additionally streams progress
  * while it runs.
  */
@@ -22,6 +22,7 @@ export const WRITE_TOOL_NAMES = [
   'update_issue_status',
   'create_release_notes',
   'run_deployment',
+  'assign_issue',
 ] as const
 export type WriteToolName = (typeof WRITE_TOOL_NAMES)[number]
 
@@ -57,14 +58,16 @@ export const TOOL_DESCRIPTIONS: Record<ReadToolName | WriteToolName, string> = {
     'Use when the user asks to save or publish release notes they have already been shown — not to draft them, which is diff_release_notes. Pass the markdown the user saw.',
   run_deployment:
     'Use when the user asks to deploy, ship, release, or roll out a version to an environment.',
+  assign_issue:
+    'Use when the user asks to assign, reassign, or unassign an existing issue, or to hand it to someone on the team (any change of assignee).',
 }
 
 /**
  * Length bounds on everything a client supplies.
  *
  * Not cosmetic validation. The whole workspace is persisted as a single Durable
- * Object value (ADR-0011), and `apps/mcp-issues` exposes `create_issue` and
- * `update_issue_status` publicly with no approval gate — the MCP host owns that
+ * Object value (ADR-0011), and `apps/mcp-issues` exposes `create_issue`,
+ * `update_issue_status` and `assign_issue` publicly with no approval gate — the MCP host owns that
  * prompt, not us. So one well-formed request with a multi-megabyte string can
  * push the stored workspace past the storage ceiling, after which *every* later
  * write fails for *every* visitor until someone resets the board. A single
@@ -153,6 +156,13 @@ export const updateIssueStatusInputSchema = z.object({
   comment: z.string().max(LIMITS.comment).optional(),
 })
 
+export const assignIssueInputSchema = z.object({
+  /** Human key, e.g. 'DS-12'. */
+  issueKey: z.string().max(LIMITS.issueKey),
+  /** A roster id such as 'u-dana'; null takes the issue off whoever holds it. */
+  assigneeId: z.string().max(LIMITS.id).nullable(),
+})
+
 export const createReleaseNotesInputSchema = z.object({
   /** e.g. 'v1.5.0'. */
   version: z.string().max(LIMITS.version),
@@ -181,6 +191,7 @@ export const WRITE_TOOL_INPUT_SCHEMAS = {
   update_issue_status: updateIssueStatusInputSchema,
   create_release_notes: createReleaseNotesInputSchema,
   run_deployment: runDeploymentInputSchema,
+  assign_issue: assignIssueInputSchema,
 } satisfies Record<WriteToolName, z.ZodType>
 
 export type ListIssuesInput = z.infer<typeof listIssuesInputSchema>
@@ -193,3 +204,4 @@ export type CreateIssueInput = z.infer<typeof createIssueInputSchema>
 export type UpdateIssueStatusInput = z.infer<typeof updateIssueStatusInputSchema>
 export type CreateReleaseNotesInput = z.infer<typeof createReleaseNotesInputSchema>
 export type RunDeploymentInput = z.infer<typeof runDeploymentInputSchema>
+export type AssignIssueInput = z.infer<typeof assignIssueInputSchema>

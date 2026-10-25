@@ -292,6 +292,26 @@ describe('WorkspaceDO — undo journal', () => {
     expect(created.ok && created.data.changeId).not.toBe(first)
   })
 
+  it('records an assignment, and undoes it from storage after a fresh load', async () => {
+    const fake = fakeDurableObjectState()
+    const first = new WorkspaceDO(fake.ctx, {} as Cloudflare.Env)
+    await fake.ready()
+    const assigned = await first.assignIssue({ issueKey: 'DS-12', assigneeId: 'u-dana' })
+    expect(assigned).toMatchObject({ ok: true, data: { previousAssigneeId: null } })
+    const changeId = assigned.ok ? assigned.data.changeId : undefined
+    expect(changeId).toMatch(/^[0-9a-f-]{36}$/)
+
+    const second = new WorkspaceDO(fake.ctx, {} as Cloudflare.Env)
+    await fake.ready()
+    expect((await second.snapshot()).issues.find((i) => i.key === 'DS-12')?.assigneeId).toBe(
+      'u-dana',
+    )
+    const undone = await second.undoChange({ changeId: changeId! })
+
+    expect(undone).toMatchObject({ ok: true, data: { tool: 'assign_issue', outcome: 'restored' } })
+    expect((await second.snapshot()).issues.find((i) => i.key === 'DS-12')?.assigneeId).toBeNull()
+  })
+
   it('persists the record with the board, so an undo survives a fresh load', async () => {
     const fake = fakeDurableObjectState()
     const first = new WorkspaceDO(fake.ctx, {} as Cloudflare.Env)

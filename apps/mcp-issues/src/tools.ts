@@ -1,11 +1,13 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
+  type AssignIssueInput,
   type CreateIssueInput,
   type ListIssuesInput,
   type SearchIssuesInput,
   type UpdateIssueStatusInput,
   type WorkspaceApi,
   TOOL_DESCRIPTIONS,
+  assignIssueInputSchema,
   createIssueInputSchema,
   listIssuesInputSchema,
   searchIssuesInputSchema,
@@ -13,12 +15,12 @@ import {
 } from '@devsprint/shared/tools'
 
 /**
- * The four issue tools this server exposes (docs/tool-inventory.md, "Future MCP
+ * The five issue tools this server exposes (docs/tool-inventory.md, "Future MCP
  * server" column). Descriptions and input schemas are the same objects the
  * in-app agent uses, so the contract cannot drift between the two clients.
  *
- * `create_issue` and `update_issue_status` are writes, and they carry no
- * approval flag here on purpose: over MCP the host runs its own tool-permission
+ * `create_issue`, `update_issue_status` and `assign_issue` are writes, and they
+ * carry no approval flag here on purpose: over MCP the host runs its own tool-permission
  * prompt, which replaces our ApprovalCard (docs/tool-inventory.md §3.6). What
  * does not change is server-side validation — the schema below runs on every
  * call regardless of what the host allowed.
@@ -50,6 +52,11 @@ const ISSUE_TOOLS = [
     schema: updateIssueStatusInputSchema,
     invoke: (workspace: WorkspaceApi, input: UpdateIssueStatusInput) =>
       workspace.updateIssueStatus(input),
+  },
+  {
+    name: 'assign_issue',
+    schema: assignIssueInputSchema,
+    invoke: (workspace: WorkspaceApi, input: AssignIssueInput) => workspace.assignIssue(input),
   },
 ] as const
 

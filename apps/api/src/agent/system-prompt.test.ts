@@ -30,8 +30,17 @@ describe('buildSystemPrompt', () => {
     // prompt entirely — kept the tests green.
     expect(prompt).not.toMatch(/write actions are not available/i)
     expect(prompt).toContain('update_issue_status')
+    expect(prompt).toContain('assign_issue')
     expect(prompt).toMatch(/one call per change/i)
     expect(prompt).toMatch(/denied/i)
+  })
+
+  it('has assign_issue take a roster id, and refuse to guess one', () => {
+    // The roster above is the only place names resolve from, so a name with no
+    // match is a question, not a write the server would refuse anyway.
+    expect(prompt).toContain('- u-dana: Dana Petrova, @dana, devops')
+    expect(prompt).toMatch(/assign_issue takes an id from the roster above, or null to unassign/)
+    expect(prompt).toMatch(/if nobody on the roster matches, say so and ask rather than guess/)
   })
 
   it('describes the formatting the chat actually renders (ADR-0022)', () => {
@@ -70,8 +79,8 @@ describe('buildSystemPrompt', () => {
   it('keeps "the card is the confirmation" to writes the user asked for (S-E)', () => {
     // Unscoped, it pulled against "a search match is a guess, so ask": a live
     // model could follow either and request DS-7 straight off the search.
-    expect(prompt).toMatch(/When the user asks for a write in so many\s+words, call it/)
-    expect(prompt).toMatch(/A write you inferred, such as a search match, is a\s+question first/)
+    expect(prompt).toMatch(/When the user asks for a\s+write in so many words, call it/)
+    expect(prompt).toMatch(/A write you inferred, such as a search\s+match, is a question first/)
     expect(prompt).not.toMatch(/Call them when asked/)
   })
 

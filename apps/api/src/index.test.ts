@@ -144,6 +144,26 @@ describe('POST /api/workspace/undo', () => {
     expect(workspace.store.get().issues.some((i) => i.key === issue?.key)).toBe(false)
   })
 
+  it('puts an approved assignment back to nobody', async () => {
+    const { createLocalWorkspaceApi } = await import('./workspace/store')
+    const assigned = await createLocalWorkspaceApi(workspace.store).assignIssue({
+      issueKey: 'DS-12',
+      assigneeId: 'u-dana',
+    })
+    const changeId = assigned.ok ? assigned.data.changeId : undefined
+    const assignee = () => workspace.store.get().issues.find((i) => i.key === 'DS-12')?.assigneeId
+    expect(assignee()).toBe('u-dana')
+
+    const res = await undo({ changeId })
+
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toMatchObject({
+      ok: true,
+      data: { changeId, tool: 'assign_issue', issueKey: 'DS-12', outcome: 'restored' },
+    })
+    expect(assignee()).toBeNull()
+  })
+
   it('refuses a second undo of the same change with a 409', async () => {
     const changeId = await applied()
     await undo({ changeId })

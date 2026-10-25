@@ -19,6 +19,7 @@ import {
   type ToolResult,
 } from '@devsprint/shared'
 import type {
+  AssignIssueData,
   BurndownData,
   CreateIssueData,
   CreateReleaseNotesData,
@@ -117,6 +118,10 @@ function searchQueryFrom(text: string): string {
   return stripped.length > 0 ? stripped : text
 }
 
+/** "Assign DS-12 to Dana", "reassign it", "unassign DS-9", "hand DS-12 to @ben". */
+const ASSIGN_INTENT = /\b(assign|reassign|unassign|hand)\b/i
+const UNASSIGN_INTENT = /\bunassign\b|\b(to )?(nobody|no one)\b/i
+
 /** Longest chain the mock will script, matching the demo scenarios (S-A uses three). */
 const MAX_PLAN_LENGTH = 3
 
@@ -160,6 +165,13 @@ export function planUserText(text: string, availableTools: ReadonlySet<string>):
         input: { issueKey: namedKey, status: namedStatus },
       },
     ]
+  }
+
+  // "Assign DS-12 to Dana" reads the issue first, so the write that follows
+  // names a key the board has rather than one the sentence merely mentions.
+  // The person comes from the roster in the system prompt (assignCalls).
+  if (namedKey !== undefined && ASSIGN_INTENT.test(text) && availableTools.has('search_issues')) {
+    return [{ kind: 'tool-call', toolName: 'search_issues', input: { query: namedKey } }]
   }
 
   // "Deploy v1.5.0-rc.1 to staging" asks for the write; "has v1.4.2 shipped?"
@@ -388,6 +400,13 @@ function summarizeStatusChanges(applied: UpdateIssueStatusData[], requested: num
   return `${tally} issues are now ${label(target)}.`
 }
 
+/** A person as the chat names them: by @handle, which the roster maps from an id. */
+function summarizeAssignment(data: AssignIssueData, handles: ReadonlyMap<string, string>): string {
+  const { key, assigneeId } = data.issue
+  if (assigneeId === null) return `${key} is now unassigned.`
+  return `${key} is now assigned to @${handles.get(assigneeId) ?? assigneeId}.`
+}
+
 function summarizeCreatedIssue(data: CreateIssueData): string {
   const where = data.issue.sprintId === null ? 'the backlog' : data.issue.sprintId
   return `Created ${data.issue.key} "${data.issue.title}" in ${where}.`
@@ -444,7 +463,10 @@ function describeFailure(toolName: string, code: ToolErrorCode, input: unknown):
     case 'WORKSPACE_FULL':
       return 'The board is full; a reset clears it.'
     case 'INVALID_INPUT':
-      return 'The board couldn’t accept that request.'
+      // The one refusal an assignment has of its own: it already has that assignee.
+      return toolName === 'assign_issue'
+        ? `${arg('issueKey') ?? 'That issue'} already has that assignee.`
+        : 'The board couldn’t accept that request.'
     default:
       return 'That didn’t go through.'
   }
@@ -454,7 +476,12 @@ function describeFailure(toolName: string, code: ToolErrorCode, input: unknown):
  * One grounded sentence per tool. A failure is said once, in words: the error
  * card beside it already shows the code.
  */
-export function summarizeToolOutput(toolName: string, output: unknown, input?: unknown): string {
+export function summarizeToolOutput(
+  toolName: string,
+  output: unknown,
+  input?: unknown,
+  handles: ReadonlyMap<string, string> = new Map(),
+): string {
   if (!isEnvelope(output)) return `${toolName} returned an unexpected result.`
   if (!output.ok) return describeFailure(toolName, output.error.code, input)
   // The mock only ever runs against our own tools, so the payload shape follows from the name.
@@ -473,6 +500,8 @@ export function summarizeToolOutput(toolName: string, output: unknown, input?: u
       return summarizeDiff(output.data as ReleaseNotesDiffData)
     case 'update_issue_status':
       return summarizeStatusChanges([output.data as UpdateIssueStatusData], 1)
+    case 'assign_issue':
+      return summarizeAssignment(output.data as AssignIssueData, handles)
     case 'create_issue':
       return summarizeCreatedIssue(output.data as CreateIssueData)
     case 'create_release_notes':
@@ -519,6 +548,7 @@ const WRITE_TOOLS: ReadonlySet<string> = new Set(WRITE_TOOL_NAMES)
 function summarizeToolResultPart(
   part: { toolName: string; toolCallId: string; output: ToolResultOutput },
   inputByToolCallId: ReadonlyMap<string, unknown>,
+  handles: ReadonlyMap<string, string>,
 ): string {
   // A tool result carries no input, so a sentence about a write has to name
   // its subject by looking back at the call that asked for it.
@@ -536,7 +566,7 @@ function summarizeToolResultPart(
       ? `${target()} isn’t on the board, so nothing changed.`
       : `${describeFailure(part.toolName, output.error.code, input)} Nothing changed.`
   }
-  return summarizeToolOutput(part.toolName, output, input)
+  return summarizeToolOutput(part.toolName, output, input, handles)
 }
 
 /** What a write would have touched, for the denial and failure sentences. */
@@ -577,8 +607,12 @@ function appliedStatusChange(part: {
 function composeAnswer(
   gathered: ToolMessage[],
   inputByToolCallId: ReadonlyMap<string, unknown>,
+  handles: ReadonlyMap<string, string>,
 ): string {
   const question = recoveryQuestion(gathered)
+  // The search that grounded an assignment speaks through it, as a list does
+  // through the writes it fed: its table is on screen, the change is the news.
+  const assigned = alreadyCalled(gathered, 'assign_issue')
   const sentences: string[] = []
   const applied: UpdateIssueStatusData[] = []
   let requested = 0
@@ -601,8 +635,8 @@ function composeAnswer(
         continue
       }
       if (part.toolName === 'list_issues' && fedALaterStep) continue
-      if (part.toolName === 'search_issues' && question.length > 0) continue
-      sentences.push(summarizeToolResultPart(part, inputByToolCallId))
+      if (part.toolName === 'search_issues' && (question.length > 0 || assigned)) continue
+      sentences.push(summarizeToolResultPart(part, inputByToolCallId, handles))
     }
   })
   if (applied.length > 0) sentences.splice(tallyAt, 0, summarizeStatusChanges(applied, requested))
@@ -986,6 +1020,76 @@ function closeOutCalls(
     .map((key) => ({ toolName: 'update_issue_status', input: { issueKey: key, status: 'done' } }))
 }
 
+interface RosterEntry {
+  id: string
+  name: string
+  handle: string
+}
+
+/**
+ * The team roster, read back from the system prompt that lists it ("- u-dana:
+ * Dana Petrova, @dana, devops"). The mock has no view of the workspace, and
+ * the prompt is the same place a real model resolves names from, so a person
+ * it names is one the board actually has.
+ */
+function rosterFrom(prompt: LanguageModelV3Prompt): RosterEntry[] {
+  const roster: RosterEntry[] = []
+  for (const message of prompt) {
+    if (message.role !== 'system') continue
+    for (const match of message.content.matchAll(/^- ([\w-]+): ([^,\n]+), @([\w-]+),/gm)) {
+      const [, id, name, handle] = match
+      if (id !== undefined && name !== undefined && handle !== undefined) {
+        roster.push({ id, name, handle })
+      }
+    }
+  }
+  return roster
+}
+
+function handlesFrom(roster: readonly RosterEntry[]): Map<string, string> {
+  return new Map(roster.map((entry) => [entry.id, entry.handle]))
+}
+
+/** The person a sentence names, by @handle, first name or full name. */
+function personFrom(text: string, roster: readonly RosterEntry[]): RosterEntry | undefined {
+  const words = new Set(text.toLowerCase().match(/@?[\w-]+/g) ?? [])
+  return roster.find(
+    (entry) =>
+      words.has(`@${entry.handle.toLowerCase()}`) ||
+      words.has(entry.handle.toLowerCase()) ||
+      words.has(entry.name.split(' ')[0]!.toLowerCase()) ||
+      text.toLowerCase().includes(entry.name.toLowerCase()),
+  )
+}
+
+type AssignStep = { calls: MockToolCall[] } | { text: string }
+
+/**
+ * The write half of "Assign DS-12 to Dana", once the read is in. Both ends
+ * are grounded before anything is asked for: the key has to be one the search
+ * just found, and the person one the roster lists. A name the roster does not
+ * have becomes a question, never an id made up to fill the argument.
+ */
+function assignStep(
+  text: string,
+  prompt: LanguageModelV3Prompt,
+  gathered: ToolMessage[],
+  availableTools: ReadonlySet<string>,
+): AssignStep | undefined {
+  if (!availableTools.has('assign_issue') || !ASSIGN_INTENT.test(text)) return undefined
+  const key = issueKeyFrom(text)
+  if (key === undefined || alreadyCalled(gathered, 'assign_issue')) return undefined
+  if (!searchMatchKeys(gathered).includes(key)) return undefined
+  if (UNASSIGN_INTENT.test(text)) {
+    return { calls: [{ toolName: 'assign_issue', input: { issueKey: key, assigneeId: null } }] }
+  }
+  const person = personFrom(text.replace(/\bds-\d+\b/gi, ' '), rosterFrom(prompt))
+  if (person === undefined) {
+    return { text: `No one on the team goes by that name. Who should ${key} go to?` }
+  }
+  return { calls: [{ toolName: 'assign_issue', input: { issueKey: key, assigneeId: person.id } }] }
+}
+
 /** The most recent user turn — the one the current plan answers. */
 function lastUserText(prompt: LanguageModelV3Prompt): string {
   for (let index = prompt.length - 1; index >= 0; index -= 1) {
@@ -1037,14 +1141,21 @@ export function scriptChunks(options: LanguageModelV3CallOptions): LanguageModel
     const writes = closeOutCalls(text, options.prompt, gathered, available)
     const diff = releaseNotesDiffCalls(text, gathered, available)
     const recovery = recoveryCalls(text, gathered, available)
+    const assign = assignStep(text, options.prompt, gathered, available)
     if (writes.length > 0) {
       body = toolCallChunks(writes)
+    } else if (assign !== undefined) {
+      body = 'calls' in assign ? toolCallChunks(assign.calls) : textChunks(assign.text)
     } else if (diff.length > 0) {
       body = toolCallChunks(diff)
     } else if (recovery.length > 0) {
       body = toolCallChunks(recovery)
     } else {
-      const summary = composeAnswer(gathered, inputsByToolCallId(options.prompt))
+      const summary = composeAnswer(
+        gathered,
+        inputsByToolCallId(options.prompt),
+        handlesFrom(rosterFrom(options.prompt)),
+      )
       body = textChunks(summary.length > 0 ? summary : 'I have nothing to report.')
     }
   }

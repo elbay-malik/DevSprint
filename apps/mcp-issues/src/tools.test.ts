@@ -37,6 +37,12 @@ function fakeWorkspace() {
         error: { code: 'ISSUE_NOT_FOUND' as const, message: 'nope' },
       }),
     ),
+    assignIssue: vi.fn(() =>
+      Promise.resolve({
+        ok: false as const,
+        error: { code: 'USER_NOT_FOUND' as const, message: 'nobody by that id' },
+      }),
+    ),
   }
   return { calls, api: calls as unknown as WorkspaceApi }
 }
@@ -46,7 +52,7 @@ function parse(result: { content: { text: string }[] }): Record<string, unknown>
 }
 
 describe('registerIssueTools', () => {
-  it('exposes exactly the four issue tools (S-F eval assertion)', () => {
+  it('exposes exactly the five issue tools (S-F eval assertion)', () => {
     const { server, registered } = fakeServer()
     registerIssueTools(server, fakeWorkspace().api)
 
@@ -55,6 +61,7 @@ describe('registerIssueTools', () => {
       'search_issues',
       'create_issue',
       'update_issue_status',
+      'assign_issue',
     ])
     expect(ISSUE_TOOL_NAMES).toEqual([...registered.keys()])
   })
@@ -115,5 +122,25 @@ describe('registerIssueTools', () => {
       .get('update_issue_status')!
       .handler({ issueKey: 'DS-99', status: 'done' })
     expect(parse(missing)).toMatchObject({ ok: false, error: { code: 'ISSUE_NOT_FOUND' } })
+  })
+
+  it('passes an assignment through, null included, and returns its refusal as a value', async () => {
+    const { server, registered } = fakeServer()
+    const workspace = fakeWorkspace()
+    registerIssueTools(server, workspace.api)
+    const assign = registered.get('assign_issue')!
+
+    const unknown = await assign.handler({ issueKey: 'DS-12', assigneeId: 'u-zoe' })
+    await assign.handler({ issueKey: 'DS-11', assigneeId: null })
+
+    expect(parse(unknown)).toMatchObject({ ok: false, error: { code: 'USER_NOT_FOUND' } })
+    expect(workspace.calls.assignIssue).toHaveBeenNthCalledWith(2, {
+      issueKey: 'DS-11',
+      assigneeId: null,
+    })
+    // No assignee at all is not "nobody": it never reaches the workspace.
+    const missing = await assign.handler({ issueKey: 'DS-12' })
+    expect(parse(missing)).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } })
+    expect(workspace.calls.assignIssue).toHaveBeenCalledTimes(2)
   })
 })

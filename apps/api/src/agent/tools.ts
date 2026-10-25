@@ -3,7 +3,7 @@
  * `@devsprint/shared/tools`; execution delegates to the pure functions over the
  * store's current snapshot.
  *
- * Reads (1–6) execute on sight. Writes (7–9) carry `needsApproval: true`, which
+ * Reads (1–6) execute on sight. Writes (7–9, 11) carry `needsApproval: true`, which
  * is what makes the SDK pause and ask a human before running them — every write
  * is gated, with no allowlist and no "trusted after the first one" mode
  * (docs/tool-inventory.md §3, ADR-0003). Omitting the flag would silently make a
@@ -77,6 +77,12 @@ export function createWriteTools(workspace: WorkspaceApi, options: WriteToolOpti
       needsApproval: true,
       execute: (input) => workspace.updateIssueStatus(input),
     }),
+    assign_issue: tool({
+      description: TOOL_DESCRIPTIONS.assign_issue,
+      inputSchema: WRITE_TOOL_INPUT_SCHEMAS.assign_issue,
+      needsApproval: true,
+      execute: (input) => workspace.assignIssue(input),
+    }),
     create_release_notes: tool({
       description: TOOL_DESCRIPTIONS.create_release_notes,
       inputSchema: WRITE_TOOL_INPUT_SCHEMAS.create_release_notes,
@@ -117,6 +123,7 @@ export const MCP_OWNED_TOOL_NAMES = [
   'search_issues',
   'create_issue',
   'update_issue_status',
+  'assign_issue',
 ] as const
 
 export type ReadTools = ReturnType<typeof createReadTools>
