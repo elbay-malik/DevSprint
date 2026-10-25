@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useDevSprintChat } from '@/features/chat/composables/useDevSprintChat'
-import { usePendingMoves } from '@/features/chat/composables/usePendingMoves'
+import { usePendingAssignments, usePendingMoves } from '@/features/chat/composables/usePendingMoves'
 import IssueBoard from './IssueBoard.vue'
 import SprintStatsCards from './SprintStatsCards.vue'
 import { useReadOnReturn } from '../composables/useReadOnReturn'
@@ -15,6 +15,7 @@ import { lastReadLabel } from '../lib/last-read'
 const store = useWorkspaceStore()
 const chat = useDevSprintChat()
 const pendingMoves = usePendingMoves()
+const pendingAssignments = usePendingAssignments()
 
 onMounted(() => void store.hydrate())
 
@@ -121,6 +122,7 @@ watch(
       :backlog="store.backlogIssues"
       :users="store.users"
       :pending-moves="pendingMoves"
+      :pending-assignments="pendingAssignments"
       :changed="store.recentlyChanged"
     />
   </section>

@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createWorkspaceSeed } from '@devsprint/shared'
 import { requestUndo, undoneCopy, undoTargetOf } from './undo'
 
-const DS9 = createWorkspaceSeed().issues.find((issue) => issue.key === 'DS-9')!
+const seed = createWorkspaceSeed()
+const DS9 = seed.issues.find((issue) => issue.key === 'DS-9')!
+const DS12 = seed.issues.find((issue) => issue.key === 'DS-12')!
 
 /** An approved, applied DS-9 status change; `over` swaps any field. */
 function applied(over: Record<string, unknown> = {}) {
@@ -19,6 +21,11 @@ describe('undoTargetOf', () => {
   it('reads the change id and the issue off an applied write the workspace recorded', () => {
     expect(undoTargetOf(applied())).toEqual({ changeId: 'chg-1', issueKey: 'DS-9' })
     expect(undoTargetOf(applied({ type: 'dynamic-tool', toolName: 'create_issue' }))).toEqual({
+      changeId: 'chg-1',
+      issueKey: 'DS-9',
+    })
+    // A reassignment is recorded like a status change, so it is undone like one.
+    expect(undoTargetOf(applied({ type: 'tool-assign_issue' }))).toEqual({
       changeId: 'chg-1',
       issueKey: 'DS-9',
     })
@@ -66,6 +73,19 @@ describe('undoneCopy', () => {
         issueKey: 'DS-14',
       }),
     ).toEqual(['Undone by you — ', { id: 'DS-14' }, ' removed from the board.'])
+  })
+
+  it('says who holds a reassigned issue again, by @handle as the board does', () => {
+    const assignment = { ...data, tool: 'assign_issue' as const, issueKey: 'DS-12' }
+    expect(
+      undoneCopy({ ...assignment, issue: { ...DS12, assigneeId: 'u-ben' } }, '14:07', seed.users),
+    ).toEqual(['Undone by you at 14:07 — ', { id: 'DS-12' }, ' back to @ben.'])
+    // A first assignment undone leaves the issue with nobody, said in words.
+    expect(undoneCopy({ ...assignment, issue: DS12 }, '14:07', seed.users)).toEqual([
+      'Undone by you at 14:07 — ',
+      { id: 'DS-12' },
+      ' back to unassigned.',
+    ])
   })
 })
 

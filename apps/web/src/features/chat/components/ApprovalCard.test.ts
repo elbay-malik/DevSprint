@@ -423,6 +423,69 @@ describe('ApprovalCard', () => {
     expect(decided.find('[data-testid="approval-warning"]').exists()).toBe(false)
   })
 
+  describe('assign_issue', () => {
+    const assign = (input: Record<string, unknown>) => requested(input, 'assign_issue')
+
+    it('names the reassignment by @handle, as the board names people', () => {
+      const wrapper = mountCard(assign({ issueKey: 'DS-9', assigneeId: 'u-dana' }))
+      expect(wrapper.get('[data-testid="approval-headline"]').text()).toBe('DS-9: @ben → @dana')
+      expect(wrapper.text()).toContain('Notification preferences page')
+      expect(wrapper.get('[data-testid="approval-tool"]').text()).toBe('assign_issue')
+      expect(isInk(wrapper, 'approval-approve')).toBe(true)
+    })
+
+    it('says nobody in plain words, on either side of the arrow', () => {
+      // DS-12 sits in the backlog with no one on it.
+      expect(
+        mountCard(assign({ issueKey: 'ds-12', assigneeId: 'u-dana' }))
+          .get('[data-testid="approval-headline"]')
+          .text(),
+      ).toBe('DS-12: Unassigned → @dana')
+      expect(
+        mountCard(assign({ issueKey: 'DS-9', assigneeId: null }))
+          .get('[data-testid="approval-headline"]')
+          .text(),
+      ).toBe('DS-9: @ben → Unassigned')
+    })
+
+    it('keeps the from-assignee after the decision, so the record reads as the change', async () => {
+      const resolved = await decide(
+        { issueKey: 'DS-12', assigneeId: 'u-dana' },
+        true,
+        { state: 'output-available', output: { ok: true, data: {} } },
+        'assign_issue',
+      )
+      expect(resolved.get('[data-testid="approval-headline"]').text()).toBe(
+        'DS-12: Unassigned → @dana',
+      )
+
+      // The board catching up the write must not turn it into "@dana → @dana".
+      const board = useWorkspaceStore()
+      board.workspace.issues.find((issue) => issue.key === 'DS-12')!.assigneeId = 'u-dana'
+      await resolved.vm.$nextTick()
+      expect(resolved.get('[data-testid="approval-headline"]').text()).toBe(
+        'DS-12: Unassigned → @dana',
+      )
+    })
+
+    it('warns before handing an issue to someone not on the team, and leads with Deny', () => {
+      const wrapper = mountCard(assign({ issueKey: 'DS-9', assigneeId: 'u-zed' }))
+      expect(wrapper.get('[data-testid="approval-headline"]').text()).toBe('DS-9: @ben → u-zed')
+      const warning = wrapper.get('[data-testid="approval-warning"]')
+      expect(warning.text()).toBe('No one on the team has the id u-zed.')
+      expect(warning.get('.font-mono').text()).toBe('u-zed')
+      expect(isInk(wrapper, 'approval-deny')).toBe(true)
+      expect(isInk(wrapper, 'approval-approve')).toBe(false)
+
+      // An issue the board does not hold is warned about the same way as a move.
+      expect(
+        mountCard(assign({ issueKey: 'DS-42', assigneeId: 'u-dana' }))
+          .get('[data-testid="approval-warning"]')
+          .text(),
+      ).toBe('DS-42 isn’t on the board.')
+    })
+  })
+
   describe('undo', () => {
     const DS9 = createWorkspaceSeed().issues.find((issue) => issue.key === 'DS-9')!
 
@@ -555,6 +618,40 @@ describe('ApprovalCard', () => {
       expect(wrapper.get('[data-testid="approval-undo-record"]').text()).toBe(
         '↶ Undone by you at 14:06 — DS-14 removed from the board.',
       )
+    })
+
+    it('says who holds a reassigned issue again, by @handle', async () => {
+      const DS12 = createWorkspaceSeed().issues.find((issue) => issue.key === 'DS-12')!
+      answer(200, {
+        ok: true,
+        data: {
+          changeId: 'chg-3',
+          tool: 'assign_issue',
+          issueKey: 'DS-12',
+          outcome: 'restored',
+          issue: DS12,
+          undoneAt: new Date(2026, 9, 25, 14, 7).toISOString(),
+        },
+      })
+      const wrapper = mountCard({
+        ...requested({ issueKey: 'DS-12', assigneeId: 'u-dana' }, 'assign_issue'),
+        state: 'output-available',
+        output: {
+          ok: true,
+          data: {
+            issue: { ...DS12, assigneeId: 'u-dana' },
+            previousAssigneeId: null,
+            changeId: 'chg-3',
+          },
+        },
+        approval: { id: 'approval-1', approved: true, signature: 'sig' },
+      })
+      await wrapper.get('[data-testid="approval-undo"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.get('[data-testid="approval-undo-record"]').text()).toBe(
+        '↶ Undone by you at 14:07 — DS-12 back to unassigned.',
+      )
+      expect(lastUndo.value?.line).toBe('Undone by you at 14:07 — DS-12 back to unassigned.')
     })
 
     it('reads a refusal in plain words, and does not offer the Undo again', async () => {

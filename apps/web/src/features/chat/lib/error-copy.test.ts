@@ -102,6 +102,25 @@ describe('toolErrorCopy', () => {
     expect(identifiers(copyParts('list_issues', 'WORKSPACE_FULL'))).toEqual([])
   })
 
+  it('says an assignment that changed nothing, and an assignee nobody on the team has', () => {
+    expect(toolErrorCopy('assign_issue', 'INVALID_INPUT', { issueKey: 'ds-9' })).toBe(
+      'DS-9 already has that assignee.',
+    )
+    expect(copyParts('assign_issue', 'INVALID_INPUT', { issueKey: 'DS-9' })).toContainEqual({
+      id: 'DS-9',
+    })
+    expect(toolErrorCopy('assign_issue', 'INVALID_INPUT')).toBe(
+      'That issue already has that assignee.',
+    )
+    // The generic line still covers every other tool's malformed request.
+    expect(toolErrorCopy('create_issue', 'INVALID_INPUT', { issueKey: 'DS-9' })).toBe(
+      'The board couldn’t accept that request.',
+    )
+    expect(
+      toolErrorCopy('assign_issue', 'USER_NOT_FOUND', { issueKey: 'DS-12', assigneeId: 'u-zed' }),
+    ).toBe('No one on the team has the id u-zed.')
+  })
+
   it('reads whole without a version to name', () => {
     expect(toolErrorCopy('create_release_notes', 'VERSION_EXISTS', {})).toBe(
       'Release notes for that version already exist.',

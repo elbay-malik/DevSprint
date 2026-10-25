@@ -13,10 +13,25 @@ import {
   isSettledApproval,
   parseApprovalStates,
   pendingApprovalCount,
+  pendingAssignments,
   pendingStatusMoves,
 } from './approvals'
 
-const { issues } = createWorkspaceSeed()
+const { issues, users } = createWorkspaceSeed()
+
+/** An open assign_issue card; `assigneeId` null unassigns. */
+const assignment = (
+  id: string,
+  issueKey: string,
+  assigneeId: unknown,
+  state = 'approval-requested',
+) => ({
+  type: 'tool-assign_issue',
+  toolCallId: id,
+  state,
+  input: { issueKey, assigneeId },
+  approval: { id: `a-${id}` },
+})
 
 describe('approvalOutcome', () => {
   it('has nothing to say while the card is still asking', () => {
@@ -288,6 +303,33 @@ describe('changesToReview', () => {
   })
 })
 
+describe('pendingAssignments', () => {
+  it('maps each open reassignment to the issue it would hand on and to whom', () => {
+    const assignments = pendingAssignments(
+      [
+        assignment('c1', 'ds-12', 'u-dana'),
+        assignment('c2', 'DS-9', null),
+        // Answered, off the board, or malformed: nothing to mark.
+        assignment('c3', 'DS-7', 'u-ben', 'approval-responded'),
+        assignment('c4', 'DS-42', 'u-ben'),
+        assignment('c5', 'DS-8', 7),
+        // A status change is a move, not a reassignment.
+        {
+          type: 'tool-update_issue_status',
+          toolCallId: 'c6',
+          state: 'approval-requested',
+          input: { issueKey: 'DS-10', status: 'done' },
+        },
+      ],
+      issues,
+    )
+    expect([...assignments]).toEqual([
+      ['DS-12', 'u-dana'],
+      ['DS-9', null],
+    ])
+  })
+})
+
 describe('approveAllPlan', () => {
   const status = (id: string, issueKey: string, state = 'approval-requested') => ({
     type: 'tool-update_issue_status',
@@ -355,6 +397,36 @@ describe('approveAllPlan', () => {
       ['deploying ', { id: 'v1.5.0' }, ' to ', { id: 'staging' }],
       ['saving the ', { id: 'v1.5.0' }, ' release notes'],
     ])
+  })
+
+  it('answers an assignment that can land, with who holds the issue now', () => {
+    const plan = approveAllPlan(
+      [assignment('c1', 'DS-12', 'u-dana'), assignment('c2', 'DS-9', null), status('c3', 'DS-7')],
+      issues,
+      users,
+    )
+    expect(plan.approvals).toEqual([
+      { toolCallId: 'c1', approvalId: 'a-c1', from: 'todo', fromAssignee: null },
+      { toolCallId: 'c2', approvalId: 'a-c2', from: 'in_progress', fromAssignee: 'u-ben' },
+      { toolCallId: 'c3', approvalId: 'a-c3', from: 'in_review' },
+    ])
+    expect(plan.excluded).toEqual([])
+  })
+
+  it('leaves an assignment the board would refuse to its own card', () => {
+    const plan = approveAllPlan(
+      [
+        status('c0', 'DS-7'),
+        // Not on the board, nobody on the roster by that id, already Ben's.
+        assignment('c1', 'DS-42', 'u-dana'),
+        assignment('c2', 'DS-12', 'u-zed'),
+        assignment('c3', 'DS-9', 'u-ben'),
+      ],
+      issues,
+      users,
+    )
+    expect(plan.approvals.map((approval) => approval.toolCallId)).toEqual(['c0'])
+    expect(plan.excluded).toEqual([[{ id: 'DS-42' }], [{ id: 'DS-12' }], [{ id: 'DS-9' }]])
   })
 
   it('knows when some cards were already answered one by one', () => {
