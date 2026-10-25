@@ -382,7 +382,8 @@ over Rule gridlines and 10px tabular axis labels. Hovering moves the readout to 
   for everything secondary or abortive.
 - **Do** check every change in both themes at WCAG 2.2 AA.
 - **Do** theme the browser's own surfaces: `color-scheme` per theme, an ink-tint selection, Rule-coloured
-  scrollbars, and the theme applied before first paint.
+  scrollbars, a `theme-color` that follows the chosen theme (not only the OS), and the theme applied
+  before first paint.
 
 ### Don't:
 

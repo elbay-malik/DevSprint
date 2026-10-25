@@ -437,7 +437,7 @@
       "Do separate surfaces with a 1px ring at 10% or a tonal step, and keep 14px corners for board cards and 8px for chat cards.",
       "Do spend the Ink-filled button once per region, on the affirmative action, and use outline for everything secondary or abortive.",
       "Do check every change in both themes at WCAG 2.2 AA.",
-      "Do theme the browser's own surfaces: `color-scheme` per theme, an ink-tint selection, Rule-coloured scrollbars, and the theme applied before first paint."
+      "Do theme the browser's own surfaces: `color-scheme` per theme, an ink-tint selection, Rule-coloured scrollbars, a `theme-color` that follows the chosen theme (not only the OS), and the theme applied before first paint."
     ],
     "donts": [
       "Don't put a drop shadow on a surface at rest.",
