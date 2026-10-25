@@ -20,8 +20,8 @@ while its effects appear simultaneously in a workspace pane.
 One project — **DS**, the fictional Nimbus web product team — with 2 sprints (one completed, one
 active), 13 issues on a five-column board (todo / in_progress / in_review / blocked / done),
 4 users, 5 deployments, and 1 published release note. The seed is deterministic with a fixed demo
-clock, and resets daily once live (Phase 9). Exact values live in
-[domain-model.md](./domain-model.md).
+clock. The live board resets to it every UTC midnight (Phase 9, ADR-0014), and the header's Reset
+board button resets it on demand. Exact values live in [domain-model.md](./domain-model.md).
 
 ## Core capabilities
 
@@ -37,8 +37,9 @@ Each capability maps to a tool risk class (see [tool-inventory.md](./tool-invent
 
 Vue 3 (3.6-track) SPA (Vite 8, shadcn-vue) in `apps/web` → Hono on Cloudflare Workers in
 `apps/api` running an AI SDK v6 ToolLoopAgent (Groq primary / Gemini Flash fallback), sharing
-types and fixtures via `packages/shared` → later an MCP client to 2–3 custom MCP servers on
-Workers (Phase 6), one publicly exposed to Claude Desktop/Cursor. The SPA ships as a Workers
+types and fixtures via `packages/shared` → an MCP client to one custom MCP server on Workers,
+`apps/mcp-issues` (Phase 6). It serves the four issue tools to the in-app agent and publicly to
+Claude Desktop/Cursor, rate-limited per ADR-0020. The SPA ships as a Workers
 Static Assets (assets-only Worker) deploy, live since Phase 14 (ADR-0019).
 
 ## Non-goals

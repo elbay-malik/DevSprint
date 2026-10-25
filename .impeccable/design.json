@@ -267,7 +267,7 @@
       {
         "name": "surface-ring",
         "value": "0 0 0 1px color-mix(in oklch, var(--foreground) 10%, transparent)",
-        "purpose": "Hairline that separates board cards, stat cards and dialogs instead of a border or shadow."
+        "purpose": "Hairline that separates board cards and stat cards instead of a border or shadow."
       },
       {
         "name": "focus-ring",
@@ -370,14 +370,14 @@
       "kind": "custom",
       "refersTo": "chat-card",
       "description": "The record of a decision: eyebrow, 14px headline, reason, Deny and Approve.",
-      "html": "<div class=\"ds-approval\"><p class=\"ds-eyebrow\">Approval required: <span class=\"ds-mono\">update_issue_status</span></p><p class=\"ds-headline\">DS-7: in_review → done</p><div class=\"ds-actions\"><input class=\"ds-reason\" placeholder=\"Reason (optional)\" /><button class=\"ds-deny\">Deny</button><button class=\"ds-approve\">Approve</button></div></div>",
+      "html": "<div class=\"ds-approval\"><p class=\"ds-eyebrow\">Approval required: <span class=\"ds-mono\">update_issue_status</span></p><p class=\"ds-headline\">DS-7: In review → Done</p><div class=\"ds-actions\"><input class=\"ds-reason\" placeholder=\"Reason (optional)\" /><button class=\"ds-deny\">Deny</button><button class=\"ds-approve\">Approve</button></div></div>",
       "css": ".ds-approval { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 360px; padding: 8px 12px; border: 1px solid var(--border, oklch(0.922 0 0)); border-radius: 8px; background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); font-size: 12px; display: flex; flex-direction: column; gap: 8px; } .ds-eyebrow { margin: 0; color: var(--muted-foreground, oklch(0.556 0 0)); font-weight: 500; } .ds-mono { font-family: ui-monospace, monospace; } .ds-headline { margin: 0; font-size: 14px; font-weight: 500; } .ds-actions { display: flex; gap: 8px; align-items: center; } .ds-reason { flex: 1; height: 28px; padding: 0 10px; border: 1px solid var(--input, oklch(0.922 0 0)); border-radius: 10px; background: transparent; color: inherit; font-size: 12px; } .ds-deny, .ds-approve { height: 28px; padding: 0 10px; border-radius: 8px; font-size: 12.8px; font-weight: 500; cursor: pointer; } .ds-deny { border: 1px solid var(--border, oklch(0.922 0 0)); background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); } .ds-approve { border: 1px solid transparent; background: var(--primary, oklch(0.205 0 0)); color: var(--primary-foreground, oklch(0.985 0 0)); } .ds-deny:hover { background: var(--muted, oklch(0.97 0 0)); } .ds-approve:hover { background: color-mix(in oklch, var(--primary, oklch(0.205 0 0)) 80%, transparent); } .ds-deny:focus-visible, .ds-approve:focus-visible, .ds-reason:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.708 0 0)) 50%, transparent); }"
     },
     {
       "name": "Deployment Progress",
       "kind": "custom",
       "refersTo": "chat-card",
-      "description": "Stage list with glyph + tone, and a round progress track filled in Ink by whole stages.",
+      "description": "Stage list with glyph + tone, and a round progress track filled in Deep Ink by whole stages.",
       "html": "<div class=\"ds-deploy\"><p class=\"ds-deploy-head\">v1.5.0-rc.1 → <span class=\"ds-mono\">staging</span> <span class=\"ds-run\">running</span></p><div class=\"ds-track\"><div class=\"ds-fill\"></div></div><ul class=\"ds-stages\"><li class=\"ds-ok\">● build</li><li>◐ test</li><li class=\"ds-wait\">○ migrate</li><li class=\"ds-wait\">○ release</li></ul></div>",
       "css": ".ds-deploy { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 360px; padding: 8px 12px; border: 1px solid var(--border, oklch(0.922 0 0)); border-radius: 8px; background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); font-size: 12px; } .ds-deploy-head { margin: 0; font-weight: 500; } .ds-mono { font-family: ui-monospace, monospace; } .ds-track { margin-top: 8px; height: 4px; border-radius: 9999px; background: var(--muted, oklch(0.97 0 0)); overflow: hidden; } .ds-fill { width: 25%; height: 100%; background: var(--foreground, oklch(0.145 0 0)); transition: width 300ms; } .ds-stages { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-family: ui-monospace, monospace; } .ds-ok { color: oklch(50.8% 0.118 165.612); } .ds-wait { color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-run { color: inherit; }"
     },
@@ -386,8 +386,8 @@
       "kind": "custom",
       "refersTo": "chat-card",
       "description": "A typed tool error: information, not an alarm.",
-      "html": "<div class=\"ds-error\"><span class=\"ds-tool\">update_issue_status</span> <span class=\"ds-code\">ISSUE_NOT_FOUND</span><p class=\"ds-msg\">No issue with key 'DS-42'.</p></div>",
-      "css": ".ds-error { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 360px; padding: 8px 12px; border: 1px solid color-mix(in oklch, var(--destructive, oklch(0.577 0.245 27.325)) 40%, transparent); border-radius: 8px; background: color-mix(in oklch, var(--muted, oklch(0.97 0 0)) 40%, transparent); font-size: 12px; } .ds-tool { font-family: ui-monospace, monospace; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-code { font-family: ui-monospace, monospace; font-weight: 500; color: var(--destructive, oklch(0.577 0.245 27.325)); } .ds-msg { margin: 4px 0 0; color: var(--muted-foreground, oklch(0.556 0 0)); }"
+      "html": "<div class=\"ds-error\"><p class=\"ds-msg\">No issue with key 'DS-42'.</p><p class=\"ds-meta\"><span class=\"ds-tool\">update_issue_status</span> <span class=\"ds-code\">ISSUE_NOT_FOUND</span></p></div>",
+      "css": ".ds-error { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 360px; padding: 8px 12px; border: 1px solid color-mix(in oklch, var(--destructive, oklch(0.577 0.245 27.325)) 40%, transparent); border-radius: 8px; background: color-mix(in oklch, var(--muted, oklch(0.97 0 0)) 40%, transparent); font-size: 12px; } .ds-tool { font-family: ui-monospace, monospace; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-code { font-family: ui-monospace, monospace; font-weight: 500; color: var(--destructive, oklch(0.577 0.245 27.325)); } .ds-msg { margin: 0; color: var(--foreground, oklch(0.145 0 0)); } .ds-meta { margin: 4px 0 0; display: flex; gap: 8px; font-family: ui-monospace, monospace; color: var(--muted-foreground, oklch(0.556 0 0)); }"
     },
     {
       "name": "Chat Bubbles",

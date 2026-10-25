@@ -182,10 +182,10 @@ An achromatic ink-and-paper ramp, with three signal hues that each carry a meani
   dark mode, Deep Ink is the page and Ink the cards.
 - **Paper Tint** (oklch(0.97 0 0)): assistant bubbles, secondary badges, the progress track,
   hover fills. In dark mode, Charcoal.
-- **Rule** (oklch(0.922 0 0)): every border, divider and input stroke. In dark mode, Bright Paper
-  at 10% for borders and 15% for inputs.
+- **Rule** (oklch(0.922 0 0)): every border, divider and input stroke. In dark mode, Paper at 10%
+  for borders and 15% for inputs.
 - **Pencil** (oklch(0.708 0 0)): the focus ring source, used at 50%. In dark mode it becomes the
-  secondary text colour.
+  secondary text colour, and Graphite takes over the focus ring.
 - **Graphite** (oklch(0.556 0 0)): secondary text everywhere, meaning captions, labels, keys,
   column headings, the ideal line in the chart, and pending or skipped states.
 - **Charcoal** (oklch(0.269 0 0)): dark-mode tints and badges.
@@ -266,13 +266,13 @@ Viewport breakpoints are Tailwind's defaults; the workspace uses container sizes
 ## Elevation & Depth
 
 The system is flat by default. Depth comes from two things only: **hairline rings** (1px at 10%
-of the foreground colour, on board cards, stat cards and dialogs) and **tonal steps** (a Paper chat
+of the foreground colour, on board cards and stat cards) and **tonal steps** (a Paper chat
 card inset in a Paper Tint bubble, or Ink cards on a Deep Ink page in dark mode). Nothing carries
 a drop shadow at rest. Lift is allowed as a response to state (hover, focus, drag) in future
 interactive surfaces, but today no component uses it.
 
-The only depth-like effect in use is the focus ring: 3px of Pencil at 50%, or inset on the
-scrolling board pane.
+The only depth-like effect in use is the focus ring: 3px of Pencil at 50% (Graphite in dark
+mode), or inset on the scrolling board pane.
 
 ### Named Rules
 
@@ -334,11 +334,13 @@ decision or a result lives.
 
 ### Inputs / Fields
 
-- **Style:** 32px tall, 10px corners, a 1px Rule stroke, transparent on Paper (Bright Paper at 3%
-  in dark mode), 14px text.
+- **Style:** 32px tall, 10px corners, a 1px Rule stroke, transparent on Paper (the dark input
+  colour at 30%, about 4.5% white, in dark mode), 14px text.
 - **Focus:** a Pencil border with a 3px Pencil ring at 50%.
 - **Error / Disabled:** a Stop Red border and a 20% ring when invalid. At 50% opacity with no
-  pointer when disabled. The composer also rewrites its placeholder while an approval is pending.
+  pointer when disabled, except the composer: while it is locked it stays at full opacity, and its
+  placeholder names what to do ("Approve or deny the change above to continue…", counting the
+  changes when several are pending), also exposed to screen readers via `aria-describedby`.
 
 ### Navigation
 
@@ -358,7 +360,8 @@ or "Denied: …", in Graphite, and in Stop Red only when an approved write faile
 
 A version and an environment in mono, a stage list where each line carries a glyph (○ pending,
 ◐ running, ● succeeded, ✕ failed, – skipped) and its tone, a log tail, and a 4px round track
-filled in Ink by whole stages. Status is announced politely to screen readers.
+filled in the text colour (Deep Ink; Bright Paper in dark mode) by whole stages. Status is
+announced politely to screen readers.
 
 ### Burndown Chart (signature)
 

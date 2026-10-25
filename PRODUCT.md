@@ -101,6 +101,7 @@ storyboard; recording pending), then the ADRs and tests on GitHub.
 - The Sprint and Deploys tabs.
 - A release-notes badge.
 - A distinct "interrupted" deployment stage state.
+- The sprint selector in the header (the agent scopes by sprint itself).
 
 ## Brand Commitments
 

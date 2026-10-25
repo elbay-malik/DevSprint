@@ -47,7 +47,9 @@ Annotations:
   approved in chat adds a row to the Deploys tab while it streams.
 - **Board — five columns**, mapping 1:1 to `IssueStatus`: `todo` / `in_progress` / `in_review` /
   `blocked` / `done` ("In Prog" and "Blkd" are abbreviated only in this ASCII sketch). Cards show
-  the issue key and points; the stat chips above the board come from `get_sprint_status` data.
+  the issue key and points; the stat cards above the board (Committed, Completed, Remaining,
+  Progress) are computed in the SPA from the workspace snapshot (`sprint-stats.ts`), not from a
+  `get_sprint_status` result.
 - **Right pane — chat.** In-stream parts render in strict transcript order (see Section 2). The
   composer sits at the bottom; scripted scenario buttons (S-A through S-E; S-F runs in an external
   MCP host) fill the composer with the verbatim scenario prompt as a spend control.
@@ -85,7 +87,7 @@ assistant turn (top to bottom)
 
 ```
 +--[ Approval required: update_issue_status ]--------------+
-| DS-7: in_review -> done                                  |
+| DS-7: In review → Done                                   |
 | "Billing export CSV download"                            |
 |                                                          |
 | > Raw arguments (collapsed JSON, click to expand)        |
@@ -95,7 +97,8 @@ assistant turn (top to bottom)
 ```
 
 - **Header**: `Approval required: <tool name>`.
-- **Body**: human-readable args summary (here `DS-7: in_review -> done` plus the issue title),
+- **Body**: human-readable args summary (here `DS-7: In review → Done` plus the issue title;
+  statuses use the labels in `status-labels.ts`, never the raw enum),
   with the raw JSON arguments behind a collapsible disclosure.
 - **Footer**: Deny (with an optional free-text reason input) and Approve.
 - **Resolved state** replaces the footer once the user acts; the card stays in the transcript as
@@ -103,13 +106,17 @@ assistant turn (top to bottom)
 
 ```
 +----------------------------------------------------------+
-| Approved by you at 14:02                                 |
+| Approved by you — applied.                               |
 +----------------------------------------------------------+
 
 +----------------------------------------------------------+
 | Denied: "Still blocked on vendor sandbox"                |
 +----------------------------------------------------------+
 ```
+
+A failed approved write, a failed deployment included, reads
+`Approved by you, but it failed: <message> (<CODE>)` in Stop Red. Any other deployment reads
+`Approved by you — deployment <status>.` (for example `deployment succeeded`).
 
 ## 4. HITL approval sequence
 
@@ -143,7 +150,9 @@ scenario specs).
 
 | Component                                | Fed by                                                                                                     | First built in phase |
 | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------- |
-| ChatMessage                              | every message part (user and assistant text; wraps all parts below)                                        | 2                    |
+| ChatMessageList                          | every message (user and assistant bubbles; wraps all parts below)                                          | 1                    |
+| ChatText                                 | assistant text parts, safe markdown subset without v-html (ADR-0022)                                       | 15                   |
+| ToolResultCard                           | picks the card per tool for a finished call (ErrorCard for `ok: false`); falls back to ToolCallChip        | 7                    |
 | ToolCallChip                             | fallback for every tool call; permanent rendering for get_sprint_status and get_deployment_history results | 3                    |
 | IssueTable                               | list_issues; search_issues (compact variant)                                                               | 7                    |
 | BurndownChart (inline SVG, see ADR-0012) | get_burndown                                                                                               | 7                    |
@@ -154,17 +163,20 @@ scenario specs).
 
 ## 6. Notes
 
-- **Responsive behavior**: below 1024px the two panes stack vertically — chat first, workspace
-  behind a tab — so the phone experience is chat-led.
-- **Current scope**: this wireframe is the TARGET layout. The repo currently ships the two panes,
-  the 5-column board with seed data, and a composer backed by the real agent loop, which chains
-  several tools in one turn (Phase 4); ToolCallChip renders every tool call — name, state,
-  collapsed args/result JSON — as the fallback rendering and the permanent one for
-  get_sprint_status and get_deployment_history. The other read tools now render as cards:
-  IssueTable, BurndownChart and ReleaseNotesDiff, with ErrorCard for any `ok: false` result. The Stop button aborts the loop mid-turn, and a call it interrupts is labelled `stopped`
-  rather than left claiming to run. Every write the agent can make is gated: an ApprovalCard renders per gated call and
-  stays in the transcript afterwards as the record of what was decided, while the composer is locked
-  until the outstanding cards are answered. Tabs, sprint selector, and scenario buttons are still
-  pending (Phase 7+).
+- **Responsive behavior**: below 1024px (Tailwind `lg`) the two panes stack and the page scrolls.
+  The board comes first at its natural height, then the copilot, divided by a hairline and given a
+  full screen of its own (`max-lg:h-dvh`). There are no tabs. From `lg` up, the panes share a
+  locked viewport and each scrolls on its own.
+- **Current scope**: this wireframe is the TARGET layout. The repo ships the two panes, the header
+  with Reset board and the theme toggle, a four-stat row (Committed, Completed, Remaining,
+  Progress), the 5-column board plus backlog, and a composer backed by the real agent loop.
+  Assistant text renders a safe markdown subset with no `v-html` (ChatText, ADR-0022).
+  ToolCallChip is the fallback for every tool call and the permanent rendering for
+  get_sprint_status and get_deployment_history. IssueTable, BurndownChart, ReleaseNotesDiff and
+  DeploymentProgressCard (with a live Cancel, ADR-0013) render as cards, and ErrorCard handles any
+  `ok: false` result. Stop aborts the loop mid-turn, and a call it interrupts is labelled
+  `stopped`. Every write is gated by an ApprovalCard that stays in the transcript, and the
+  composer is locked until outstanding cards are answered. Still unbuilt: the sprint selector, the
+  Board/Sprint/Deploys tabs and the scenario buttons.
 - **Auto-scroll**: the chat pane follows new tokens with scroll-anchoring; a manual scroll-up
   releases the anchor (a jump-to-bottom affordance re-engages it).
