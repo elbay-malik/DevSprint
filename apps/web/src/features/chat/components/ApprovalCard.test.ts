@@ -251,4 +251,30 @@ describe('ApprovalCard', () => {
     })
     expect(wrapper.get('[data-testid="approval-outcome"]').text()).toContain('ISSUE_NOT_FOUND')
   })
+
+  it('records an approval as soon as it is given', () => {
+    const wrapper = mountCard({
+      ...requested({ issueKey: 'DS-7', status: 'done' }),
+      state: 'approval-responded',
+      approval: { id: 'approval-1', approved: true, signature: 'sig' },
+    })
+    expect(wrapper.get('[data-testid="approval-outcome"]').text()).toBe('Approved by you.')
+  })
+
+  it('offers its decision as a named group the transcript can move focus to', () => {
+    const wrapper = mountCard(requested({ issueKey: 'DS-7', status: 'done' }))
+    const group = wrapper.get('[data-approval-focus]')
+    expect(group.attributes('role')).toBe('group')
+    expect(group.attributes('aria-label')).toBe('Decision: DS-7: In review → Done')
+    // Reachable by script only; Tab goes straight to the reason field.
+    expect(group.attributes('tabindex')).toBe('-1')
+  })
+
+  it('keeps the reason field at 16px below md, so iOS does not zoom into it', () => {
+    const wrapper = mountCard(requested({ issueKey: 'DS-7', status: 'done' }))
+    const classes = wrapper.get('[data-testid="approval-reason"]').classes()
+    expect(classes).toContain('text-base')
+    expect(classes).toContain('md:text-xs')
+    expect(classes).not.toContain('text-xs')
+  })
 })

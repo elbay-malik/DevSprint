@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useDevSprintChat } from '../composables/useDevSprintChat'
 import { statusLabel } from '@/features/workspace/lib/status-labels'
+import { approvalOutcome } from '../lib/approvals'
 
 /**
  * The gate in front of every write (docs/wireframes.md §3, ADR-0003). It shows
@@ -32,11 +33,11 @@ const approval = computed((): { id: string; approved?: boolean; reason?: string 
 /** Pending until the user answers; the card then becomes an audit record. */
 const decided = computed(() => props.part.state !== 'approval-requested')
 
-const outcome = computed(() => {
-  const value = approval.value
-  if (value?.approved === undefined) return undefined
-  return { approved: value.approved, reason: value.reason }
-})
+/**
+ * Once answered, the card says how it went — the chip no longer does. The words
+ * come from one place so the status announcement repeats them exactly.
+ */
+const outcome = computed(() => approvalOutcome(props.part))
 
 /**
  * What the change means, not what it looks like as JSON. The workspace pane
@@ -78,65 +79,6 @@ const summary = computed((): { headline: string; detail?: string } => {
 
 const argumentsJson = computed(() => JSON.stringify(props.part.input ?? {}, null, 2))
 
-/**
- * Once an approved write has run, say how it went — the chip no longer does.
- * A failure has to show as a failure: reporting only "Approved by you" would
- * present a write that never landed as one that did.
- */
-interface Outcome {
-  failed: boolean
-  /** Reads after "Approved by you —" or "…but it failed:". */
-  text: string
-  code?: string
-}
-
-const result = computed((): Outcome | undefined => {
-  if (props.part.state === 'output-error') {
-    return { failed: true, text: props.part.errorText || 'the change did not go through' }
-  }
-  if (props.part.state !== 'output-available') return undefined
-  const output: unknown = props.part.output
-  if (typeof output !== 'object' || output === null || !('ok' in output)) {
-    return { failed: false, text: 'done' }
-  }
-  const envelope = output as {
-    ok: boolean
-    error?: { code: string; message?: string }
-    data?: unknown
-  }
-  if (!envelope.ok) {
-    // Every envelope carries a message written to be read, so it leads; the
-    // code ("ISSUE_NOT_FOUND") follows as detail for whoever is debugging.
-    const { code, message } = envelope.error ?? {}
-    return {
-      failed: true,
-      text: message !== undefined && message.length > 0 ? message : 'the change did not go through',
-      ...(code === undefined ? {} : { code }),
-    }
-  }
-
-  // A deployment reaches `output-available` on its first frame and stays there
-  // for the whole run, so "applied" would be premature while it is going and
-  // wrong afterwards for a run that was cancelled. Its own status is the truth.
-  // A cancelled run is not a failure: the user asked for it.
-  const status = deploymentStatus(envelope.data)
-  if (status !== undefined) return { failed: status === 'failed', text: `deployment ${status}` }
-
-  return { failed: false, text: 'applied' }
-})
-
-/** The deployment inside a run_deployment result, if this is one. */
-function deploymentStatus(data: unknown): string | undefined {
-  if (typeof data !== 'object' || data === null || !('deployment' in data)) return undefined
-  const deployment = data.deployment
-  if (typeof deployment !== 'object' || deployment === null || !('status' in deployment)) {
-    return undefined
-  }
-  return typeof deployment.status === 'string' ? deployment.status : undefined
-}
-
-const failed = computed(() => result.value?.failed === true)
-
 function respond(approved: boolean) {
   const id = approval.value?.id
   // Without an id there is nothing to answer, and the SDK would no-op silently.
@@ -177,11 +119,24 @@ function respond(approved: boolean) {
       <pre class="mt-1 max-h-48 overflow-auto font-mono text-xs">{{ argumentsJson }}</pre>
     </details>
 
-    <div v-if="!decided" class="flex flex-wrap items-center gap-2">
+    <!--
+      The decision is a named group, and the transcript moves focus here when a
+      turn ends waiting on it (tabindex -1: reachable by script, not by Tab), so
+      a keyboard user lands on the change rather than on the page.
+    -->
+    <div
+      v-if="!decided"
+      role="group"
+      :aria-label="`Decision: ${summary.headline}`"
+      tabindex="-1"
+      data-approval-focus
+      class="focus-visible:outline-ring flex flex-wrap items-center gap-2 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
+    >
+      <!-- 16px below md like every other field, so iOS does not zoom on focus. -->
       <Input
         v-model="reason"
         data-testid="approval-reason"
-        class="h-7 flex-1 text-xs md:text-xs"
+        class="h-7 flex-1 text-base md:text-xs"
         :aria-label="`Reason (optional), for denying: ${summary.headline}`"
         placeholder="Reason (optional)"
         autocomplete="off"
@@ -208,23 +163,14 @@ function respond(approved: boolean) {
     </div>
 
     <p
-      v-else
+      v-else-if="outcome"
       data-testid="approval-outcome"
-      :class="failed ? 'text-destructive' : 'text-muted-foreground'"
+      :class="outcome.failed ? 'text-destructive' : 'text-muted-foreground'"
     >
-      <template v-if="outcome?.approved && result?.failed">
-        Approved by you, but it failed: {{ result.text }}
-        <span v-if="result.code" data-testid="approval-error-code" class="font-mono"
-          >({{ result.code }})</span
-        >
-      </template>
-      <template v-else-if="outcome?.approved">
-        Approved by you<template v-if="result"> — {{ result.text }}</template
-        >.
-      </template>
-      <template v-else>
-        Denied<template v-if="outcome?.reason">: “{{ outcome.reason }}”</template>.
-      </template>
+      {{ outcome.text }}
+      <span v-if="outcome.code" data-testid="approval-error-code" class="font-mono"
+        >({{ outcome.code }})</span
+      >
     </p>
   </div>
 </template>
