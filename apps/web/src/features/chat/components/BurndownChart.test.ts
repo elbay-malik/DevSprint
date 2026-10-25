@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
 import type { BurndownData } from '@devsprint/shared/tools'
 import BurndownChart from './BurndownChart.vue'
 
@@ -19,7 +20,37 @@ function burndown(overrides: Partial<BurndownData> = {}): BurndownData {
   }
 }
 
+/**
+ * A ResizeObserver the test drives: `resize(width)` reports the chart as drawn
+ * at that many CSS pixels, as the browser would once layout has run.
+ */
+function fakeResizeObserver() {
+  const callbacks: ResizeObserverCallback[] = []
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(callback: ResizeObserverCallback) {
+        callbacks.push(callback)
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  )
+  return {
+    async resize(width: number) {
+      const entry = { contentRect: { width } } as ResizeObserverEntry
+      for (const callback of callbacks) callback([entry], {} as ResizeObserver)
+      await nextTick()
+    },
+  }
+}
+
 describe('BurndownChart', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   /** The y of each point on a path, in SVG units (larger is lower on screen). */
   function ys(d: string | undefined): number[] {
     return [...(d ?? '').matchAll(/[ML][\d.]+ ([\d.]+)/g)].map((match) => Number(match[1]))
@@ -112,5 +143,40 @@ describe('BurndownChart', () => {
 
     await wrapper.setProps({ data: tiny })
     expect(wrapper.findAll('g.text-border line')).toHaveLength(4)
+  })
+
+  it('draws in CSS pixels, so its labels are not scaled down in a narrow column', async () => {
+    // A fixed 440-wide viewBox in a ~344px column drew 10px labels at under 8px.
+    const observer = fakeResizeObserver()
+    const wrapper = mount(BurndownChart, { props: { data: burndown() } })
+    const chart = () => wrapper.get('svg[role="img"]')
+    expect(chart().attributes('viewBox')).toBe('0 0 440 180')
+
+    await observer.resize(310)
+
+    expect(chart().attributes('viewBox')).toBe('0 0 310 180')
+    // The plot follows: its right edge sits the right padding in from 310.
+    const xs = [...(chart().get('path').attributes('d') ?? '').matchAll(/[ML]([\d.]+) /g)]
+    expect(Number(xs.at(-1)?.[1])).toBe(310 - 42)
+  })
+
+  it('keeps its last width while it is collapsed', async () => {
+    const observer = fakeResizeObserver()
+    const wrapper = mount(BurndownChart, { props: { data: burndown() } })
+
+    await observer.resize(344)
+    await observer.resize(0)
+
+    expect(wrapper.get('svg[role="img"]').attributes('viewBox')).toBe('0 0 344 180')
+  })
+
+  it('sets every axis and end label at 11px', () => {
+    const wrapper = mount(BurndownChart, { props: { data: burndown() } })
+    const labels = wrapper.findAll('svg[role="img"] text')
+    expect(labels.length).toBeGreaterThan(0)
+    for (const label of labels) {
+      const sized = label.element.closest('[class*="text-[11px]"]')
+      expect(sized, label.text()).not.toBeNull()
+    }
   })
 })

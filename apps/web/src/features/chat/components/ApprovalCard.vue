@@ -170,7 +170,7 @@ function respond(approved: boolean) {
 
     <details>
       <summary
-        class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 cursor-pointer rounded-sm outline-none focus-visible:ring-3 select-none"
+        class="text-muted-foreground hover:text-foreground cursor-pointer rounded-sm select-none"
       >
         Raw arguments
       </summary>

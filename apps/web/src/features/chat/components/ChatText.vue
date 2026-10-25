@@ -35,7 +35,10 @@ const blocks = computed(() => parseChatText(props.text))
           <ChatInline :parts="item" />
         </li>
       </ul>
-      <div v-else-if="block.kind === 'table'" class="overflow-x-auto">
+      <div
+        v-else-if="block.kind === 'table'"
+        class="bg-background min-w-0 overflow-x-auto rounded-md border"
+      >
         <table class="w-full border-collapse text-xs">
           <thead class="text-muted-foreground">
             <tr class="border-b">

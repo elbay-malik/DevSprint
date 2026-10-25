@@ -48,4 +48,12 @@ describe('ChatText', () => {
     expect(wrapper.findAll('th').map((cell) => cell.text())).toEqual(['Key', 'Status'])
     expect(wrapper.get('td strong').text()).toBe('Done')
   })
+
+  it('sets a table on Paper, like the other chat cards', () => {
+    // Graphite headers on the Paper Tint bubble were 4.34:1; on Paper, 4.73:1.
+    const wrapper = mount(ChatText, {
+      props: { text: '| Key | Status |\n|---|---|\n| DS-7 | Done |' },
+    })
+    expect(wrapper.get('table').element.parentElement?.className).toContain('bg-background')
+  })
 })

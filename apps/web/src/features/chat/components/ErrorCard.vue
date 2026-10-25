@@ -14,7 +14,7 @@ defineProps<{ toolName: string; error: ToolError }>()
   <div
     data-testid="error-card"
     :data-code="error.code"
-    class="bg-muted/40 border-destructive/40 min-w-0 rounded-md border px-3 py-2 text-xs"
+    class="bg-background border-destructive/40 min-w-0 rounded-md border px-3 py-2 text-xs"
   >
     <!-- What failed, in words, leads; the code follows for whoever is debugging.
          The code stays a visible label, so the state survives greyscale. -->

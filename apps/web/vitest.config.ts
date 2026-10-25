@@ -13,5 +13,8 @@ export default defineConfig({
     environment: 'happy-dom',
     include: ['src/**/*.{test,spec}.ts'],
     exclude: ['e2e/**', 'node_modules/**'],
+    // Vitest stubs every stylesheet to '' by default; the token contrast test
+    // reads main.css as text, so that one file comes through.
+    css: { include: [/main\.css/] },
   },
 })

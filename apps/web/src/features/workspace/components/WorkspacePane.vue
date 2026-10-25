@@ -28,12 +28,13 @@ watch(
 
 <template>
   <!-- The pane scrolls on its own and holds nothing focusable, so without a tab
-       stop a keyboard user could never reach the lower columns. -->
+       stop a keyboard user could never reach the lower columns. Its focus outline
+       is the shared scroll-region rule in main.css. -->
   <section
     data-testid="workspace-pane"
     tabindex="0"
     aria-label="Sprint board"
-    class="focus-visible:ring-ring/50 @container flex min-h-0 flex-col gap-4 p-4 outline-none focus-visible:ring-[3px] focus-visible:ring-inset lg:overflow-y-auto lg:p-6"
+    class="@container flex min-h-0 flex-col gap-4 p-4 lg:overflow-y-auto lg:p-6"
   >
     <!-- The sprint name leads; the header bar already names the product, so the
          project needs no label above it. The source badge sits on the heading's

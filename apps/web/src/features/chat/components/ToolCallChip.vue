@@ -108,7 +108,7 @@ const outputJson = computed(() =>
     </div>
     <details>
       <summary
-        class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 cursor-pointer rounded-sm outline-none focus-visible:ring-3 py-1 select-none"
+        class="text-muted-foreground hover:text-foreground cursor-pointer rounded-sm py-1 select-none"
       >
         Arguments
       </summary>
@@ -116,7 +116,7 @@ const outputJson = computed(() =>
     </details>
     <details v-if="outputJson !== undefined">
       <summary
-        class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 cursor-pointer rounded-sm outline-none focus-visible:ring-3 py-1 select-none"
+        class="text-muted-foreground hover:text-foreground cursor-pointer rounded-sm py-1 select-none"
       >
         Result
       </summary>

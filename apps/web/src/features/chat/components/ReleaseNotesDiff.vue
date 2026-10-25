@@ -18,6 +18,10 @@ const pane = ref<'after' | 'before'>('after')
 
 const shown = computed(() => (pane.value === 'after' ? props.data.after : props.data.before))
 
+/** The pressed state's non-colour cue: an underline in the text colour, Ink. */
+const PRESSED_CUE =
+  'aria-pressed:underline aria-pressed:decoration-2 aria-pressed:underline-offset-4'
+
 const CHANGE_TONES: Record<string, string> = {
   added: 'text-success',
   removed: 'text-destructive',
@@ -32,10 +36,14 @@ const CHANGE_TONES: Record<string, string> = {
         Release notes vs
         <span class="font-mono">{{ data.baseVersion }}</span>
       </span>
+      <!-- The Paper Tint fill alone is about 1.1:1 against Paper, so the pressed
+           half also takes an Ink underline, keyed to aria-pressed so what is seen
+           and what is announced cannot drift apart. -->
       <div class="flex gap-1" role="group" aria-label="Which version to show">
         <Button
           size="sm"
           :variant="pane === 'before' ? 'secondary' : 'ghost'"
+          :class="PRESSED_CUE"
           data-testid="diff-before"
           :aria-pressed="pane === 'before'"
           @click="pane = 'before'"
@@ -45,6 +53,7 @@ const CHANGE_TONES: Record<string, string> = {
         <Button
           size="sm"
           :variant="pane === 'after' ? 'secondary' : 'ghost'"
+          :class="PRESSED_CUE"
           data-testid="diff-after"
           :aria-pressed="pane === 'after'"
           @click="pane = 'after'"

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useResizeObserver } from '@vueuse/core'
 import type { BurndownData } from '@devsprint/shared/tools'
 
 /**
@@ -13,14 +14,29 @@ import type { BurndownData } from '@devsprint/shared/tools'
  */
 const props = defineProps<{ data: BurndownData }>()
 
-// Roughly 2:1 rather than 3:1 — in a ~360px chat column the wider box collapsed
-// the plot to about 100px tall, which flattened the very gap the chart exists to
-// show.
+/**
+ * One SVG unit is one CSS pixel. A fixed 440-wide viewBox scaled into a ~344px
+ * column shrank the 10px labels to under 8px, so the viewBox takes the width the
+ * chart is actually drawn at, and the height stays put: the plot keeps the same
+ * 142px of height in every column instead of flattening as the column narrows.
+ * WIDTH is only the first-paint guess, before the chart has been measured.
+ */
 const WIDTH = 440
-const HEIGHT = 210
+const HEIGHT = 180
 const PAD = { top: 14, right: 42, bottom: 24, left: 32 }
+/** Below this the plot would invert; a chart that narrow is not being read. */
+const MIN_WIDTH = 160
 
-const plotWidth = WIDTH - PAD.left - PAD.right
+const svg = ref<SVGSVGElement>()
+const width = ref(WIDTH)
+
+useResizeObserver(svg, (entries) => {
+  const measured = Math.round(entries[0]?.contentRect.width ?? 0)
+  // A collapsed or hidden chart measures 0; keep the last real width.
+  if (measured > 0) width.value = Math.max(measured, MIN_WIDTH)
+})
+
+const plotWidth = computed(() => width.value - PAD.left - PAD.right)
 const plotHeight = HEIGHT - PAD.top - PAD.bottom
 
 const days = computed(() => props.data.days)
@@ -32,7 +48,7 @@ const maxY = computed(
 
 function x(index: number): number {
   const last = Math.max(days.value.length - 1, 1)
-  return PAD.left + (index / last) * plotWidth
+  return PAD.left + (index / last) * plotWidth.value
 }
 
 function y(value: number): number {
@@ -86,9 +102,9 @@ function onMove(event: PointerEvent) {
   const target = event.currentTarget as SVGRectElement
   const bounds = target.getBoundingClientRect()
   const ratio = (event.clientX - bounds.left) / bounds.width
-  const position = ratio * WIDTH
+  const position = ratio * width.value
   const last = Math.max(days.value.length - 1, 1)
-  const index = Math.round(((position - PAD.left) / plotWidth) * last)
+  const index = Math.round(((position - PAD.left) / plotWidth.value) * last)
   hovered.value = Math.min(Math.max(index, 0), days.value.length - 1)
 }
 
@@ -135,7 +151,8 @@ function shortDate(date: string): string {
     </ul>
 
     <svg
-      :viewBox="`0 0 ${WIDTH} ${HEIGHT}`"
+      ref="svg"
+      :viewBox="`0 0 ${width} ${HEIGHT}`"
       class="mt-1 w-full"
       role="img"
       :aria-label="`Burndown for ${data.sprintId}: ${active?.remaining ?? 0} of ${data.committedPoints} ${data.unit} remaining`"
@@ -147,22 +164,22 @@ function shortDate(date: string): string {
           :key="tick.key"
           :x1="PAD.left"
           :y1="tick.y"
-          :x2="WIDTH - PAD.right"
+          :x2="width - PAD.right"
           :y2="tick.y"
         />
       </g>
-      <g class="fill-muted-foreground text-[10px] tabular-nums">
+      <g class="fill-muted-foreground text-[11px] tabular-nums">
         <text
           v-for="tick in yTicks"
           :key="tick.key"
           :x="PAD.left - 6"
-          :y="tick.y + 3"
+          :y="tick.y + 4"
           text-anchor="end"
         >
           {{ tick.label }}
         </text>
         <text :x="PAD.left" :y="HEIGHT - 6">{{ shortDate(days[0]?.date ?? '') }}</text>
-        <text :x="WIDTH - PAD.right" :y="HEIGHT - 6" text-anchor="end">
+        <text :x="width - PAD.right" :y="HEIGHT - 6" text-anchor="end">
           {{ shortDate(days.at(-1)?.date ?? '') }}
         </text>
       </g>
@@ -178,7 +195,7 @@ function shortDate(date: string): string {
           stroke-width="1"
           stroke-dasharray="2 3"
         />
-        <text :x="x(todayIndex) + 4" :y="PAD.top + 8" class="fill-muted-foreground text-[10px]">
+        <text :x="x(todayIndex) + 4" :y="PAD.top + 9" class="fill-muted-foreground text-[11px]">
           today
         </text>
       </g>
@@ -203,17 +220,17 @@ function shortDate(date: string): string {
       />
 
       <!-- Values at the line ends rather than a number on every point. -->
-      <g class="text-[10px] tabular-nums">
+      <g class="text-[11px] tabular-nums">
         <text
-          :x="WIDTH - PAD.right + 6"
-          :y="y(days.at(-1)?.remaining ?? 0) + 3"
+          :x="width - PAD.right + 6"
+          :y="y(days.at(-1)?.remaining ?? 0) + 4"
           class="fill-chart-1"
         >
           {{ days.at(-1)?.remaining ?? 0 }}
         </text>
         <text
-          :x="WIDTH - PAD.right + 6"
-          :y="y(days.at(-1)?.ideal ?? 0) + 3"
+          :x="width - PAD.right + 6"
+          :y="y(days.at(-1)?.ideal ?? 0) + 4"
           class="fill-muted-foreground"
         >
           {{ days.at(-1)?.ideal ?? 0 }}
@@ -243,7 +260,7 @@ function shortDate(date: string): string {
 
     <details class="mt-1">
       <summary
-        class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 cursor-pointer rounded-sm outline-none focus-visible:ring-3 text-xs select-none"
+        class="text-muted-foreground hover:text-foreground cursor-pointer rounded-sm text-xs select-none"
       >
         Series
       </summary>

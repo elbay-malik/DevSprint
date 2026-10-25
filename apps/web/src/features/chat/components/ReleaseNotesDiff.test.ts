@@ -44,4 +44,19 @@ describe('ReleaseNotesDiff', () => {
     const wrapper = mount(ReleaseNotesDiff, { props: { data: diff({ changedSections: [] }) } })
     expect(wrapper.text()).toContain('matches v1.4.2 section for section')
   })
+
+  it('marks the pressed half with more than a fill, keyed to aria-pressed', async () => {
+    // The Paper Tint fill is about 1.1:1 on Paper, so the underline carries it.
+    const wrapper = mount(ReleaseNotesDiff, { props: { data: diff() } })
+    const before = wrapper.get('[data-testid="diff-before"]')
+    const after = wrapper.get('[data-testid="diff-after"]')
+    for (const button of [before, after]) {
+      expect(button.classes()).toContain('aria-pressed:underline')
+    }
+
+    await before.trigger('click')
+
+    expect(before.attributes('aria-pressed')).toBe('true')
+    expect(after.attributes('aria-pressed')).toBe('false')
+  })
 })

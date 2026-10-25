@@ -57,9 +57,13 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  /* Signals (DESIGN.md): Trace Blue for measured data, Go Green for success. */
-  --chart-1: #2a78d6;
+  /* The focus ring is each theme's secondary-text step (Graphite here, Pencil in
+     dark), so a solid indicator clears 3:1 on every surface a control sits on:
+     4.73:1 on Paper, 4.34:1 on Paper Tint (WCAG 2.2 SC 1.4.11). */
+  --ring: oklch(0.556 0 0);
+  /* Signals (DESIGN.md): Trace Blue for measured data, Go Green for success.
+     Trace Blue also sets the chart's small end label, so it holds 4.91:1 on Paper. */
+  --chart-1: oklch(0.55 0.163 255.53);
   --success: oklch(0.508 0.118 165.612);
   --radius: 0.625rem;
 }
@@ -83,8 +87,9 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: #3987e5;
+  /* Pencil: 7.63:1 on the page, 6.91:1 on cards, 5.83:1 on the Charcoal bubble. */
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.622 0.161 255.05);
   --success: oklch(0.765 0.177 163.223);
 }
 
@@ -103,5 +108,17 @@
   }
   * {
     scrollbar-color: var(--border) transparent;
+  }
+  /* A 50% halo alone is about 1.5:1, too faint to find. Disclosures and the
+     focusable scroll regions (the board pane, the chat scroller) have no border
+     to recolour, so they take a solid outline in the ring colour. Scroll regions
+     draw it inside, where their own overflow and the app grid cannot clip it. */
+  summary:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  [tabindex='0']:not(a, button, input, select, textarea, summary):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
   }
 }
