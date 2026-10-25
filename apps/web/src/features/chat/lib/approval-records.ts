@@ -11,6 +11,12 @@ import type { CopyPart } from './approvals'
 export interface ApprovalRecord {
   /** The issue's status when the decision was made; the board moves on after. */
   from?: IssueStatus
+  /**
+   * Who held the issue when an assignment was decided, for the same reason;
+   * null when nobody did. Absent when the card is not an assignment, or the
+   * board did not hold the issue.
+   */
+  fromAssignee?: string | null
   decidedAt: Date
 }
 
@@ -27,7 +33,8 @@ export function approvalRecord(approvalId: string | undefined): ApprovalRecord |
 /**
  * How an Undo on an applied card went, kept by approval id for the same reason
  * as the decision: the record line has to survive the card being remounted.
- * `undone` reads "Undone by you at 14:05 — DS-9 back to In progress.";
+ * `undone` reads "Undone by you at 14:05 — DS-9 back to In progress." (or
+ * "— DS-12 back to @ben." for an assignment);
  * `refused` is the board's plain reason, and the Undo does not come back.
  */
 export type UndoRecord =

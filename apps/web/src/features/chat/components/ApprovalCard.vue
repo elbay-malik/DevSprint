@@ -8,8 +8,9 @@ import { Input } from '@/components/ui/input'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useDevSprintChat } from '../composables/useDevSprintChat'
 import { findIssueByKey } from '@/features/workspace/lib/issue-key'
+import { assigneeLabel, isKnownAssignee } from '@/features/workspace/lib/people'
 import { statusLabel } from '@/features/workspace/lib/status-labels'
-import { approvalOutcome } from '../lib/approvals'
+import { approvalOutcome, type CopyPart } from '../lib/approvals'
 import {
   approvalRecord,
   formatDecisionTime,
@@ -80,38 +81,55 @@ const OUTCOME_MARK_TONES: Record<string, string> = {
 
 const toolInput = computed(() => props.part.input as Record<string, unknown> | undefined)
 
+/** The writes that change an issue already on the board, and so name one. */
+const ISSUE_WRITES: readonly string[] = ['update_issue_status', 'assign_issue']
+
 /**
- * The board's copy of the issue a status change targets, if it has one, found
- * the way the api finds it, so "ds-7" is DS-7 here too.
+ * The board's copy of the issue a status change or reassignment targets, if it
+ * has one, found the way the api finds it, so "ds-7" is DS-7 here too.
  */
 const targetIssue = computed(() => {
   const key = toolInput.value?.issueKey
-  if (toolName.value !== 'update_issue_status' || typeof key !== 'string') return undefined
+  if (!ISSUE_WRITES.includes(toolName.value) || typeof key !== 'string') return undefined
   return findIssueByKey(workspace.workspace.issues, key)
 })
 
+/** The person an assignment hands the issue to: an id, or null for nobody. */
+const requestedAssignee = computed((): string | null | undefined => {
+  const id = toolInput.value?.assigneeId
+  return toolName.value === 'assign_issue' && (typeof id === 'string' || id === null)
+    ? id
+    : undefined
+})
+
 /**
- * A status change for a key the board does not hold (S-E). Approving it can
- * only fail, so the card says so before the decision and makes Deny the
- * default. Approve stays: the write's own typed error is what the agent's
- * recovery answers to, and the person may know something the board does not.
+ * Why a pending change cannot land, if the board already knows: a key it does
+ * not hold (S-E), or an assignee nobody on the team has. Approving it can only
+ * fail, so the card says so before the decision and makes Deny the default.
+ * Approve stays: the write's own typed error is what the agent's recovery
+ * answers to, and the person may know something the board does not.
  */
-const missingIssueKey = computed((): string | undefined => {
+const warning = computed((): CopyPart[] | undefined => {
   const key = toolInput.value?.issueKey
-  if (decided.value || toolName.value !== 'update_issue_status' || typeof key !== 'string') {
+  if (decided.value || !ISSUE_WRITES.includes(toolName.value) || typeof key !== 'string') {
     return undefined
   }
-  return targetIssue.value === undefined ? key : undefined
+  if (targetIssue.value === undefined) return [{ id: key }, ' isn’t on the board.']
+  const assignee = requestedAssignee.value
+  if (typeof assignee === 'string' && !isKnownAssignee(workspace.users, assignee)) {
+    return ['No one on the team has the id ', { id: assignee }, '.']
+  }
+  return undefined
 })
 
 const warningId = useId()
 
 /** The one Ink button, if this card holds it: Approve, or Deny for a change that cannot land. */
 const approveVariant = computed(() =>
-  props.lead && missingIssueKey.value === undefined ? 'default' : 'outline',
+  props.lead && warning.value === undefined ? 'default' : 'outline',
 )
 const denyVariant = computed(() =>
-  props.lead && missingIssueKey.value !== undefined ? 'default' : 'outline',
+  props.lead && warning.value !== undefined ? 'default' : 'outline',
 )
 
 /**
@@ -133,6 +151,22 @@ const summary = computed((): { headline: string; detail?: string } => {
     // Named as the board spells it, so the card and the board agree on "DS-7".
     return {
       headline: `${issue?.key ?? input.issueKey}: ${from}${statusLabel(input.status)}`,
+      ...(issue ? { detail: issue.title } : {}),
+    }
+  }
+  if (toolName.value === 'assign_issue' && typeof input.issueKey === 'string') {
+    const issue = targetIssue.value
+    // The same rule as a status change: the board's assignee while pending,
+    // the one captured at the decision after, so the record never reads
+    // "@dana → @dana" once the board catches up. Named by @handle, as the
+    // board's cards name people; nobody is "Unassigned".
+    const fromId = decided.value ? record.value?.fromAssignee : issue?.assigneeId
+    const users = workspace.users
+    const from = fromId === undefined ? '' : `${assigneeLabel(users, fromId)} → `
+    const to = requestedAssignee.value
+    const toLabel = to === undefined ? String(input.assigneeId) : assigneeLabel(users, to)
+    return {
+      headline: `${issue?.key ?? input.issueKey}: ${from}${toLabel}`,
       ...(issue ? { detail: issue.title } : {}),
     }
   }
@@ -174,7 +208,7 @@ async function undoChange(): Promise<void> {
   try {
     const result = await requestUndo(target.changeId)
     const copy = result.ok
-      ? undoneCopy(result.data, formatDecisionTime(new Date(result.data.undoneAt)))
+      ? undoneCopy(result.data, formatDecisionTime(new Date(result.data.undoneAt)), workspace.users)
       : toolErrorCopy('undo', result.error.code, { issueKey: target.issueKey })
     recordUndo(id, { state: result.ok ? 'undone' : 'refused', copy }, errorCopyText(copy))
   } catch (error) {
@@ -197,9 +231,11 @@ function respond(approved: boolean) {
   const id = approval.value?.id
   // Without an id there is nothing to answer, and the SDK would no-op silently.
   if (id === undefined) return
+  const issue = targetIssue.value
   recordDecision(id, {
     decidedAt: new Date(),
-    ...(targetIssue.value ? { from: targetIssue.value.status } : {}),
+    ...(issue ? { from: issue.status } : {}),
+    ...(issue && toolName.value === 'assign_issue' ? { fromAssignee: issue.assigneeId } : {}),
   })
   const trimmed = reason.value.trim()
   chat.addToolApprovalResponse({
@@ -224,13 +260,11 @@ function respond(approved: boolean) {
         {{ summary.headline }}
       </p>
       <p v-if="summary.detail" class="text-muted-foreground">{{ summary.detail }}</p>
-      <p
-        v-if="missingIssueKey"
-        :id="warningId"
-        data-testid="approval-warning"
-        class="text-destructive"
-      >
-        <span class="font-mono">{{ missingIssueKey }}</span> isn’t on the board.
+      <p v-if="warning" :id="warningId" data-testid="approval-warning" class="text-destructive">
+        <template v-for="(piece, index) in warning" :key="index">
+          <span v-if="typeof piece === 'string'">{{ piece }}</span>
+          <span v-else class="font-mono">{{ piece.id }}</span>
+        </template>
       </p>
       <p data-testid="approval-tool" class="text-muted-foreground font-mono">{{ toolName }}</p>
     </div>
@@ -253,7 +287,7 @@ function respond(approved: boolean) {
       v-if="!decided"
       role="group"
       :aria-label="`Decision: ${summary.headline}`"
-      :aria-describedby="missingIssueKey ? warningId : undefined"
+      :aria-describedby="warning ? warningId : undefined"
       tabindex="-1"
       data-approval-focus
       class="focus-visible:outline-ring flex flex-wrap items-center gap-2 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"

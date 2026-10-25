@@ -626,6 +626,17 @@ describe('ChatMessageList approve all and undo, said aloud', () => {
     await nextTick()
     expect(status(wrapper)).toBe('Undone by you at 14:05 — DS-9 back to In progress.')
   })
+
+  it('says an undone reassignment by who holds the issue again', async () => {
+    const wrapper = mount(ChatMessageList)
+    recordUndo(
+      'a-c2',
+      { state: 'undone', copy: ['Undone by you at 14:07 — ', { id: 'DS-9' }, ' back to @ben.'] },
+      'Undone by you at 14:07 — DS-9 back to @ben.',
+    )
+    await nextTick()
+    expect(status(wrapper)).toBe('Undone by you at 14:07 — DS-9 back to @ben.')
+  })
 })
 
 describe('ChatMessageList approval groups', () => {
@@ -755,6 +766,43 @@ describe('ChatMessageList approval groups', () => {
         createWorkspaceSeed().issues.find((issue) => issue.key === 'DS-8')?.status,
       )
       expect(approvalRecord('a-c2')).toBeUndefined()
+    } finally {
+      delete (chat as Partial<typeof chat> & { addToolApprovalResponse?: unknown })
+        .addToolApprovalResponse
+    }
+  })
+
+  it('takes a reassignment that can land into one press, keeping who held the issue', async () => {
+    const addToolApprovalResponse = vi.fn()
+    Object.assign(chat, { addToolApprovalResponse })
+    const assign = (id: string, issueKey: string, assigneeId: string | null) => ({
+      type: 'tool-assign_issue',
+      toolCallId: id,
+      state: 'approval-requested',
+      input: { issueKey, assigneeId },
+      approval: { id: `a-${id}` },
+    })
+    try {
+      chat.messages = [
+        turnWith([
+          gated('c1', 'DS-7'),
+          assign('c2', 'DS-12', 'u-dana'),
+          // Nobody on the team has this id, so it keeps its own decision.
+          assign('c3', 'DS-9', 'u-zed'),
+        ]),
+      ]
+      const wrapper = mount(ChatMessageList)
+      expect(wrapper.get('[data-testid="approval-approve-all"]').text()).toBe('Approve all 2')
+      expect(wrapper.text()).toContain('DS-9 needs its own decision.')
+      await wrapper.get('[data-testid="approval-approve-all"]').trigger('click')
+
+      expect(addToolApprovalResponse.mock.calls).toEqual([
+        [{ id: 'a-c1', approved: true }],
+        [{ id: 'a-c2', approved: true }],
+      ])
+      // DS-12 sat with nobody: the record says so, not "no record".
+      expect(approvalRecord('a-c2')?.fromAssignee).toBeNull()
+      expect(approvalRecord('a-c1')).not.toHaveProperty('fromAssignee')
     } finally {
       delete (chat as Partial<typeof chat> & { addToolApprovalResponse?: unknown })
         .addToolApprovalResponse

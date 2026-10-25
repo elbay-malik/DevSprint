@@ -84,8 +84,17 @@ export function toolErrorCopy(toolName: string, code: string, input?: unknown): 
           ]
         : ['That change can’t be undone: the board has moved on.']
     }
-    case 'INVALID_INPUT':
+    case 'INVALID_INPUT': {
+      // The one refusal an assignment has of its own (the api's assignIssue):
+      // the issue already has that assignee, so there was nothing to change.
+      const key = text('issueKey')
+      if (toolName === 'assign_issue') {
+        return key
+          ? [{ id: key.toUpperCase() }, ' already has that assignee.']
+          : ['That issue already has that assignee.']
+      }
       return ['The board couldn’t accept that request.']
+    }
     default:
       return ['That didn’t go through.']
   }

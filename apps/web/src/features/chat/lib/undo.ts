@@ -1,6 +1,7 @@
 import type { ToolResult } from '@devsprint/shared'
 import type { UndoableToolName, UndoChangeData } from '@devsprint/shared/tools'
 import { WORKSPACE_UNDO_ENDPOINT } from '@/lib/api'
+import { assigneeLabel } from '@/features/workspace/lib/people'
 import { statusLabel } from '@/features/workspace/lib/status-labels'
 import type { CopyPart } from './approvals'
 
@@ -12,6 +13,7 @@ import type { CopyPart } from './approvals'
 const UNDOABLE_TOOLS = [
   'create_issue',
   'update_issue_status',
+  'assign_issue',
 ] as const satisfies readonly UndoableToolName[]
 
 /** The fields of a settled tool part an undo is read from. */
@@ -64,12 +66,25 @@ export async function requestUndo(changeId: string): Promise<ToolResult<UndoChan
   return body
 }
 
-/** "Undone by you at 14:05 — DS-9 back to In progress.", the key apart for mono. */
-export function undoneCopy(data: UndoChangeData, at?: string): CopyPart[] {
+/**
+ * "Undone by you at 14:05 — DS-9 back to In progress.", the key apart for mono.
+ * An assignment says who holds the issue again, by @handle as the board does,
+ * or "back to unassigned"; `users` is the roster that maps the id.
+ */
+export function undoneCopy(
+  data: UndoChangeData,
+  at?: string,
+  users: readonly { id: string; handle: string }[] = [],
+): CopyPart[] {
   const when = at === undefined ? '' : ` at ${at}`
   const lead = `Undone by you${when} — `
   if (data.outcome === 'removed' || data.issue === null) {
     return [lead, { id: data.issueKey }, ' removed from the board.']
+  }
+  if (data.tool === 'assign_issue') {
+    const { assigneeId } = data.issue
+    const who = assigneeId === null ? 'unassigned' : assigneeLabel(users, assigneeId)
+    return [lead, { id: data.issueKey }, ` back to ${who}.`]
   }
   return [lead, { id: data.issueKey }, ` back to ${statusLabel(data.issue.status)}.`]
 }

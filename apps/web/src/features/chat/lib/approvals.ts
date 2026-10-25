@@ -1,5 +1,6 @@
 import type { IssueStatus } from '@devsprint/shared'
 import { findIssueByKey } from '@/features/workspace/lib/issue-key'
+import { isKnownAssignee } from '@/features/workspace/lib/people'
 
 /**
  * What an approval card says once it is decided, as plain data, so the card's
@@ -211,6 +212,32 @@ export function pendingStatusMoves(
   return moves
 }
 
+/**
+ * The reassignments still waiting on a card, as issue key → requested assignee
+ * id (null to unassign), so the board can mark the cards they would hand on.
+ * Matched and keyed like the status moves, for the same reasons. An assignee
+ * that is not a string or null is a malformed call with nothing to show.
+ */
+export function pendingAssignments(
+  parts: readonly object[] | undefined,
+  issues: readonly { key: string }[],
+): Map<string, string | null> {
+  const assignments = new Map<string, string | null>()
+  for (const part of (parts ?? []) as StatusMovePartLike[]) {
+    if (part.state !== 'approval-requested') continue
+    const isAssignment =
+      part.type === 'tool-assign_issue' ||
+      (part.type === 'dynamic-tool' && part.toolName === 'assign_issue')
+    const input = part.input as { issueKey?: unknown; assigneeId?: unknown } | undefined
+    if (!isAssignment || typeof input?.issueKey !== 'string') continue
+    const assigneeId = input.assigneeId
+    if (typeof assigneeId !== 'string' && assigneeId !== null) continue
+    const issue = findIssueByKey(issues, input.issueKey)
+    if (issue !== undefined) assignments.set(issue.key, assigneeId)
+  }
+  return assignments
+}
+
 /** "5 changes to review · 23 pts"; the points are left off when none are known. */
 export function changesToReview(count: number, points: number): string {
   const changes = count === 1 ? '1 change to review' : `${count} changes to review`
@@ -258,7 +285,11 @@ export function isSettledApproval(part: { state?: string; approval?: unknown }):
  * deployments are left out on purpose: a draft goes out under a version and a
  * deploy ships one, so each keeps a decision of its own.
  */
-const BATCH_APPROVABLE_TOOLS: readonly string[] = ['update_issue_status', 'create_issue']
+const BATCH_APPROVABLE_TOOLS: readonly string[] = [
+  'update_issue_status',
+  'create_issue',
+  'assign_issue',
+]
 
 /** The fields of a pending part that "Approve all" reads. */
 interface BatchPartLike {
@@ -279,6 +310,8 @@ export interface BatchApproval {
   approvalId: string
   /** The issue's status as the board has it now, for the card's from → to record. */
   from?: IssueStatus
+  /** For an assignment: who holds the issue now (null for nobody), for the same record. */
+  fromAssignee?: string | null
 }
 
 export interface ApproveAllPlan {
@@ -305,7 +338,9 @@ function stringField(input: unknown, name: string): string | undefined {
 function excludedLabel(tool: string | undefined, input: unknown): CopyPart[] {
   const key = stringField(input, 'issueKey')
   const version = stringField(input, 'version')
-  if (tool === 'update_issue_status' && key !== undefined) return [{ id: key }]
+  if ((tool === 'update_issue_status' || tool === 'assign_issue') && key !== undefined) {
+    return [{ id: key }]
+  }
   if (tool === 'run_deployment' && version !== undefined) {
     const environment = stringField(input, 'environment')
     return environment === undefined
@@ -318,15 +353,41 @@ function excludedLabel(tool: string | undefined, input: unknown): CopyPart[] {
   return ['one other change']
 }
 
+/** The board's issue as "Approve all" reads it; `assigneeId` only matters to an assignment. */
+interface BatchIssueLike {
+  key: string
+  status: IssueStatus
+  assigneeId?: string | null
+}
+
+/**
+ * Whether an assignment can land: the issue is on the board, the person is on
+ * the roster (or it unassigns), and it changes who holds the issue. The api
+ * refuses the other two, so approving them along with the rest could only fail.
+ */
+function assignmentLands(
+  input: unknown,
+  issue: BatchIssueLike | undefined,
+  users: readonly { id: string }[],
+): boolean {
+  if (issue === undefined || typeof input !== 'object' || input === null) return false
+  const assigneeId = (input as { assigneeId?: unknown }).assigneeId
+  if (typeof assigneeId !== 'string' && assigneeId !== null) return false
+  return isKnownAssignee(users, assigneeId) && assigneeId !== (issue.assigneeId ?? null)
+}
+
 /**
  * What "Approve all" would answer on a message, and what it leaves. Only board
  * writes that can land qualify: a status change for a key the board does not
  * hold is the S-E case, where the card makes Deny the default, so it is left
- * for the person to read rather than approved along with the rest.
+ * for the person to read rather than approved along with the rest. An
+ * assignment is left the same way when its issue or person is not on the
+ * board, or it would hand the issue to whoever already has it.
  */
 export function approveAllPlan(
   parts: readonly object[] | undefined,
-  issues: readonly { key: string; status: IssueStatus }[],
+  issues: readonly BatchIssueLike[],
+  users: readonly { id: string }[] = [],
 ): ApproveAllPlan {
   const plan: ApproveAllPlan = { approvals: [], excluded: [], remaining: false }
   for (const part of (parts ?? []) as BatchPartLike[]) {
@@ -341,7 +402,10 @@ export function approveAllPlan(
     const tool = toolNameOf(part)
     const key = stringField(part.input, 'issueKey')
     const issue = key === undefined ? undefined : findIssueByKey(issues, key)
-    const lands = tool !== 'update_issue_status' || issue !== undefined
+    const lands =
+      tool === 'assign_issue'
+        ? assignmentLands(part.input, issue, users)
+        : tool !== 'update_issue_status' || issue !== undefined
     const approvalId = part.approval.id
     if (
       tool !== undefined &&
@@ -354,6 +418,9 @@ export function approveAllPlan(
         toolCallId: part.toolCallId,
         approvalId,
         ...(issue === undefined ? {} : { from: issue.status }),
+        ...(tool === 'assign_issue' && issue !== undefined
+          ? { fromAssignee: issue.assigneeId ?? null }
+          : {}),
       })
     } else {
       plan.excluded.push(excludedLabel(tool, part.input))

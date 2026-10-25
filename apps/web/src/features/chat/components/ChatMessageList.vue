@@ -109,7 +109,7 @@ function approvalGroupOf(parts: readonly object[], last: boolean): ApprovalGroup
     headerAt: gated[0]?.index,
     header: changesToReview(open.length, points),
   }
-  const plan = approveAllPlan(parts, issues)
+  const plan = approveAllPlan(parts, issues, workspace.users)
   if (!last || plan.approvals.length < APPROVE_ALL_MIN) return header
   return {
     ...header,
@@ -243,8 +243,12 @@ function approveAll(messageId: string): void {
   const ids = approvals.map((approval) => approval.toolCallId)
   batch = { ids: new Set(ids), said: approvedTogether(approvals.length, at) }
   pressed = { ids: new Set(ids), at }
-  for (const { approvalId, from } of approvals) {
-    recordDecision(approvalId, { decidedAt, ...(from === undefined ? {} : { from }) })
+  for (const { approvalId, from, fromAssignee } of approvals) {
+    recordDecision(approvalId, {
+      decidedAt,
+      ...(from === undefined ? {} : { from }),
+      ...(fromAssignee === undefined ? {} : { fromAssignee }),
+    })
     void chat.addToolApprovalResponse({ id: approvalId, approved: true })
   }
 }

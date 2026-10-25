@@ -8,7 +8,13 @@ const sprint = seed.sprints.find((candidate) => candidate.state === 'active')
 const issues = seed.issues.filter((issue) => issue.sprintId === sprint?.id)
 const backlog = seed.issues.filter((issue) => issue.sprintId === null)
 
-function mountBoard(props: { pendingMoves?: Map<string, unknown>; changed?: Set<string> } = {}) {
+function mountBoard(
+  props: {
+    pendingMoves?: Map<string, unknown>
+    pendingAssignments?: Map<string, string | null>
+    changed?: Set<string>
+  } = {},
+) {
   return mount(IssueBoard, { props: { issues, backlog, users: seed.users, ...props } })
 }
 
@@ -47,6 +53,56 @@ describe('IssueBoard', () => {
     const marked = card(wrapper, 'DS-12')
     expect(marked.get('[data-testid="issue-status"]').text()).toBe('Todo')
     expect(marked.get('[data-testid="issue-pending-move"]').text()).toContain('In progress')
+  })
+
+  it('marks a pending reassignment where the card stands, by @handle', () => {
+    const wrapper = mountBoard({ pendingAssignments: new Map([['DS-9', 'u-dana']]) })
+
+    const marked = card(wrapper, 'DS-9')
+    expect(marked.attributes()).toHaveProperty('data-pending-assignee')
+    // Same dashed ring as a move, but no move: it stays in its own column.
+    expect(marked.classes()).toEqual(expect.arrayContaining(['outline-dashed', 'outline-ring']))
+    expect(marked.attributes()).not.toHaveProperty('data-pending-move')
+    expect(marked.find('[data-testid="issue-pending-move"]').exists()).toBe(false)
+    expect(
+      wrapper
+        .get('[data-testid="board-column-in_progress"]')
+        .find('[data-issue-key="DS-9"]')
+        .exists(),
+    ).toBe(true)
+
+    expect(marked.get('[data-testid="issue-assignee"]').text()).toBe('@ben')
+    const caption = marked.get('[data-testid="issue-pending-assignee"]')
+    expect(caption.text()).toContain('→')
+    expect(caption.text()).toContain('@dana')
+    expect(caption.get('.sr-only').text()).toBe('Awaiting approval to assign to')
+  })
+
+  it('says a pending unassignment in words, and marks a backlog card too', () => {
+    const wrapper = mountBoard({
+      pendingAssignments: new Map<string, string | null>([
+        ['DS-7', null],
+        ['DS-12', 'u-dana'],
+      ]),
+    })
+    const unassign = card(wrapper, 'DS-7').get('[data-testid="issue-pending-assignee"]')
+    expect(unassign.text()).toContain('Unassigned')
+    expect(unassign.get('.sr-only').text()).toBe('Awaiting approval to unassign')
+
+    const backlogCard = card(wrapper, 'DS-12')
+    expect(backlogCard.get('[data-testid="issue-pending-assignee"]').text()).toContain('@dana')
+    expect(backlogCard.get('[data-testid="issue-status"]').text()).toBe('Todo')
+  })
+
+  it('names who holds a backlog issue, as a column card does', () => {
+    const held = backlog.map((issue) =>
+      issue.key === 'DS-12' ? { ...issue, assigneeId: 'u-dana' } : issue,
+    )
+    const wrapper = mount(IssueBoard, { props: { issues, backlog: held, users: seed.users } })
+    const backlogCard = (key: string) =>
+      wrapper.get(`[data-testid="issue-card"][data-issue-key="${key}"]`)
+    expect(backlogCard('DS-12').get('[data-testid="issue-assignee"]').text()).toBe('@dana')
+    expect(backlogCard('DS-13').find('[data-testid="issue-assignee"]').exists()).toBe(false)
   })
 
   it('flags the cards the last read moved, and only those', () => {
@@ -101,6 +157,7 @@ describe('IssueBoard', () => {
   it('draws a plain board when nothing is pending or changed', () => {
     const wrapper = mountBoard()
     expect(wrapper.find('[data-pending-move]').exists()).toBe(false)
+    expect(wrapper.find('[data-pending-assignee]').exists()).toBe(false)
     expect(wrapper.find('[data-board-change]').exists()).toBe(false)
   })
 })

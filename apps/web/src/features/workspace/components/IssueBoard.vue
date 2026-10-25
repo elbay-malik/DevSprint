@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { ISSUE_STATUSES, type Issue, type User } from '@devsprint/shared'
 import { Badge } from '@/components/ui/badge'
 import IssueCard from './IssueCard.vue'
+import { assigneeLabel } from '../lib/people'
 import { ISSUE_STATUS_LABELS, statusLabel } from '../lib/status-labels'
 
 const props = defineProps<{
@@ -11,6 +12,8 @@ const props = defineProps<{
   users: User[]
   /** Issue key → the status a pending approval card would move it to. */
   pendingMoves?: ReadonlyMap<string, unknown>
+  /** Issue key → who a pending approval card would hand it to (null: nobody). */
+  pendingAssignments?: ReadonlyMap<string, string | null>
   /** Issues the last read of the board moved, marked briefly. */
   changed?: ReadonlySet<string>
 }>()
@@ -19,6 +22,13 @@ function pendingLabel(issue: Issue): string | undefined {
   return props.pendingMoves?.has(issue.key)
     ? statusLabel(props.pendingMoves.get(issue.key))
     : undefined
+}
+
+/** The person a pending reassignment names, as the card names people; null to unassign. */
+function pendingAssignee(issue: Issue): string | null | undefined {
+  if (!props.pendingAssignments?.has(issue.key)) return undefined
+  const assigneeId = props.pendingAssignments.get(issue.key) ?? null
+  return assigneeId === null ? null : assigneeLabel(props.users, assigneeId)
 }
 
 const columns = computed(() =>
@@ -61,6 +71,7 @@ const handleById = computed(() => new Map(props.users.map((user) => [user.id, `@
               :issue="issue"
               :assignee-handle="issue.assigneeId ? handleById.get(issue.assigneeId) : undefined"
               :pending-status="pendingLabel(issue)"
+              :pending-assignee="pendingAssignee(issue)"
               :changed="changed?.has(issue.key)"
             />
           </li>
@@ -92,12 +103,15 @@ const handleById = computed(() => new Map(props.users.map((user) => [user.id, `@
       </h2>
       <ul role="list" class="grid grid-cols-2 gap-3 @2xl:grid-cols-3 @4xl:grid-cols-5">
         <!-- Backlog issues sit outside the sprint's columns, so their status
-             has to be on the card or a move made elsewhere (S-F) is invisible. -->
+             has to be on the card or a move made elsewhere (S-F) is invisible.
+             Their assignee shows as in a column, now that one can be handed on. -->
         <li v-for="issue in backlog" :key="issue.id" class="grid">
           <IssueCard
             :issue="issue"
+            :assignee-handle="issue.assigneeId ? handleById.get(issue.assigneeId) : undefined"
             :status-label="ISSUE_STATUS_LABELS[issue.status]"
             :pending-status="pendingLabel(issue)"
+            :pending-assignee="pendingAssignee(issue)"
             :changed="changed?.has(issue.key)"
           />
         </li>
