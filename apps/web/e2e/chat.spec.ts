@@ -436,3 +436,47 @@ test('an applied change can be undone once, and the board shows it back', async 
   expect(again.status()).toBe(409)
   expect((await again.json()).error.code).toBe('UNDO_CONFLICT')
 })
+
+test('an assignment is marked on the board, applied, and undone back to nobody', async ({
+  page,
+  request,
+}) => {
+  await page.goto('/')
+  await expect(page.getByTestId('workspace-source')).toHaveText(/live/i)
+  await send(page, 'Assign DS-12 to Dana')
+  const card = page.getByTestId('approval-card')
+  // DS-12 sits in the backlog with nobody on it; the card says so in words.
+  await expect(card.getByTestId('approval-headline')).toHaveText('DS-12: Unassigned → @dana')
+  await expect(card.getByTestId('approval-tool')).toHaveText('assign_issue')
+
+  // Pending, the card is marked where it stands: no move, just the hand-on.
+  const issue = page.getByTestId('board-backlog').locator('[data-issue-key="DS-12"]')
+  await expect(issue).toHaveAttribute('data-pending-assignee', '')
+  await expect(issue).not.toHaveAttribute('data-pending-move', '')
+  // The arrow is drawn; a screen reader hears "Awaiting approval to assign to @dana".
+  await expect(issue.getByTestId('issue-pending-assignee')).toHaveText(
+    '→ Awaiting approval to assign to @dana',
+  )
+
+  await card.getByTestId('approval-approve').click()
+  await turnSettled(page)
+  await expect(page.getByTestId('chat-pane')).toContainText('DS-12 is now assigned to @dana.')
+  await expect(issue.getByTestId('issue-assignee')).toHaveText('@dana')
+  await expect(issue.getByTestId('issue-pending-assignee')).toHaveCount(0)
+  // The record keeps the change it was, after the board caught up.
+  await expect(card.getByTestId('approval-headline')).toHaveText('DS-12: Unassigned → @dana')
+  expect(
+    (await storedWorkspace(request)).issues.find((stored) => stored.key === 'DS-12')?.assigneeId,
+  ).toBe('u-dana')
+
+  await card.getByTestId('approval-undo').click()
+  const record = card.getByTestId('approval-undo-record')
+  await expect(record).toHaveText(/^↶ Undone by you at \d\d.\d\d — DS-12 back to unassigned\.$/)
+  await expect(page.getByTestId('chat-status')).toHaveText(
+    /^Undone by you at \d\d.\d\d — DS-12 back to unassigned\.$/,
+  )
+  await expect(issue.getByTestId('issue-assignee')).toHaveCount(0)
+  expect(
+    (await storedWorkspace(request)).issues.find((stored) => stored.key === 'DS-12')?.assigneeId,
+  ).toBeNull()
+})

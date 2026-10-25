@@ -17,7 +17,13 @@ export async function storedWorkspace(request: APIRequestContext) {
   const res = await request.get(`${API}/api/workspace`)
   expect(res.ok()).toBe(true)
   return (await res.json()) as {
-    issues: Array<{ key: string; title: string; status: string; sprintId: string | null }>
+    issues: Array<{
+      key: string
+      title: string
+      status: string
+      sprintId: string | null
+      assigneeId: string | null
+    }>
     releaseNotes: Array<{ version: string; status: string; markdown: string }>
     deployments: Array<{ version: string; status: string; stages: Array<{ status: string }> }>
   }

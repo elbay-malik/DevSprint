@@ -454,9 +454,10 @@ test.describe('S-F — an external MCP host operates the same workspace', () => 
       await openBoard(page)
       await expect(page.locator('[data-issue-key="DS-14"]')).toHaveCount(0)
 
-      // "The MCP server exposes exactly" the four issue tools.
+      // "The MCP server exposes exactly" the five issue tools.
       const { tools } = await client.listTools()
       expect(tools.map((tool) => tool.name).sort()).toEqual([
+        'assign_issue',
         'create_issue',
         'list_issues',
         'search_issues',
