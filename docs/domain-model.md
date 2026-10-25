@@ -326,21 +326,23 @@ type ToolErrorCode =
   | 'STAGE_FAILED'
   | 'INVALID_INPUT'
   | 'WORKSPACE_FULL'
+  | 'UNDO_CONFLICT'
 ```
 
 Canonical error codes:
 
-| Code                   | Meaning                                                                                        |
-| ---------------------- | ---------------------------------------------------------------------------------------------- |
-| ISSUE_NOT_FOUND        | No issue with the given key (e.g. `DS-42` in scenario S-E)                                     |
-| SPRINT_NOT_FOUND       | No sprint with the given id                                                                    |
-| USER_NOT_FOUND         | No user with the given id (bad `assigneeId` filter or assignment)                              |
-| VERSION_EXISTS         | Release notes for that version already exist, or version already live                          |
-| DEPLOY_IN_PROGRESS     | A deployment is already running for that environment                                           |
-| DEPLOY_ALREADY_SETTLED | Cancel was requested for a deployment that already finished (cancel route, HTTP 409)           |
-| STAGE_FAILED           | Reserved: a deployment stage failed. The simulation has no failure path, so it is never raised |
-| INVALID_INPUT          | Input failed schema or domain validation (catch-all for bad arguments)                         |
-| WORKSPACE_FULL         | A write would push the persisted board past its size cap; reset the board                      |
+| Code                   | Meaning                                                                                                                                |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| ISSUE_NOT_FOUND        | No issue with the given key (e.g. `DS-42` in scenario S-E)                                                                             |
+| SPRINT_NOT_FOUND       | No sprint with the given id                                                                                                            |
+| USER_NOT_FOUND         | No user with the given id (bad `assigneeId` filter or assignment)                                                                      |
+| VERSION_EXISTS         | Release notes for that version already exist, or version already live                                                                  |
+| DEPLOY_IN_PROGRESS     | A deployment is already running for that environment                                                                                   |
+| DEPLOY_ALREADY_SETTLED | Cancel was requested for a deployment that already finished (cancel route, HTTP 409)                                                   |
+| STAGE_FAILED           | Reserved: a deployment stage failed. The simulation has no failure path, so it is never raised                                         |
+| INVALID_INPUT          | Input failed schema or domain validation (catch-all for bad arguments)                                                                 |
+| WORKSPACE_FULL         | A write would push the persisted board past its size cap; reset the board                                                              |
+| UNDO_CONFLICT          | Undo route only (HTTP 409): the issue changed since the write, it was already undone, or no record of it remains (a reset clears them) |
 
 Notes:
 

@@ -74,7 +74,8 @@ storyboard; recording pending), then the ADRs and tests on GitHub.
 
 - **Ask:** grounded answers from read tools.
 - **Act with approval:** gated writes, namely issue status changes, new issues, saving release
-  notes, and deployments.
+  notes, and deployments. Several open board changes can be approved in one press, and an applied
+  status change or new issue can be undone from its card.
 - **Watch:** a multi-stage deployment streams progress live and can be cancelled.
 - **See:** results render as cards: an issue table, a burndown chart, a release-notes diff, a
   deployment card and an error card.
@@ -115,7 +116,7 @@ storyboard; recording pending), then the ADRs and tests on GitHub.
 
 - The live demo and the public MCP endpoint, both above.
 - `docs/`: product brief, domain model, tool inventory, six demo scenarios, wireframes, roadmap,
-  and 22 ADRs.
+  and 23 ADRs.
 - Tests, kept current by the code (`pnpm test`, `pnpm --filter @devsprint/web test:e2e`):
   - unit and eval tests
   - browser tests, one per scenario plus accessibility across UI states and both themes
@@ -128,8 +129,9 @@ be invented. The demo video is not yet recorded.
 ## Product Principles
 
 1. **Grounded, never guessed.** Every fact the copilot states comes from a tool result.
-2. **The human holds the pen.** Every change is proposed, approved and recorded, one decision per
-   change.
+2. **The human holds the pen.** Every change is proposed, approved and recorded one by one. A
+   reviewed batch of board changes can be approved in one go, and an applied board change can be
+   taken back.
 3. **Show, don't claim.** Each capability can be seen working live in one short session, with
    cause in the chat and effect on the board.
 4. **One board, any client.** The SPA and outside AI assistants act on the same workspace through

@@ -533,7 +533,7 @@ identifiers in mono). The press answers each card on its own, so each keeps its 
 line, time and "from". The status line says it once, when the last of them has turned ("4
 changes approved by you at 14:05."), and focus moves to the next card it left, or the composer.
 
-**Undo.** An applied status change or new issue carries a ghost "Undo" (28px, never Ink) after
+**Undo.** An applied status change or new issue carries a ghost "Undo" (24px, never Ink) after
 its record line; release notes and deployments have none. It sends only the workspace's change
 id, so what goes back is the server's record, not the card's. Once undone, a second Graphite line
 follows the record, led by a mono ↶ hidden from screen readers: "↶ Undone by you at 14:05 —
@@ -577,7 +577,8 @@ hovered day.
 - **Do** keep the user's bubble on `--bubble-user`, not `--primary`, so dark mode does not light it
   up.
 - **Do** spend the Ink-filled button once per region, on the affirmative action, or on the safe
-  default (Deny) when the affirmative cannot land, and use outline for everything else.
+  default (Deny) when the affirmative cannot land, and use outline for everything else. While a
+  group header offers "Approve all", it is that region's Ink, and an Undo on a record is ghost.
 - **Do** check every change in both themes at WCAG 2.2 AA.
 - **Do** theme the browser's own surfaces: `color-scheme` per theme, an ink-tint selection, Rule-coloured
   scrollbars, a `theme-color` that follows the chosen theme (not only the OS), and the theme applied

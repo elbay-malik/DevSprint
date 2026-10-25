@@ -247,8 +247,11 @@ z.object({
 **Output**
 
 ```ts
-{ ok: true, data: { issue: Issue } } // server assigns the next DS-<n> key
+{ ok: true, data: { issue: Issue, changeId?: string } } // server assigns the next DS-<n> key
 ```
+
+`changeId` is minted by the workspace as the write lands, with a record of what it changed; it is
+all `POST /api/workspace/undo` takes ([ADR-0023](./adr/0023-approve-all-and-undo.md)).
 
 **Errors:** `SPRINT_NOT_FOUND`, `USER_NOT_FOUND`, `INVALID_INPUT`
 
@@ -270,14 +273,18 @@ z.object({
 **Output**
 
 ```ts
-{ ok: true, data: { issue: Issue, previousStatus: IssueStatus } }
+{ ok: true, data: { issue: Issue, previousStatus: IssueStatus, changeId?: string } }
 ```
+
+`changeId` names the workspace's record of the status, assignee, blocked reason and completion
+time before and after the write, for the card's Undo (ADR-0023).
 
 **Errors:** `ISSUE_NOT_FOUND`, `INVALID_INPUT`
 
 **Policy note:** when a request implies N status changes, the agent must issue N separate calls →
 N separate approval cards. There is no batch variant, by design — scenario S-B ("close out Sprint
-12") produces exactly 5 approval gates, one per open issue.
+12") produces exactly 5 approval gates, one per open issue. The SPA's "Approve all" answers those
+cards in one press, but still one approval per call (ADR-0023).
 
 ### 9. `create_release_notes` — gated write
 
@@ -350,7 +357,10 @@ always auto-execute; ALL writes are gated — no exceptions.**
    There is no allowlist, no "trusted after first approval" mode, and no threshold logic.
 2. **One approval per mutation.** Approvals are granted per tool call, never per conversation or
    per batch. For `update_issue_status` this means one approval per issue: a request implying N
-   status changes produces N separate calls and N separate ApprovalCards (see scenario S-B).
+   status changes produces N separate calls and N separate ApprovalCards (see scenario S-B). The
+   SPA's "Approve all" is a shortcut over those cards, not a batch approval: it sends one signed,
+   single-use approval response per card, and covers only `update_issue_status` for a key the
+   board holds and `create_issue` (ADR-0023).
 3. **Mechanism (AI SDK v6, corrected in Phase 5).** Gating is `needsApproval: true` on the tool.
    There is no `toolApproval` map in `ai@6.0.277` and `needsApproval` is not deprecated — this
    paragraph previously said the opposite, which was verified wrong against the installed package
@@ -378,12 +388,13 @@ always auto-execute; ALL writes are gated — no exceptions.**
 
 Kept within the 6–10 tool budget. Each of these was considered and deliberately left out:
 
-| Deferred tool           | Why deferred                                                                                                                                                                                                                                                                                                                       |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `assign_issue`          | Fold into a future general `update_issue` tool rather than adding a single-field write now.                                                                                                                                                                                                                                        |
-| `list_users`            | The 4-user roster is small and static; it is embedded in the Phase 3 system prompt instead (see domain-model.md).                                                                                                                                                                                                                  |
-| `publish_release_notes` | Drafting covers the demo scenarios; publishing adds a second gated write with little new signal.                                                                                                                                                                                                                                   |
-| `cancel_deployment`     | Cancel comes from a button, so it is an api route (`POST /api/deployments/:id/cancel`), not a tool call. Routing it through the model would make whether the deploy stops depend on the model choosing to call it, and it could not be reached mid-tool-call at all — [ADR-0013](./adr/0013-deployment-cancel-as-an-api-route.md). |
+| Deferred tool           | Why deferred                                                                                                                                                                                                                                                                                                                        |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `assign_issue`          | Fold into a future general `update_issue` tool rather than adding a single-field write now.                                                                                                                                                                                                                                         |
+| `list_users`            | The 4-user roster is small and static; it is embedded in the Phase 3 system prompt instead (see domain-model.md).                                                                                                                                                                                                                   |
+| `publish_release_notes` | Drafting covers the demo scenarios; publishing adds a second gated write with little new signal.                                                                                                                                                                                                                                    |
+| `cancel_deployment`     | Cancel comes from a button, so it is an api route (`POST /api/deployments/:id/cancel`), not a tool call. Routing it through the model would make whether the deploy stops depend on the model choosing to call it, and it could not be reached mid-tool-call at all — [ADR-0013](./adr/0013-deployment-cancel-as-an-api-route.md).  |
+| `undo_change`           | Undo comes from a button on an applied card, so it is an api route (`POST /api/workspace/undo { changeId }`), not a tool. It reverses `create_issue` or `update_issue_status` from the workspace's own record, once, and refuses with `UNDO_CONFLICT` once the board has moved on — [ADR-0023](./adr/0023-approve-all-and-undo.md). |
 
 If a later phase needs one of these, promote it here first and update
 [demo-scenarios.md](./demo-scenarios.md), [wireframes.md](./wireframes.md), and the affected ADRs

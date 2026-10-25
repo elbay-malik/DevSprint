@@ -148,6 +148,44 @@ read that card, says `… — not applied (<CODE>).`). A call that threw, with n
 `✕ Approved by you at 14:02, but it failed: <reason>`. A deployment reads
 `Approved by you at 14:02 — deployment <status>.` (for example `deployment succeeded`).
 
+**Group header and Approve all.** Two or more approval cards in one message get a header line
+above the first. When two or more of the open cards on the last message are board writes that
+can land, it also carries "Approve all N", the message's one Ink, and every card below decides in
+outline. Cards it leaves are named under it:
+
+```
+5 changes to review · 23 pts                [ Approve all 4 ]
+DS-42 needs its own decision.
++----------------------------------------------------------+
+| DS-7: In review → Done                                   |
+| ...                                                      |
+| [ Deny  (optional reason input) ]          [ Approve ]   |  <- outline
++----------------------------------------------------------+
+```
+
+After a card is answered on its own the button reads "Approve remaining 3". Deploys, release notes
+and a status change for a key the board does not hold never count. The press still answers each
+card through its own approval, so each keeps its own record line.
+
+**Undo.** An applied status change or new issue gets a quiet ghost Undo on its record line; once
+undone, a second line follows it, or the board's refusal in Stop Red:
+
+```
++----------------------------------------------------------+
+| DS-9: In progress → Done                                 |
+| ● Approved by you at 14:02 — applied.          [ Undo ]  |
++----------------------------------------------------------+
+
++----------------------------------------------------------+
+| DS-9: In progress → Done                                 |
+| ● Approved by you at 14:02 — applied.                    |
+| ↶ Undone by you at 14:05 — DS-9 back to In progress.     |
++----------------------------------------------------------+
+```
+
+Release notes and deployments have no Undo. A refusal reads `That change to DS-9 can’t be undone:
+the board has moved on.`, and the Undo does not come back.
+
 ## 4. HITL approval sequence
 
 ```mermaid

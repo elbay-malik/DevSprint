@@ -19,14 +19,14 @@ over when Groq fails or hits its rate limit. Ask it anything about the board. Th
 are the demo scenarios, and each one exercises a different part of the system. A real model words
 its answers its own way, and may take a slightly different route than described here:
 
-| Prompt                                                                                   | What you'll see                                                                                               |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `Summarize Sprint 12 and draft release notes for v1.5.0.`, then `Looks good, save it.`   | Three chained tool calls, a release-notes diff against v1.4.2, then an approval card before anything is saved |
-| `We're closing Sprint 12 today — mark every remaining open issue in the sprint as done.` | Five separate approval cards, one per issue. Deny one with a reason and watch the agent say so                |
-| `Deploy v1.5.0-rc.1 to staging.`                                                         | A gated deployment that streams build → test → migrate → release live, with a working Cancel                  |
-| `Is Sprint 12 on track? Show me the burndown.`                                           | A burndown chart drawn from the tool's own series, and a narration that names the blocker                     |
-| `Mark DS-42 as done — the billing export shipped this morning.`, then `Yes, that one.`   | A typed `ISSUE_NOT_FOUND` error, a search for what you meant, and a fresh approval for the fix                |
-| _In Claude Desktop or Cursor_: add the MCP server above, then ask it to create an issue  | The write lands on the same board. Switch back to the demo and it appears in the backlog                      |
+| Prompt                                                                                   | What you'll see                                                                                                                |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `Summarize Sprint 12 and draft release notes for v1.5.0.`, then `Looks good, save it.`   | Three chained tool calls, a release-notes diff against v1.4.2, then an approval card before anything is saved                  |
+| `We're closing Sprint 12 today — mark every remaining open issue in the sprint as done.` | Five separate approval cards, one per issue. Deny one with a reason, approve the rest in one press, and watch the agent say so |
+| `Deploy v1.5.0-rc.1 to staging.`                                                         | A gated deployment that streams build → test → migrate → release live, with a working Cancel                                   |
+| `Is Sprint 12 on track? Show me the burndown.`                                           | A burndown chart drawn from the tool's own series, and a narration that names the blocker                                      |
+| `Mark DS-42 as done — the billing export shipped this morning.`, then `Yes, that one.`   | A typed `ISSUE_NOT_FOUND` error, a search for what you meant, and a fresh approval for the fix                                 |
+| _In Claude Desktop or Cursor_: add the MCP server above, then ask it to create an issue  | The write lands on the same board. Switch back to the demo and it appears in the backlog                                       |
 
 The board is shared by every visitor and resets itself at midnight UTC. **Reset board** in the
 header restores it at any time, once you confirm it for everyone.
@@ -50,7 +50,9 @@ A turn starts when the SPA streams a question to the **api Worker**. There, an A
 - **Reads run immediately** and come back as cards in the transcript: an issue table, a burndown
   chart, a release-notes diff.
 - **Writes don't run until approved.** Each write becomes a signed approval card, and only an
-  explicit, single-use approval lets it execute.
+  explicit, single-use approval lets it execute. "Approve all" answers a group's board writes in
+  one press, still one approval per card, and an applied status change or new issue can be undone
+  from its card, from the server's own record of what it changed.
 - **The four issue tools live in a separate MCP Worker,** which the agent reaches over a service
   binding as an ordinary MCP client. Any outside AI assistant can use the same server.
 - **There's one board.** Both Workers read and write it through one Durable Object, so a write
@@ -66,6 +68,7 @@ with the real thing, and say why.
 | [Approvals are signed, and single-use through our own ledger](docs/adr/0010-tool-approval-mechanism-and-replay-protection.md) | The SDK's signature has no nonce, so a captured approval could be replayed. The ledger closes that, with its two exceptions named rather than hidden                    |
 | [The workspace lives in a Durable Object](docs/adr/0011-workspace-state-in-a-durable-object.md)                               | It's what lets two Workers, and any outside MCP host, share one board. It replaced the planned D1 database                                                              |
 | [Deployment cancel is an api route](docs/adr/0013-deployment-cancel-as-an-api-route.md)                                       | A browser that stops reading a stream does not reliably abort the Worker, so the run would finish while the card said "cancelled"                                       |
+| [Undo reads the server's record, not the card's](docs/adr/0023-approve-all-and-undo.md)                                       | The undo route takes only a change id. The workspace records each write's before and after as it lands, and refuses once the board has moved on                         |
 | [Tracing without the OpenTelemetry SDK](docs/adr/0015-otlp-tracing-without-the-opentelemetry-sdk.md)                          | About 200 hand-written lines. The "risky on workerd" assumption was measured, not believed                                                                              |
 | [Two spend controls, deliberately different](docs/adr/0016-two-spend-controls-and-an-honest-injection-posture.md)             | Cloudflare's rate limiter disclaims being an accounting system, so the token cap lives elsewhere. Prompt injection is answered by the approval gate, not a prompt       |
 | [Scenario specs assert three layers](docs/adr/0018-scenario-specs-assert-three-layers.md)                                     | Green tests turned out to prove little. A mutation pass found ten product bugs every suite let through                                                                  |

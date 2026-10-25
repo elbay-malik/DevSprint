@@ -85,8 +85,8 @@ Conventions used in the step tables:
 ## S-B — Batch write with per-issue approval gates
 
 - **ID:** S-B
-- **Goal:** demonstrate the HITL policy under a batch request — one approval PER issue, no batch
-  approval — including a denial that the agent must respect and report.
+- **Goal:** demonstrate the HITL policy under a batch request — one approval PER issue, never one
+  batch card — including a denial that the agent must respect and report.
 - **First fully runnable phase:** Phase 5.
 - **Preconditions:** fresh seed; `sprint-12` has exactly 5 non-done issues: DS-7 (in_review), DS-8
   (in_review), DS-9 (in_progress), DS-10 (in_progress), DS-11 (blocked). The seed is tuned so this
@@ -116,6 +116,10 @@ Conventions used in the step tables:
 > together and the approved writes execute once the last card is answered — the board therefore
 > updates in one go rather than card by card. The policy the scenario exists to prove is
 > unchanged: five separate calls, five separate approvals, no batch card, and the denial honoured.
+>
+> **Approve all (ADR-0023).** Once DS-11 is denied, the group header offers "Approve remaining 4",
+> which answers DS-7 to DS-10 in one press. It sends four separate approvals, so every card keeps its
+> own record line; the step table keeps the per-card path, and `scenarios.spec.ts` follows it.
 
 **Eval assertions**
 
