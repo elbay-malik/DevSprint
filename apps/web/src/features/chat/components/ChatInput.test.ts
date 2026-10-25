@@ -111,4 +111,15 @@ describe('ChatInput', () => {
 
     expect(sendMessage).toHaveBeenCalledWith({ text: 'How is the sprint?' })
   })
+  it('names what Stop stops, so it is not mistaken for a deploy’s Cancel', async () => {
+    // During a deploy the card's "Cancel" sits above; this ends only the reply.
+    chat.status = 'streaming'
+    const wrapper = mount(ChatInput)
+    const stop = wrapper.get('[data-testid="chat-stop"]')
+
+    expect(stop.text()).toBe('Stop reply')
+    expect(stop.attributes('aria-label')).toBe('Stop reply')
+    await stop.trigger('click')
+    expect(chat.stop).toHaveBeenCalledOnce()
+  })
 })

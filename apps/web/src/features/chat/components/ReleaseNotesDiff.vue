@@ -27,6 +27,23 @@ const CHANGE_TONES: Record<string, string> = {
   removed: 'text-destructive',
   modified: 'text-muted-foreground',
 }
+
+/**
+ * The changes are to whole sections, not to lines inside them, so each chip
+ * reads as a heading with a sign ("− Fixed") under a "Sections:" label.
+ * "removed Fixed" read as notes being deleted. The sign is drawn; a screen
+ * reader hears the word after the heading ("Fixed, removed").
+ */
+const CHANGE_SIGNS: Record<string, string> = {
+  added: '+',
+  removed: '−',
+  modified: '~',
+}
+const CHANGE_WORDS: Record<string, string> = {
+  added: 'added',
+  removed: 'removed',
+  modified: 'changed',
+}
 </script>
 
 <template>
@@ -63,16 +80,26 @@ const CHANGE_TONES: Record<string, string> = {
       </div>
     </div>
 
-    <div v-if="data.changedSections.length > 0" class="flex flex-wrap gap-1.5 border-b px-3 py-2">
-      <!-- The change type is spelled out, never signalled by colour alone. -->
+    <div
+      v-if="data.changedSections.length > 0"
+      class="flex flex-wrap items-center gap-1.5 border-b px-3 py-2"
+    >
+      <span class="text-muted-foreground">Sections:</span>
+      <!-- The change type is a sign and a word, never signalled by colour alone. -->
       <Badge
         v-for="section in data.changedSections"
         :key="`${section.changeType}-${section.heading}`"
+        data-testid="diff-section"
+        :data-change="section.changeType"
+        :title="`${section.heading} section ${CHANGE_WORDS[section.changeType] ?? section.changeType}`"
         variant="outline"
         class="font-normal"
       >
-        <span :class="CHANGE_TONES[section.changeType]">{{ section.changeType }}</span>
-        <span class="ml-1">{{ section.heading }}</span>
+        <span aria-hidden="true" :class="CHANGE_TONES[section.changeType]">{{
+          CHANGE_SIGNS[section.changeType]
+        }}</span>
+        <span>{{ section.heading }}</span>
+        <span class="sr-only">, {{ CHANGE_WORDS[section.changeType] ?? section.changeType }}</span>
       </Badge>
     </div>
     <p v-else class="text-muted-foreground border-b px-3 py-2">

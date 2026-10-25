@@ -98,7 +98,7 @@ test('the stop button ends the turn', async ({ page }) => {
 
   // Stop once the first tool call is in flight, so there is a turn to interrupt.
   await expect(page.getByTestId('tool-call-chip').first()).toBeVisible()
-  await page.getByRole('button', { name: 'Stop' }).click()
+  await page.getByTestId('chat-stop').click()
   await expect(page.getByRole('button', { name: 'Send' })).toBeVisible()
 
   // Left alone this turn chains a second tool and answers in about 1.5s, so if
@@ -118,7 +118,7 @@ test('the chat still works after a turn is stopped', async ({ page }) => {
   // Wait for a call to actually be in flight, so the stop really does leave a
   // dangling tool call — that is the precondition this test exists to cover.
   await expect(page.getByTestId('tool-call-chip').first()).toBeVisible()
-  await page.getByRole('button', { name: 'Stop' }).click()
+  await page.getByTestId('chat-stop').click()
   await expect(page.getByRole('button', { name: 'Send' })).toBeVisible()
 
   // The stopped turn leaves a tool call with no result in the history; the next
@@ -235,7 +235,7 @@ test('tool results render as cards, not raw JSON', async ({ page }) => {
   await expect(page.getByTestId('tool-call-chip')).toHaveCount(0)
 })
 
-test('a search renders the compact table with match scores', async ({ page }) => {
+test('a search renders the compact table with how well each issue matched', async ({ page }) => {
   await page.goto('/')
 
   await page.getByTestId('chat-input').fill('Find the billing export issue')
@@ -244,6 +244,7 @@ test('a search renders the compact table with match scores', async ({ page }) =>
   const table = page.getByTestId('issue-table')
   await expect(table).toBeVisible()
   await expect(table).toContainText('DS-7')
-  // The compact variant carries the match score instead of points.
-  await expect(table).toContainText('Score')
+  // The compact variant says how well each issue matched instead of points.
+  await expect(table).toContainText('Match')
+  await expect(table.locator('[data-issue-key="DS-7"]')).toContainText('Strong')
 })

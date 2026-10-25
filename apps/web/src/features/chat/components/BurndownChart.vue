@@ -2,6 +2,8 @@
 import { computed, ref } from 'vue'
 import { useResizeObserver } from '@vueuse/core'
 import type { BurndownData } from '@devsprint/shared/tools'
+import { useWorkspaceStore } from '@/stores/workspace'
+import { dateTickIndices } from '../lib/date-ticks'
 
 /**
  * Remaining work against the ideal line, drawn as inline SVG.
@@ -13,6 +15,26 @@ import type { BurndownData } from '@devsprint/shared/tools'
  * greyscale or with a colour vision deficiency.
  */
 const props = defineProps<{ data: BurndownData }>()
+
+const workspace = useWorkspaceStore()
+
+/**
+ * The sprint as the board names it ("Sprint 12 — Notifications & billing"),
+ * not the tool's id. A sprint the board does not hold keeps its id, in mono.
+ */
+const sprintName = computed(
+  () => workspace.workspace.sprints.find((sprint) => sprint.id === props.data.sprintId)?.name,
+)
+const sprintLabel = computed(() => sprintName.value ?? props.data.sprintId)
+
+/**
+ * The ideal line is linear, so most days land between whole points (9.54).
+ * Labels and the table give whole points, which is what a sprint is counted
+ * in; the line itself is drawn from the exact values.
+ */
+function points(value: number): number {
+  return Math.round(value)
+}
 
 /**
  * One SVG unit is one CSS pixel. A fixed 440-wide viewBox scaled into a ~344px
@@ -78,6 +100,9 @@ const yTicks = computed(() => {
   }))
 })
 
+/** Dates under the plot, as many as fit without touching at the drawn width. */
+const dateTicks = computed(() => dateTickIndices(days.value.length, plotWidth.value))
+
 const asOfDate = computed(() => props.data.asOf.slice(0, 10))
 
 /** The sprint is partly in the future, so the line is only real up to here. */
@@ -117,12 +142,15 @@ function shortDate(date: string): string {
 <template>
   <figure data-testid="burndown-chart" class="bg-background m-0 rounded-md border px-3 py-2">
     <figcaption class="flex flex-wrap items-baseline justify-between gap-2">
-      <span class="font-medium"
-        >Burndown — <span class="font-mono">{{ data.sprintId }}</span></span
+      <span data-testid="burndown-title" class="font-medium"
+        >Burndown:
+        <span :class="sprintName === undefined ? 'font-mono' : undefined">{{
+          sprintLabel
+        }}</span></span
       >
       <span v-if="active" class="text-muted-foreground text-xs tabular-nums">
         {{ shortDate(active.date) }} · {{ active.remaining }} of {{ data.committedPoints }}
-        {{ data.unit }} left · ideal {{ active.ideal }}
+        {{ data.unit }} left · ideal {{ points(active.ideal) }}
       </span>
     </figcaption>
 
@@ -155,7 +183,7 @@ function shortDate(date: string): string {
       :viewBox="`0 0 ${width} ${HEIGHT}`"
       class="mt-1 w-full"
       role="img"
-      :aria-label="`Burndown for ${data.sprintId}: ${active?.remaining ?? 0} of ${data.committedPoints} ${data.unit} remaining`"
+      :aria-label="`Burndown for ${sprintLabel}: ${active?.remaining ?? 0} of ${data.committedPoints} ${data.unit} remaining`"
     >
       <!-- Recessive frame: hairline, solid, one step off the surface. -->
       <g class="text-border" stroke="currentColor" stroke-width="1">
@@ -178,9 +206,15 @@ function shortDate(date: string): string {
         >
           {{ tick.label }}
         </text>
-        <text :x="PAD.left" :y="HEIGHT - 6">{{ shortDate(days[0]?.date ?? '') }}</text>
-        <text :x="width - PAD.right" :y="HEIGHT - 6" text-anchor="end">
-          {{ shortDate(days.at(-1)?.date ?? '') }}
+        <text
+          v-for="index in dateTicks"
+          :key="`date-${index}`"
+          data-testid="burndown-date"
+          :x="x(index)"
+          :y="HEIGHT - 6"
+          text-anchor="middle"
+        >
+          {{ shortDate(days[index]?.date ?? '') }}
         </text>
       </g>
 
@@ -233,7 +267,7 @@ function shortDate(date: string): string {
           :y="y(days.at(-1)?.ideal ?? 0) + 4"
           class="fill-muted-foreground"
         >
-          {{ days.at(-1)?.ideal ?? 0 }}
+          {{ points(days.at(-1)?.ideal ?? 0) }}
         </text>
       </g>
 
@@ -276,7 +310,7 @@ function shortDate(date: string): string {
           <tr v-for="day in days" :key="day.date">
             <td>{{ day.date }}</td>
             <td>{{ day.remaining }}</td>
-            <td>{{ day.ideal }}</td>
+            <td>{{ points(day.ideal) }}</td>
           </tr>
         </tbody>
       </table>

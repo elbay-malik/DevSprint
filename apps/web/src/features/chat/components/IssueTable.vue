@@ -3,13 +3,15 @@ import { computed } from 'vue'
 import type { IssueSummary, SearchIssuesMatch } from '@devsprint/shared/tools'
 import { Badge } from '@/components/ui/badge'
 import { statusLabel } from '@/features/workspace/lib/status-labels'
+import { matchStrength } from '../lib/match-strength'
 
 /**
  * Issues as a table rather than raw JSON (docs/wireframes.md §5).
  *
  * `list_issues` and `search_issues` return different rows, so the compact
- * variant carries the match score and drops the columns a search result does
- * not have.
+ * variant carries how well each issue matched and drops the columns a search
+ * result does not have. The match is a word ("Strong"); the raw score stays
+ * on hover and for screen readers.
  */
 const props = defineProps<{
   issues?: IssueSummary[]
@@ -24,13 +26,15 @@ const rows = computed(() =>
         key: match.key,
         title: match.title,
         status: match.status,
-        trailing: match.score.toFixed(2),
+        trailing: matchStrength(match.score),
+        score: match.score.toFixed(2),
       }))
     : (props.issues ?? []).map((issue) => ({
         key: issue.key,
         title: issue.title,
         status: issue.status,
         trailing: `${issue.points}`,
+        score: undefined,
       })),
 )
 
@@ -55,7 +59,7 @@ const caption = computed(
           <th scope="col" class="px-3 py-1.5 text-left font-normal">Issue</th>
           <th scope="col" class="px-3 py-1.5 text-left font-normal">Status</th>
           <th scope="col" class="px-3 py-1.5 text-right font-normal">
-            {{ compact ? 'Score' : 'Pts' }}
+            {{ compact ? 'Match' : 'Pts' }}
           </th>
         </tr>
       </thead>
@@ -75,7 +79,13 @@ const caption = computed(
               {{ statusLabel(row.status) }}
             </Badge>
           </td>
-          <td class="px-3 py-1.5 text-right tabular-nums">{{ row.trailing }}</td>
+          <td
+            class="px-3 py-1.5 text-right tabular-nums"
+            :title="row.score === undefined ? undefined : `Match score ${row.score}`"
+          >
+            {{ row.trailing
+            }}<span v-if="row.score !== undefined" class="sr-only">, score {{ row.score }}</span>
+          </td>
         </tr>
       </tbody>
     </table>

@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import type { BurndownData } from '@devsprint/shared/tools'
 import BurndownChart from './BurndownChart.vue'
@@ -47,6 +48,10 @@ function fakeResizeObserver() {
 }
 
 describe('BurndownChart', () => {
+  // The title names the sprint from the workspace store's seed.
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
   afterEach(() => {
     vi.unstubAllGlobals()
   })
@@ -79,7 +84,65 @@ describe('BurndownChart', () => {
 
     expect(wrapper.text()).toContain('07/01')
     expect(wrapper.text()).toContain('23 of 31 points left')
-    expect(wrapper.text()).toContain('ideal 6.2')
+    expect(wrapper.text()).toContain('ideal 6')
+    expect(wrapper.text()).not.toContain('6.2')
+  })
+
+  it('is titled with the sprint’s name, not its id', () => {
+    const wrapper = mount(BurndownChart, { props: { data: burndown() } })
+    const title = wrapper.get('[data-testid="burndown-title"]')
+    expect(title.text()).toBe('Burndown: Sprint 12 — Notifications & billing')
+    expect(title.find('.font-mono').exists()).toBe(false)
+    expect(wrapper.get('svg[role="img"]').attributes('aria-label')).toMatch(
+      /^Burndown for Sprint 12 — Notifications & billing:/,
+    )
+  })
+
+  it('falls back to the id, in mono, for a sprint the board does not hold', () => {
+    const wrapper = mount(BurndownChart, { props: { data: burndown({ sprintId: 'sprint-99' }) } })
+    const title = wrapper.get('[data-testid="burndown-title"]')
+    expect(title.text()).toBe('Burndown: sprint-99')
+    expect(title.get('.font-mono').text()).toBe('sprint-99')
+  })
+
+  it('gives the ideal in whole points in the labels and the table, but draws it exactly', () => {
+    const wrapper = mount(BurndownChart, {
+      props: {
+        data: burndown({
+          days: [
+            { date: '2026-06-29', remaining: 23, ideal: 9.54 },
+            { date: '2026-07-01', remaining: 23, ideal: 6.2 },
+            { date: '2026-07-05', remaining: 23, ideal: 2.5 },
+          ],
+        }),
+      },
+    })
+    const idealCells = wrapper.findAll('tbody tr').map((row) => row.findAll('td')[2]?.text())
+    expect(idealCells).toEqual(['10', '6', '3'])
+    // The end label, in the table's figures.
+    const endLabels = wrapper.findAll('svg[role="img"] text.fill-muted-foreground')
+    expect(endLabels.at(-1)?.text()).toBe('3')
+    expect(wrapper.text()).not.toMatch(/9\.54|6\.2|2\.5/)
+    // The line is not rounded: 2.5 and 3 would be different heights.
+    const idealYs = ys(wrapper.get('path[stroke-dasharray]').attributes('d'))
+    expect(idealYs.at(-1)).toBeCloseTo(14 + 142 - (2.5 / 31) * 142, 5)
+  })
+
+  it('labels dates between the first and the last, so the axis can be read', async () => {
+    const observer = fakeResizeObserver()
+    // Sprint 12: 06/22 to 07/05.
+    const fortnight = Array.from({ length: 14 }, (_, index) => ({
+      date: new Date(Date.UTC(2026, 5, 22 + index)).toISOString().slice(0, 10),
+      remaining: 31,
+      ideal: 31 - index * 2,
+    }))
+    const wrapper = mount(BurndownChart, { props: { data: burndown({ days: fortnight }) } })
+    await observer.resize(344)
+
+    const dates = wrapper.findAll('[data-testid="burndown-date"]').map((label) => label.text())
+    expect(dates[0]).toBe('06/22')
+    expect(dates.length).toBeGreaterThan(2)
+    expect(dates.at(-1)).toBe('07/05')
   })
 
   it('names both series so identity never rests on colour', () => {

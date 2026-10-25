@@ -32,12 +32,42 @@ describe('ReleaseNotesDiff', () => {
     expect(wrapper.get('[data-testid="diff-before"]').attributes('aria-pressed')).toBe('true')
   })
 
-  it('names each change in words, not only by colour', () => {
+  it('reads each change as a whole section, under a Sections label', () => {
+    // "removed Fixed" read as release notes being deleted.
     const wrapper = mount(ReleaseNotesDiff, { props: { data: diff() } })
-    expect(wrapper.text()).toContain('removed')
-    expect(wrapper.text()).toContain('Fixed')
-    expect(wrapper.text()).toContain('modified')
-    expect(wrapper.text()).toContain('Added')
+    expect(wrapper.text()).toContain('Sections:')
+    const [removed, changed] = wrapper.findAll('[data-testid="diff-section"]')
+    expect(removed?.attributes('title')).toBe('Fixed section removed')
+    expect(changed?.attributes('title')).toBe('Added section changed')
+    // The badge's gap spaces the sign from the heading; the word is for screen readers.
+    expect(removed?.text()).toBe('−Fixed, removed')
+  })
+
+  it('signs each change, and says it in words to a screen reader, not only by colour', () => {
+    const wrapper = mount(ReleaseNotesDiff, {
+      props: {
+        data: diff({
+          changedSections: [
+            { heading: 'Added', changeType: 'added' },
+            { heading: 'Fixed', changeType: 'removed' },
+            { heading: 'Changed', changeType: 'modified' },
+          ],
+        }),
+      },
+    })
+    const chips = wrapper.findAll('[data-testid="diff-section"]')
+    const signs = chips.map((chip) => chip.get('[aria-hidden="true"]'))
+    expect(signs.map((sign) => sign.text())).toEqual(['+', '−', '~'])
+    expect(signs.map((sign) => sign.classes()[0])).toEqual([
+      'text-success',
+      'text-destructive',
+      'text-muted-foreground',
+    ])
+    expect(chips.map((chip) => chip.get('.sr-only').text())).toEqual([
+      ', added',
+      ', removed',
+      ', changed',
+    ])
   })
 
   it('says so when nothing changed', () => {

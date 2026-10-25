@@ -75,7 +75,18 @@ function onSubmit() {
       autocomplete="off"
     />
     <p v-if="awaitingApproval" id="composer-locked-hint" class="sr-only">{{ lockedHint }}</p>
-    <Button v-if="streaming" type="button" variant="outline" @click="chat.stop()">Stop</Button>
+    <!-- Names what it stops: during a deploy the card's own Cancel sits above,
+         and this ends only the reply, not the deployment. -->
+    <Button
+      v-if="streaming"
+      type="button"
+      variant="outline"
+      data-testid="chat-stop"
+      aria-label="Stop reply"
+      @click="chat.stop()"
+    >
+      Stop reply
+    </Button>
     <Button v-else type="submit" :disabled="busy || !text.trim()">Send</Button>
   </form>
 </template>
