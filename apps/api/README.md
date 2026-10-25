@@ -32,8 +32,11 @@ call it, and the worst it can do is put the mock workspace back to a known board
 
 It is deliberately left open rather than restricted to dev, because
 [wireframes.md](../../docs/wireframes.md) §1 puts a Reset board button in the live demo's header and
-a dev-only guard would remove it exactly where it is useful. Protecting it from abuse belongs with
-the per-IP rate limits in Phase 11; the board also resets itself once a day regardless
+a dev-only guard would remove it exactly where it is useful. The per-IP rate limit from Phase 11
+covers `/api/chat` only
+([ADR-0016](../../docs/adr/0016-two-spend-controls-and-an-honest-injection-posture.md)), so reset
+stays unthrottled. The worst it can do is restore the seed board, and the board also resets itself
+once a day regardless
 ([ADR-0014](../../docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
 
 `POST /api/deployments/:id/cancel` is the same story for a different reason: it comes from a
@@ -146,8 +149,9 @@ CI's job.
 
 ## Model routing
 
-Per [ADR-0005](../../docs/adr/0005-model-routing-groq-primary-gemini-fallback.md), selected from
-the environment at request time:
+Per [ADR-0005](../../docs/adr/0005-model-routing-groq-primary-gemini-fallback.md) and
+[ADR-0021](../../docs/adr/0021-a-live-model-on-the-demo.md), selected from the environment at
+request time:
 
 | `MODEL_PROVIDER` | Behaviour                                                                       |
 | ---------------- | ------------------------------------------------------------------------------- |
@@ -156,13 +160,15 @@ the environment at request time:
 | `gemini`         | Gemini only; **503** `MODEL_NOT_CONFIGURED` if the Google key is missing        |
 | `mock`           | Scripted local model — no network, no quota                                     |
 
-Defaults are `llama-3.3-70b-versatile` (Groq) and `gemini-2.5-flash` (Gemini), overridable via
-`GROQ_MODEL` / `GEMINI_MODEL`. The fallback triggers when the **initial** provider call fails with
-a retryable error, a 429, or a 5xx; once a stream has started, errors are not retried, because
-chunks may already have reached the client. Every response carries the chosen route in the
-`X-DevSprint-Model` header (exposed via CORS), and a 429 surfaces as a friendly "demo budget
-reached" message rather than a provider error. The global daily token cap ADR-0005 asked for is
-below, under [Spend controls](#spend-controls).
+Defaults are `openai/gpt-oss-120b` (Groq) and `gemini-3.8-flash` (Gemini), overridable via
+`GROQ_MODEL` / `GEMINI_MODEL`. Groq retired `llama-3.3-70b-versatile`, and gpt-oss beat Groq's other
+tool-calling model on the live scenario evals
+([ADR-0021](../../docs/adr/0021-a-live-model-on-the-demo.md)). The fallback triggers when the
+**initial** provider call fails with a retryable error, a 429, or a 5xx; once a stream has started,
+errors are not retried, because chunks may already have reached the client. Every response carries
+the chosen route in the `X-DevSprint-Model` header (exposed via CORS), and a 429 surfaces as a
+friendly "demo budget reached" message rather than a provider error. The global daily token cap
+ADR-0005 asked for is below, under [Spend controls](#spend-controls).
 
 The scripted **mock model** speaks the same `LanguageModelV3` streaming protocol as a real
 provider: it picks one tool by keyword and then narrates the tool's actual output. That keeps
@@ -192,8 +198,8 @@ consistent, and intentionally designed to not be used as an accurate accounting 
 counts per Cloudflare location rather than globally. A cap that undercounts is not a cap, so this
 one lives in the Durable Object, which is global and serialises. Two consequences worth knowing:
 
-- **`POST /api/reset` does not clear it.** The board and the approval ledger both reset; the budget
-  does not, or any visitor could clear the spend cap by pressing Reset in the SPA.
+- **`POST /api/workspace/reset` does not clear it.** The board and the approval ledger both reset;
+  the budget does not, or any visitor could clear the spend cap by pressing Reset in the SPA.
 - **It rolls over on the real UTC date**, by comparing the stored day to today rather than by being
   cleared on a schedule — so a Worker asleep across midnight wakes with a fresh budget.
 
@@ -272,8 +278,9 @@ command from the repo root, first time or any time after:
 pnpm deploy:all
 ```
 
-`scripts/deploy.ts` builds the SPA, deploys the api, MCP and web Workers in the one order that
-works, and ends with `scripts/smoke.ts` against the live URLs. The api and `apps/mcp-issues` bind
+`scripts/deploy.ts` builds the SPA, deploys the MCP, api and web Workers in that order (the one
+order that works, ADR-0019), and ends with `scripts/smoke.ts` against the live URLs.
+`pnpm deploy:all --plan` prints what it would do and deploys nothing. The api and `apps/mcp-issues` bind
 each other, so on a **first** deploy it breaks the cycle itself: the api goes out once without its
 service binding, then the MCP Worker, then the api again. It also generates `TOOL_APPROVAL_SECRET`
 whenever the api lacks one, through a temp file, never printed. That secret is **not optional**:
@@ -283,13 +290,15 @@ Push to `main` runs the same script in CI once the checks and e2e jobs pass. Loc
 `wrangler login`; CI uses the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repo secrets.
 `pnpm smoke` re-runs the read-only checks at any time.
 
-The deployed values live in `wrangler.jsonc` `vars`. `MODEL_PROVIDER` is `mock` until provider
-keys are set:
+The deployed values live in `wrangler.jsonc` `vars`. `MODEL_PROVIDER` is `auto`, so the live demo
+runs Groq `openai/gpt-oss-120b` with a Gemini fallback
+([ADR-0021](../../docs/adr/0021-a-live-model-on-the-demo.md)). The provider keys are Worker
+secrets:
 
 ```sh
 pnpm --filter @devsprint/api exec wrangler secret put GROQ_API_KEY
 pnpm --filter @devsprint/api exec wrangler secret put GOOGLE_GENERATIVE_AI_API_KEY
 ```
 
-Then change `MODEL_PROVIDER` to `auto` in `wrangler.jsonc` and merge. That last step is a
-deliberate, reviewable change, not a dashboard toggle.
+Setting `MODEL_PROVIDER` back to `mock` in `wrangler.jsonc` puts the demo on the scripted model,
+which spends nothing. That is a reviewable change, not a dashboard toggle.

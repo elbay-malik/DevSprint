@@ -330,15 +330,17 @@ type ToolErrorCode =
 
 Canonical error codes:
 
-| Code               | Meaning                                                                |
-| ------------------ | ---------------------------------------------------------------------- |
-| ISSUE_NOT_FOUND    | No issue with the given key (e.g. `DS-42` in scenario S-E)             |
-| SPRINT_NOT_FOUND   | No sprint with the given id                                            |
-| USER_NOT_FOUND     | No user with the given id (bad `assigneeId` filter or assignment)      |
-| VERSION_EXISTS     | Release notes for that version already exist, or version already live  |
-| DEPLOY_IN_PROGRESS | A deployment is already running for that environment                   |
-| STAGE_FAILED       | A deployment stage failed; the deployment ends `failed`                |
-| INVALID_INPUT      | Input failed schema or domain validation (catch-all for bad arguments) |
+| Code                   | Meaning                                                                                        |
+| ---------------------- | ---------------------------------------------------------------------------------------------- |
+| ISSUE_NOT_FOUND        | No issue with the given key (e.g. `DS-42` in scenario S-E)                                     |
+| SPRINT_NOT_FOUND       | No sprint with the given id                                                                    |
+| USER_NOT_FOUND         | No user with the given id (bad `assigneeId` filter or assignment)                              |
+| VERSION_EXISTS         | Release notes for that version already exist, or version already live                          |
+| DEPLOY_IN_PROGRESS     | A deployment is already running for that environment                                           |
+| DEPLOY_ALREADY_SETTLED | Cancel was requested for a deployment that already finished (cancel route, HTTP 409)           |
+| STAGE_FAILED           | Reserved: a deployment stage failed. The simulation has no failure path, so it is never raised |
+| INVALID_INPUT          | Input failed schema or domain validation (catch-all for bad arguments)                         |
+| WORKSPACE_FULL         | A write would push the persisted board past its size cap; reset the board                      |
 
 Notes:
 
@@ -349,7 +351,7 @@ Notes:
 
 ## 5. User roster and name resolution
 
-The 4-user roster is small and static. It will be embedded verbatim in the Phase 3 system prompt so
-the model can resolve names and handles to `assigneeId`s ("assign it to Dana" → `u-dana`) without a
-`list_users` tool — see the "Considered and deferred" section of
-[tool-inventory.md](./tool-inventory.md).
+The 4-user roster is small and static. It is embedded verbatim in the system prompt
+(`apps/api/src/agent/system-prompt.ts`) so the model can resolve names and handles to `assigneeId`s
+("assign it to Dana" → `u-dana`) without a `list_users` tool. See the "Considered and deferred"
+section of [tool-inventory.md](./tool-inventory.md).

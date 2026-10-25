@@ -47,6 +47,16 @@ Tool descriptions are written as **trigger conditions** (when the model should r
 not mechanisms. The quoted description below each tool name becomes the tool's `description` field
 verbatim in Phase 3.
 
+Every client-supplied string and array is length-bounded in `packages/shared/src/tools/schemas.ts`
+(`LIMITS`: title 200, description 4000, comment 500, markdown 20000, version 40, issueKey 32, ids
+64, label 40, at most 10 labels, query 200; `limit` at most 200; `points` at most 100), so one
+request cannot push the single-value workspace past its storage ceiling. The sketches below omit
+those `.max()` calls.
+
+Every write (tools 7–10) can also return `WORKSPACE_FULL` when the persisted board would exceed its
+512 KB cap ([ADR-0020](./adr/0020-rate-limit-the-public-mcp-endpoint.md)); resetting the board clears
+it.
+
 ### 1. `list_issues`
 
 > Use when the user asks what issues exist or wants a filtered view of issues by sprint, status,
@@ -186,8 +196,9 @@ field: the Phase 7 chart uses it to draw the "today" marker without touching `Da
 
 ### 6. `diff_release_notes`
 
-> Use when the user wants to compare draft release notes against the last published version before
-> saving or publishing.
+> Use when the user asks to draft or write release notes, or to compare a draft with the last
+> published version: compose the markdown yourself (from done issues) and pass it in, so the user
+> sees the change before anything is saved.
 
 **Input**
 
@@ -270,8 +281,8 @@ N separate approval cards. There is no batch variant, by design — scenario S-B
 
 ### 9. `create_release_notes` — gated write
 
-> Use when the user asks to draft or save release notes for a version. The agent composes the
-> markdown itself (from done issues) and passes it in.
+> Use when the user asks to save or publish release notes they have already been shown — not to
+> draft them, which is diff_release_notes. Pass the markdown the user saw.
 
 **Input**
 
