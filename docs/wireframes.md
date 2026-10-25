@@ -50,7 +50,8 @@ Annotations:
   its gap to the ideal burndown line, and Days left) are computed in the SPA from the workspace
   snapshot (`sprint-stats.ts`, sharing the ideal line with `get_burndown`), not from a
   `get_sprint_status` result. The board re-reads when a turn settles and when the reader returns
-  to the tab (throttled, never mid-turn; it does not poll), and says when it was last read.
+  to the tab (throttled, never mid-turn; it does not poll), and says when it was last read. A
+  read that fails after a good one keeps that board and says "Offline" beside its time.
 - **Right pane — chat.** In-stream parts render in strict transcript order (see Section 2). The
   composer sits at the bottom. Up in an empty composer recalls the session's earlier prompts, and
   Down walks forward, as in a shell. While approval cards are open the composer takes a draft but
@@ -63,9 +64,10 @@ Annotations:
   ```
   Ask how the sprint is going, or tell the copilot what to change.
   (Is the sprint on track?) (Draft release notes) (Close out the sprint)
-  (Deploy to staging) (Fix a typo’d issue key)
+  (Deploy to staging) (Mark DS-42 as done)
   Every visitor shares this board. It resets at 00:00 UTC.
-  Any MCP client can work on it too: https://…/mcp [Copy]
+  Any MCP client can work on it too: [Copy]
+  https://devsprint-mcp-issues.eleo-666.workers.dev/mcp
   ```
 
 - **Header.** Sprint selector, demo reset, theme toggle. Reset restores the seed workspace for
@@ -140,8 +142,9 @@ assistant turn (top to bottom)
 The headline keeps its "from" status after the decision: the board's status is captured, with
 the time, when the person answers. The time is the reader's locale on a 24-hour clock. The glyph
 follows the deployment card (● applied, ◐ still running, – denied or cancelled, ✕ failed). A
-write that returned a typed error reads `✕ Approved by you at 14:02 — not applied (<CODE>).` in
-Stop Red, and the ErrorCard right below explains it. A call that threw, with no ErrorCard, reads
+write that returned a typed error reads `✕ Approved by you at 14:02 — not applied.` in Stop Red,
+and the ErrorCard right below explains it and carries the code (the status line, which does not
+read that card, says `… — not applied (<CODE>).`). A call that threw, with no ErrorCard, reads
 `✕ Approved by you at 14:02, but it failed: <reason>`. A deployment reads
 `Approved by you at 14:02 — deployment <status>.` (for example `deployment succeeded`).
 
@@ -207,5 +210,7 @@ scenario specs).
   until outstanding cards are answered (a draft can be typed meanwhile). The empty transcript
   offers the scenario suggestions and the MCP endpoint. Still unbuilt: the sprint selector and the
   Board/Sprint/Deploys tabs.
-- **Auto-scroll**: the chat pane follows new tokens with scroll-anchoring; a manual scroll-up
-  releases the anchor (a jump-to-bottom affordance re-engages it).
+- **Auto-scroll**: the chat pane follows new tokens with scroll-anchoring; a manual scroll-up, or
+  focus moving up to an approval card, releases the anchor. Scrolling back to the bottom re-engages
+  it, and so does every new request, the reader's own or the resend after the last approval, so
+  the reply to a decision lands in view.

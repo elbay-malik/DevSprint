@@ -256,7 +256,9 @@ instrument readout: wherever something can be copied, matched or referenced, it 
 - **Label** (500, 12px): badges, counts and statuses. Nothing in the system is uppercase or
   tracked, and no label sits above a heading: the heading carries its own weight.
 - **Mono** (400, 12px): issue keys, tool names, versions, environments, stage names, error codes,
-  log lines and inline code (at 0.85em).
+  log lines and inline code (at 0.85em). Also the state glyphs (○ ◐ ● ✕ –) wherever they appear,
+  on the deployment card, the approval record and the theme toggle: Geist has none of them, and
+  the fallback drew ● at half the height of ◐, while the mono stack draws the set at one size.
 - **Chart Label** (400, 11px, tabular): the chart's axis values, dates, "today" and the line-end
   values, drawn at real size, the one size below Caption. The chart's viewBox follows the width it
   is drawn at, so an SVG unit is a CSS pixel and no label shrinks in a narrow column.
@@ -294,9 +296,12 @@ the copilot follows, divided by a hairline, with a full screen of its own.
   controls need the width. The user's bubble aligns to the end and the assistant's to the start.
 - **First run:** the empty transcript is the product's help. One 14px Graphite line says what to
   ask, then a labelled group ("Suggested requests") of five suggestion chips, wrapping, and then
-  two 12px Graphite lines: "Every visitor shares this board. It resets at 00:00 UTC." and the
-  public MCP endpoint in mono, in the text colour, with a ghost Copy that reads "Copied" for 2s
-  (the status line says so too). All of it goes with the first message. The endpoint comes from
+  two 12px Graphite lines: "Every visitor shares this board. It resets at 00:00 UTC." and "Any
+  MCP client can work on it too:" with a ghost Copy beside it, then the public MCP endpoint on a
+  line of its own, in mono and the text colour (the live address alone nearly fills the 440px
+  column, so a Copy after it always wrapped onto a line by itself). Copy reads "Copied" for 2s;
+  its accessible name stays "Copy MCP address", and the status line says "MCP address copied.",
+  so it is said once. All of it goes with the first message. The endpoint comes from
   the build (`VITE_MCP_URL`), and the line is left out when a build has none. No label sits above
   any of it.
 
@@ -354,7 +359,8 @@ decision or a result lives.
 ### Buttons
 
 - **Shape:** gently rounded, 10px for the default 32px height and 8px for the 28px size used in
-  cards and the header.
+  cards and the header. The 28px size sets its text at 12px medium, the Label step (shadcn's
+  0.8rem fell between two steps).
 - **Primary:** an Ink fill with Bright Paper text, reserved for the single affirmative action in a
   region (Send, Approve), or for the safe default (Deny) when the affirmative cannot land. A
   message holding several open approval cards is one region: only the first undecided card's
@@ -383,7 +389,8 @@ decision or a result lives.
 
 - **Suggestion chips:** the first-run requests. Outline pills, 28px tall, 12px medium text in the
   text colour, 8px apart and wrapping, so five fit in two rows at 390px. Each is labelled by its
-  outcome in a few words ("Close out the sprint") and sends a demo scenario's verbatim prompt,
+  outcome in a few words ("Close out the sprint", "Mark DS-42 as done": what the visitor asks for,
+  never the twist the copilot is about to find) and sends a demo scenario's verbatim prompt,
   which its title shows. They are buttons, not badges: the only pills that act. No more than six,
   and no Ink: they are suggestions, and the composer's Send keeps the region's one fill.
 
@@ -404,9 +411,12 @@ decision or a result lives.
   word says behind or ahead, and no hue does. Progress (Completed ÷ Committed) was dropped as a
   restatement; Days left is the wireframe's fourth number and what makes the gap plannable.
 - **Board status:** beside the sprint's name, a secondary badge reads "Live board" while the board
-  is the Worker's and "Offline" while it is the seed, so it reads as the connection, not as the
-  sprint going live. A 12px Graphite `<time>` follows it while live: "Updated just now", "Updated
-  2 min ago", refreshed every 30s, with the exact time in its title. The board is re-read when a
+  is the Worker's and "Offline" while it is the seed or the last read failed, so it reads as the
+  connection, not as the sprint going live. A failed read after a good one keeps the board it had
+  (a laptop waking reads before the network is back, and the seed would then disown open cards),
+  and only the newest of two overlapping reads lands. A 12px Graphite `<time>` follows the badge
+  whenever the board is a Worker read: "Updated just now", "Updated 2 min ago", refreshed every
+  30s, with the exact time in its title, so "Offline · Updated 3 min ago" says how old it is. The board is re-read when a
   turn settles and when the reader returns to the tab (window focus, or the page turning visible),
   at most once every 5s and never while a turn streams, through the same read that marks a changed
   card. It does not poll.
@@ -429,7 +439,9 @@ decision or a result lives.
 - **Error card:** the same shell on Paper with a 40% Stop Red border. On Paper its 12px code and
   tool name hold 4.76:1 and 4.73:1; on the bubble's Paper Tint they fell under 4.5:1. It leads with
   one line in the board's words, chosen per error code in the SPA and filled from the call's own
-  arguments ("No issue DS-42 on the board."), never the api's model-facing message. The mono tool
+  arguments ("No issue DS-42 on the board."), never the api's model-facing message. The
+  identifiers in it (the key, a sprint id, a version, an environment) are set in mono, as on the
+  approval card's warning. The mono tool
   name and the Stop Red code follow as its label.
 - **Issue table (search):** the last column is "Match", a word (Strong, Good, Weak) from the
   search score's own scale; the score itself is in the cell's title and read to screen readers.
@@ -468,10 +480,11 @@ hairline underneath and no fill. There are no routes to navigate besides a 404.
   view.
 - **Reset board asks first, inline.** The board is shared, so the first click swaps the button for
   a named group: "Reset for everyone?" in 12px medium, an outline Confirm and a ghost Cancel, with
-  focus moved to Confirm. Esc, Cancel, focus moving to another control, a press outside the group
-  or 4s without an answer back out, and focus returns to Reset board when it was inside the
-  question. Both Reset board and Confirm are described by "Restores the seed board for every
-  visitor.", which is also Reset board's title. While the reset runs the button reads
+  focus moved to Confirm. Esc, Cancel, focus moving to another control or a press outside the group back
+  out, and focus returns to Reset board when it was inside the question. It never times out: a
+  screen reader can take seconds to read Confirm and its description, and a control that vanished
+  under it would fail WCAG 2.2.1. Both Reset board and Confirm are described by "Restores the seed
+  board for every visitor.", which is also Reset board's title, full stop included. While the reset runs the button reads
   "Resetting…" with `aria-disabled`, so it keeps the focus Confirm hands back. No modal: the
   question needs neither interruption nor protected focus.
 
@@ -487,11 +500,12 @@ headline ("DS-42 isn’t on the board.", the key in mono), the decision group is
 Deny takes the Ink and Approve drops to outline. Approve still works, so the write can return its
 typed error. When resolved, the controls give way to one line in Graphite, and in Stop Red only
 when an approved write failed. It leads with a glyph from the deployment card's language (● applied,
-in Go Green; ◐ still running; – denied or cancelled; ✕ failed), drawn and hidden from screen
-readers, then the words and the time of the decision on a 24-hour clock in the reader's locale:
+in Go Green; ◐ still running; – denied or cancelled; ✕ failed), drawn in mono and hidden from
+screen readers, then the words and the time of the decision on a 24-hour clock in the reader's locale:
 "● Approved by you at 14:02 — applied." or "– Denied by you at 14:03: “Still blocked”.". A typed
-error is explained by the ErrorCard right below, so the line stays short: "✕ Approved by you at
-14:02 — not applied (ISSUE_NOT_FOUND).". A status change keeps its "from" after the decision
+error is explained by the ErrorCard right below, code and all, so the line stays short and on one
+line: "✕ Approved by you at 14:02 — not applied.". The status line, which does not read the
+ErrorCard, adds the code: "… — not applied (ISSUE_NOT_FOUND)." A status change keeps its "from" after the decision
 ("DS-9: In progress → Done"): the board's status is captured with the time when the person
 answers, since the board moves on once the write lands.
 
@@ -524,7 +538,9 @@ drawn at real size: the viewBox takes the chart's drawn width, and the height st
 plot keeps its height in any column. Dates label the first and last day and every few days between,
 centred on their day, as many as fit with a label's width and a 12px gap between them (every third
 day in a phone column). The ideal value is given in whole points in the readout, the end label and
-the Series table; the line is drawn from the exact values. Hovering moves the readout to the
+the Series table; the line is drawn from the exact values. The value axis steps from zero by one
+round number (1, 2 or 5 times a power of ten, at most five lines), so 31 points read 0 / 10 / 20
+/ 30, not thirds of 31 (0 / 10 / 21 / 31); the scale still runs to the maximum. Hovering moves the readout to the
 hovered day.
 
 ## Do's and Don'ts

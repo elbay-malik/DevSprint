@@ -242,8 +242,8 @@ Timestamps (`updatedAt` = `completedAt` for done issues; `—` = null):
 
 **Sprint 12 health at `WORKSPACE_NOW`:** 8 of 31 points done (DS-5 + DS-6), 23 remaining, 4
 calendar days left. That puts the burndown line behind the ideal line — deliberately, so scenario
-S-D ("Is Sprint 12 on track?") has a real narrative: slightly behind, with DS-11 blocked as the
-named risk.
+S-D ("Is Sprint 12 on track?") has a real narrative: 13 points behind the ideal line, with DS-11
+blocked as the named risk.
 
 ### Deployments (5)
 
