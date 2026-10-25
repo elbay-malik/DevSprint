@@ -361,17 +361,41 @@
       "name": "Board Card",
       "kind": "card",
       "refersTo": "board-card",
-      "description": "An issue on the board: mono key, outline points badge, medium title, assignee.",
+      "description": "An issue on the board: mono key, outline points badge, medium title, assignee. A pending approval for its status adds a 2px dashed --ring outline and a \"→ Done\" caption; a status the last read changed adds a solid --ring outline over a 6% ink tint for 1.5s (static under reduced motion).",
       "html": "<div class=\"ds-board-card\"><div class=\"ds-row\"><span class=\"ds-key\">DS-7</span><span class=\"ds-pts\">5</span></div><p class=\"ds-title\">Billing export CSV download</p><p class=\"ds-meta\">@ben</p></div>",
       "css": ".ds-board-card { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 260px; padding: 12px; border-radius: 14px; background: var(--card, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground, oklch(0.145 0 0)) 10%, transparent); display: flex; flex-direction: column; gap: 6px; } .ds-row { display: flex; justify-content: space-between; align-items: center; } .ds-key { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-pts { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 2rem; border: 1px solid var(--border, oklch(0.922 0 0)); font-variant-numeric: tabular-nums; } .ds-title { margin: 0; font-size: 14px; font-weight: 500; line-height: 1.375; } .ds-meta { margin: 0; font-size: 12px; color: var(--muted-foreground, oklch(0.556 0 0)); }"
+    },
+    {
+      "name": "Board Card, Pending Move",
+      "kind": "card",
+      "refersTo": "board-card",
+      "description": "A board card an open update_issue_status approval would move: a 2px dashed --ring outline offset 2px, and a 12px medium caption naming the destination. It clears as soon as the card is answered.",
+      "html": "<div class=\"ds-board-card ds-pending\"><div class=\"ds-row\"><span class=\"ds-key\">DS-7</span><span class=\"ds-pts\">5</span></div><p class=\"ds-title\">Billing export CSV download</p><p class=\"ds-meta\">@ben</p><p class=\"ds-move\">→ Done</p></div>",
+      "css": ".ds-board-card { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 260px; padding: 12px; border-radius: 14px; background: var(--card, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground, oklch(0.145 0 0)) 10%, transparent); display: flex; flex-direction: column; gap: 6px; } .ds-row { display: flex; justify-content: space-between; align-items: center; } .ds-key { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-pts { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 2rem; border: 1px solid var(--border, oklch(0.922 0 0)); font-variant-numeric: tabular-nums; } .ds-title { margin: 0; font-size: 14px; font-weight: 500; line-height: 1.375; } .ds-meta { margin: 0; font-size: 12px; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-pending { outline: 2px dashed var(--ring, oklch(0.556 0 0)); outline-offset: 2px; } .ds-move { margin: 0; font-size: 12px; font-weight: 500; }"
+    },
+    {
+      "name": "Board Card, Changed",
+      "kind": "card",
+      "refersTo": "board-card",
+      "description": "A board card whose status the last read of the board changed, marked for 1.5s: a solid --ring outline settles from 5px to 2px on an exponential ease-out over a 6% ink tint, holds, then fades. Under reduced motion the outline stays still for the same 1.5s.",
+      "html": "<div class=\"ds-board-card ds-changed\"><div class=\"ds-row\"><span class=\"ds-key\">DS-7</span><span class=\"ds-pts\">5</span></div><p class=\"ds-title\">Billing export CSV download</p><p class=\"ds-meta\">@ben</p></div>",
+      "css": ".ds-board-card { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 260px; padding: 12px; border-radius: 14px; background: var(--card, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground, oklch(0.145 0 0)) 10%, transparent); display: flex; flex-direction: column; gap: 6px; } .ds-row { display: flex; justify-content: space-between; align-items: center; } .ds-key { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-pts { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 2rem; border: 1px solid var(--border, oklch(0.922 0 0)); font-variant-numeric: tabular-nums; } .ds-title { margin: 0; font-size: 14px; font-weight: 500; line-height: 1.375; } .ds-meta { margin: 0; font-size: 12px; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-changed { outline: 2px solid transparent; outline-offset: 2px; animation: ds-board-change 1.5s both; } @keyframes ds-board-change { 0% { outline-color: var(--ring, oklch(0.556 0 0)); outline-offset: 5px; background-color: color-mix(in oklch, var(--foreground, oklch(0.145 0 0)) 6%, var(--card, oklch(1 0 0))); animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); } 45% { outline-color: var(--ring, oklch(0.556 0 0)); outline-offset: 2px; background-color: color-mix(in oklch, var(--foreground, oklch(0.145 0 0)) 6%, var(--card, oklch(1 0 0))); animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); } 100% { outline-color: transparent; outline-offset: 2px; background-color: var(--card, oklch(1 0 0)); } } @media (prefers-reduced-motion: reduce) { .ds-changed { animation: none; outline-color: var(--ring, oklch(0.556 0 0)); } }"
     },
     {
       "name": "Approval Card",
       "kind": "custom",
       "refersTo": "chat-card",
-      "description": "The record of a decision: eyebrow, 14px headline, reason, Deny and Approve. The pending controls are a named group that takes focus when a turn ends waiting on it, and focus moves to the next open card after each decision; the outcome line is also announced by the transcript's status line.",
+      "description": "The record of a decision: eyebrow, 14px headline, reason, Deny and Approve. Only the first open card in a message has an Ink Approve; the rest decide in outline. A status change for a key not on the board shows a Stop Red warning (\"DS-42 isn’t on the board.\"), Deny takes the Ink and Approve drops to outline but still works. The pending controls are a named group that takes focus when a turn ends waiting on it, and focus moves to the next open card after each decision; the outcome line is also announced by the transcript's status line.",
       "html": "<div class=\"ds-approval\"><p class=\"ds-eyebrow\">Approval required: <span class=\"ds-mono\">update_issue_status</span></p><p class=\"ds-headline\">DS-7: In review → Done</p><div class=\"ds-actions\"><input class=\"ds-reason\" placeholder=\"Reason (optional)\" /><button class=\"ds-deny\">Deny</button><button class=\"ds-approve\">Approve</button></div></div>",
       "css": ".ds-approval { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; width: 360px; padding: 8px 12px; border: 1px solid var(--border, oklch(0.922 0 0)); border-radius: 8px; background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); font-size: 12px; display: flex; flex-direction: column; gap: 8px; } .ds-eyebrow { margin: 0; color: var(--muted-foreground, oklch(0.556 0 0)); font-weight: 500; } .ds-mono { font-family: ui-monospace, monospace; } .ds-headline { margin: 0; font-size: 14px; font-weight: 500; } .ds-actions { display: flex; gap: 8px; align-items: center; } .ds-reason { flex: 1; height: 28px; padding: 0 10px; border: 1px solid var(--input, oklch(0.922 0 0)); border-radius: 10px; background: transparent; color: inherit; font-size: 12px; } .ds-deny, .ds-approve { height: 28px; padding: 0 10px; border-radius: 8px; font-size: 12.8px; font-weight: 500; cursor: pointer; } .ds-deny { border: 1px solid var(--border, oklch(0.922 0 0)); background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); } .ds-approve { border: 1px solid transparent; background: var(--primary, oklch(0.205 0 0)); color: var(--primary-foreground, oklch(0.985 0 0)); } .ds-deny:hover { background: var(--muted, oklch(0.97 0 0)); } .ds-approve:hover { background: color-mix(in oklch, var(--primary, oklch(0.205 0 0)) 80%, transparent); } .ds-deny:focus-visible, .ds-approve:focus-visible, .ds-reason:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.556 0 0)) 50%, transparent); }"
+    },
+    {
+      "name": "Approval Group Header",
+      "kind": "custom",
+      "refersTo": "chat-card",
+      "description": "One 12px medium line, in the bubble's text colour (Graphite is under 4.5:1 on Paper Tint), above a message's approval cards when it holds two or more and at least one is open: the open count and the board points they would move. Gone once every card is decided.",
+      "html": "<p class=\"ds-approval-group\">5 changes to review · 23 pts</p>",
+      "css": ".ds-approval-group { font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif; margin: 0; font-size: 12px; font-weight: 500; color: var(--foreground, oklch(0.145 0 0)); font-variant-numeric: tabular-nums; }"
     },
     {
       "name": "Deployment Progress",
@@ -435,7 +459,7 @@
       "Do pair every state with a word, code or glyph, so it reads in greyscale.",
       "Do set identifiers in monospace and numbers in tabular figures.",
       "Do separate surfaces with a 1px ring at 10% or a tonal step, and keep 14px corners for board cards and 8px for chat cards.",
-      "Do spend the Ink-filled button once per region, on the affirmative action, and use outline for everything secondary or abortive.",
+      "Do spend the Ink-filled button once per region, on the affirmative action, and use outline for everything secondary or abortive. Several open approval cards in one message are one region: only the first undecided card's Approve is Ink.",
       "Do check every change in both themes at WCAG 2.2 AA.",
       "Do theme the browser's own surfaces: `color-scheme` per theme, an ink-tint selection, Rule-coloured scrollbars, a `theme-color` that follows the chosen theme (not only the OS), and the theme applied before first paint."
     ],
@@ -444,7 +468,7 @@
       "Don't add hue for decoration or branding until a single brand accent has been chosen deliberately.",
       "Don't hard-code a colour. Every signal is a token (`--success`, `--destructive`, `--chart-1`), and a new colour arrives as a token in both themes or not at all.",
       "Don't wrap an OKLCH token in `hsl()`. Mix with `color-mix(in oklch, …)`.",
-      "Don't add motion without a `prefers-reduced-motion` fallback. Pulses stop and the progress fill jumps (`motion-reduce:`), and the state word still carries the meaning.",
+      "Don't add motion without a `prefers-reduced-motion` fallback. Pulses stop, the progress fill jumps (`motion-reduce:`) and a changed board card's ring holds still, and the state word or the static mark still carries the meaning.",
       "Don't put a label or eyebrow above a heading.",
       "Don't render model text as HTML or links. Chat text uses the safe subset only."
     ]

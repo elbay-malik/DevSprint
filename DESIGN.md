@@ -281,12 +281,17 @@ card inset in a Paper Tint bubble, or Ink cards on a Deep Ink page in dark mode)
 a drop shadow at rest. Lift is allowed as a response to state (hover, focus, drag) in future
 interactive surfaces, but today no component uses it.
 
-The only depth-like effect in use is the focus ring. Buttons and inputs take a solid 1px border
+The main depth-like effect in use is the focus ring. Buttons and inputs take a solid 1px border
 in `--ring` (Graphite; Pencil in dark mode) with a 3px halo of it at 50%. The border carries the
 3:1, since the halo alone is about 1.5:1. Disclosures (`<summary>`) and the focusable scroll
 regions (the board pane, the chat scroller) have no border to recolour, so they take a solid 2px
 `--ring` outline: offset 2px on disclosures, and drawn inside on scroll regions, where an outer
 outline would be clipped. That rule lives once in `main.css`, not per component.
+
+Two more rings belong to the board, both outlines 2px off the card, so neither touches its 10%
+hairline. A **dashed** `--ring` outline marks an issue a pending approval would move, and a
+**solid** `--ring` outline over a faint ink tint marks, for 1.5s, an issue the last read of the
+board moved (see Board cards).
 
 ### Named Rules
 
@@ -320,7 +325,8 @@ decision or a result lives.
 - **Shape:** gently rounded, 10px for the default 32px height and 8px for the 28px size used in
   cards and the header.
 - **Primary:** an Ink fill with Bright Paper text, reserved for the single affirmative action in a
-  region (Send, Approve).
+  region (Send, Approve). A message holding several open approval cards is one region: only the
+  first undecided card's Approve is Ink, and the others decide in outline.
 - **Outline:** a Rule border on Paper, for secondary or abortive actions (Reset board, Stop, Deny,
   Cancel deploy).
 - **Secondary / Ghost:** Paper Tint fill or transparent. They pair as a toggle, with
@@ -343,6 +349,16 @@ decision or a result lives.
 
 - **Board cards:** 14px corners on Paper with a 1px ring at 10%, 12px padding, a mono key and an
   outline points badge on top, and the title in 14px medium.
+- **Pending move (board card):** while an approval card asks to change an issue's status, its
+  board card takes a 2px dashed `--ring` outline, offset 2px, and a 12px medium caption in the
+  text colour naming the destination ("→ Done", from the shared status labels; screen readers hear
+  "Awaiting approval to move to Done"). It is read from the chat's open `update_issue_status`
+  cards, and it goes the moment the card is answered. New issues have no card to mark.
+- **Changed (board card):** when a read of the board finds an issue's status changed since the
+  last read, the card is marked for 1.5s: a 2px solid `--ring` outline settles from 5px out to 2px
+  on an exponential ease-out over a 6% ink tint, holds, then fades. Under reduced motion the
+  outline is simply there for the same 1.5s. The first read, which replaces the seed, marks
+  nothing.
 - **Chat cards:** a shared shell of 8px corners, a 1px Rule border on Paper, 8 by 12px padding and
   12px type, inset inside the Paper Tint assistant bubble. This covers the issue table, burndown,
   release-notes diff, deployment progress, approval and tool chip.
@@ -378,7 +394,11 @@ hairline underneath and no fill. There are no routes to navigate besides a 404.
 The record of a decision. The eyebrow is 12px Graphite ("Approval required:" plus the mono tool
 name), followed by a 14px medium headline (the one 14px line inside chat cards), and the raw
 arguments one `<details>` away. While pending, it holds a reason input, an outline Deny and a
-primary Approve. When resolved, the controls give way to one line, "Approved by you — applied."
+primary Approve, which is outline too on every open card but the first in its message. When a
+status change targets a key the board does not hold, a 12px Stop Red line says so under the
+headline ("DS-42 isn’t on the board.", the key in mono), the decision group is described by it,
+Deny takes the Ink and Approve drops to outline. Approve still works, so the write can return its
+typed error. When resolved, the controls give way to one line, "Approved by you — applied."
 or "Denied: …", in Graphite, and in Stop Red only when an approved write failed.
 
 Decisions are followed by focus and by voice. The pending controls are a named group ("Decision:
@@ -387,6 +407,12 @@ card's group. After each Approve or Deny it moves to the next open card, and bac
 once none are left. Focus moves only when it was already in the chat pane or had fallen to the
 page, so someone working on the board is not pulled away. The outcome line is also what the
 transcript's status line announces.
+
+**Group header.** A message with two or more approval cards, at least one still open, gets one
+12px medium line in the bubble's text colour above the first card (Graphite would fall under
+4.5:1 on the bubble's Paper Tint): "5 changes to review · 23 pts", counting the open
+cards and the board points of the issues they would move (the points are left off when none are
+known). It goes once every card is decided. Each card keeps its own decision.
 
 ### Deployment Progress (signature)
 
@@ -427,7 +453,8 @@ moves the readout to the hovered day.
 - **Don't** hard-code a colour. Every signal is a token (`--success`, `--destructive`,
   `--chart-1`), and a new colour arrives as a token in both themes or not at all.
 - **Don't** wrap an OKLCH token in `hsl()`. Mix with `color-mix(in oklch, …)`.
-- **Don't** add motion without a `prefers-reduced-motion` fallback. Pulses stop and the progress
-  fill jumps (`motion-reduce:`), and the state word still carries the meaning.
+- **Don't** add motion without a `prefers-reduced-motion` fallback. Pulses stop, the progress
+  fill jumps (`motion-reduce:`) and a changed board card's ring holds still, and the state word
+  or the static mark still carries the meaning.
 - **Don't** put a label or eyebrow above a heading.
 - **Don't** render model text as HTML or links. Chat text uses the safe subset only.
