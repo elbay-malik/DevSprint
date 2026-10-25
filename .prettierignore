@@ -5,3 +5,7 @@ coverage/
 **/worker-configuration.d.ts
 playwright-report/
 test-results/
+
+# Local impeccable output: critique reports and the hook cache are not committed.
+.impeccable/critique/
+.impeccable/hook.cache.json
