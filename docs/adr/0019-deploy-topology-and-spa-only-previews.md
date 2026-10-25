@@ -159,3 +159,8 @@ corrected tool descriptions and prompt rules, and evals that work against a live
 `pnpm deploy:all`, except the MCP-first `Internal` rollout (ADR-0020), which was run by hand in
 that order, as the deploy-order note above says. The 2026-10-25 redeploy of `main` (`97396ca`)
 passed every smoke check.
+
+## Status note — 2026-10-25 (`assign_issue`)
+
+The MCP smoke check now expects exactly five tools: `assign_issue` joined the issue server
+(ADR-0023's status note), and `scripts/smoke.ts` lists it by name with the other four.

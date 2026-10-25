@@ -51,9 +51,9 @@ A turn starts when the SPA streams a question to the **api Worker**. There, an A
   chart, a release-notes diff.
 - **Writes don't run until approved.** Each write becomes a signed approval card, and only an
   explicit, single-use approval lets it execute. "Approve all" answers a group's board writes in
-  one press, still one approval per card, and an applied status change or new issue can be undone
-  from its card, from the server's own record of what it changed.
-- **The four issue tools live in a separate MCP Worker,** which the agent reaches over a service
+  one press, still one approval per card, and an applied status change, reassignment or new issue
+  can be undone from its card, from the server's own record of what it changed.
+- **The five issue tools live in a separate MCP Worker,** which the agent reaches over a service
   binding as an ordinary MCP client. Any outside AI assistant can use the same server.
 - **There's one board.** Both Workers read and write it through one Durable Object, so a write
   from Claude Desktop shows up in the SPA.

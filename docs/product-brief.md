@@ -38,7 +38,7 @@ Each capability maps to a tool risk class (see [tool-inventory.md](./tool-invent
 Vue 3 (3.6-track) SPA (Vite 8, shadcn-vue) in `apps/web` → Hono on Cloudflare Workers in
 `apps/api` running an AI SDK v6 ToolLoopAgent (Groq primary / Gemini Flash fallback), sharing
 types and fixtures via `packages/shared` → an MCP client to one custom MCP server on Workers,
-`apps/mcp-issues` (Phase 6). It serves the four issue tools to the in-app agent and publicly to
+`apps/mcp-issues` (Phase 6). It serves the five issue tools to the in-app agent and publicly to
 Claude Desktop/Cursor, rate-limited per ADR-0020. The SPA ships as a Workers
 Static Assets (assets-only Worker) deploy, live since Phase 14 (ADR-0019).
 

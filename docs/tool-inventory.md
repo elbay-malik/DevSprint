@@ -1,12 +1,13 @@
 # Tool Inventory
 
-The DevSprint Copilot agent exposes exactly **10 tools**. Types (`Issue`, `Sprint`, `Deployment`,
+The DevSprint Copilot agent exposes exactly **11 tools**. Types (`Issue`, `Sprint`, `Deployment`,
 …), the fixed demo clock `WORKSPACE_NOW`, and the shared result envelope are defined in
 [domain-model.md](./domain-model.md). Every scripted demo in
 [demo-scenarios.md](./demo-scenarios.md) exercises tools from this list and nothing else. Phase 3
 registers tools 1–6 (read/query and rich-data) as plain AI SDK function-calling tools in
 `apps/api`; Phase 5 adds the three gated writes, tools 7–9. Tool 10, `run_deployment`, lands with
-its simulation in Phase 8 and is gated like the other writes. The approval policy below is the contract
+its simulation in Phase 8 and is gated like the other writes. Tool 11, `assign_issue`, was promoted
+from section 4 on 2026-10-25 and is gated the same way. The approval policy below is the contract
 implemented in Phase 5, recorded in
 [ADR-0003](./adr/0003-hitl-approval-gates-on-write-tools.md) (policy) and
 [ADR-0010](./adr/0010-tool-approval-mechanism-and-replay-protection.md) (mechanism).
@@ -31,10 +32,11 @@ type ToolResult<T> = { ok: true; data: T } | { ok: false; error: { code: string;
 | 8   | `update_issue_status`    | gated write        | always requires approval, one approval PER issue (no batch) | ApprovalCard → confirmation           | issues (public)             |
 | 9   | `create_release_notes`   | gated write        | always requires approval                                    | ApprovalCard → confirmation           | deploys                     |
 | 10  | `run_deployment`         | long-running write | always requires approval before start; cancellable mid-run  | ApprovalCard → DeploymentProgressCard | deploys                     |
+| 11  | `assign_issue`           | gated write        | always requires approval, one approval PER issue (no batch) | ApprovalCard → confirmation           | issues (public)             |
 
 The "MCP server" column maps to the Phase 6 packages. `apps/mcp-issues` is built and public: the
-four issue tools are served from it over Streamable HTTP, and the in-app agent sources those same
-four through an MCP client, so both clients drive one implementation. `apps/mcp-deploys` and
+five issue tools are served from it over Streamable HTTP, and the in-app agent sources those same
+five through an MCP client, so both clients drive one implementation. `apps/mcp-deploys` and
 `apps/mcp-analytics` are still reserved names, so the other six tools remain plain AI SDK
 function-calling tools inside `apps/api` (see [ADR-0002](./adr/0002-staged-mcp-adoption.md)).
 
@@ -53,9 +55,9 @@ Every client-supplied string and array is length-bounded in `packages/shared/src
 request cannot push the single-value workspace past its storage ceiling. The sketches below omit
 those `.max()` calls.
 
-Every write (tools 7–10) can also return `WORKSPACE_FULL` when the persisted board would exceed its
-512 KB cap ([ADR-0020](./adr/0020-rate-limit-the-public-mcp-endpoint.md)); resetting the board clears
-it.
+Every write (tools 7–11) can also return `WORKSPACE_FULL` when the persisted board would exceed its
+512 KB cap ([ADR-0020](./adr/0020-rate-limit-the-public-mcp-endpoint.md)); resetting the board
+clears it.
 
 ### 1. `list_issues`
 
@@ -347,20 +349,67 @@ run finishes with deployment status `'cancelled'` and its unreached stages marke
 `INVALID_INPUT`. The simulation has no failure path, so `STAGE_FAILED` is reserved rather than
 raised; `DEPLOY_ALREADY_SETTLED` belongs to the cancel route rather than the tool.
 
+### 11. `assign_issue` — gated write
+
+> Use when the user asks to assign, reassign, or unassign an existing issue, or to hand it to
+> someone on the team (any change of assignee).
+
+**Input**
+
+```ts
+z.object({
+  issueKey: z.string(), // human key, e.g. 'DS-12'
+  assigneeId: z.string().nullable(), // a roster id such as 'u-dana'; null = unassign
+})
+```
+
+**Output**
+
+```ts
+{ ok: true, data: { issue: Issue, previousAssigneeId: string | null, changeId?: string } }
+```
+
+The model resolves "Dana" or "@dana" to `u-dana` from the roster the system prompt lists
+(domain-model.md §5), and names the person by @handle when it reports the change ("DS-12 is now
+assigned to @dana."). The workspace does not trust the id: it checks it against the same roster.
+`changeId` names the same record a status change gets, so the card's Undo hands the issue back to
+whoever held it, nobody included (ADR-0023).
+
+**Gating:** the in-app agent sources it over MCP marked `gated: true`
+(`apps/api/src/agent/mcp-tools.ts`), which sets `needsApproval: true` as for the other issue
+writes, so its approval is signed and single-use through the same replay ledger (ADR-0010). An
+external MCP host gets no flag of ours, and its own permission prompt replaces the card (section 3,
+item 6).
+
+**Errors:** `ISSUE_NOT_FOUND`, `USER_NOT_FOUND` (an id the roster does not hold; nothing is
+written), `INVALID_INPUT` (the issue already has that assignee, or already has nobody)
+
+Assigning an issue to the person who already holds it is refused rather than reported as a
+no-change success, for the same reason a status change to the current status is: an approval for a
+write that changes nothing would leave an Undo with nothing to put back.
+
+**Why a single-purpose write.** Section 4 had deferred this into a general `update_issue`. When it
+was built, one field per change won: the approval card can say exactly what it would do in one
+line ("DS-12: Unassigned → @dana"), and the inverse is one field put back, so Undo, "Approve all"
+eligibility and the conflict check never have to reason about which of several fields a write
+touched. A general `update_issue` stays deferred; a later field gets its own write the same way.
+
 ## 3. Approval policy
 
 The policy is deliberately simple so it can be stated in one line: **reads and rich-data tools
 always auto-execute; ALL writes are gated — no exceptions.**
 
 1. **Which tools are gated.** Tools 1–6 (read/query and rich-data) never require approval. Tools
-   7–10 (gated and long-running writes) always require explicit human approval before executing.
+   7–11 (gated and long-running writes) always require explicit human approval before executing.
    There is no allowlist, no "trusted after first approval" mode, and no threshold logic.
 2. **One approval per mutation.** Approvals are granted per tool call, never per conversation or
    per batch. For `update_issue_status` this means one approval per issue: a request implying N
    status changes produces N separate calls and N separate ApprovalCards (see scenario S-B). The
    SPA's "Approve all" is a shortcut over those cards, not a batch approval: it sends one signed,
    single-use approval response per card, and covers only `update_issue_status` for a key the
-   board holds and `create_issue` (ADR-0023).
+   board holds, `create_issue`, and `assign_issue` for a key the board holds, a person on the
+   roster (or nobody) and a change of assignee (ADR-0023). The same one-approval-per-issue rule
+   holds for `assign_issue`: handing three issues to Dana is three calls and three cards.
 3. **Mechanism (AI SDK v6, corrected in Phase 5).** Gating is `needsApproval: true` on the tool.
    There is no `toolApproval` map in `ai@6.0.277` and `needsApproval` is not deprecated — this
    paragraph previously said the opposite, which was verified wrong against the installed package
@@ -386,15 +435,16 @@ always auto-execute; ALL writes are gated — no exceptions.**
 
 ## 4. Considered and deferred
 
-Kept within the 6–10 tool budget. Each of these was considered and deliberately left out:
+The budget was 6–10 tools. Each of these was considered and deliberately left out; `assign_issue`
+was later promoted to tool 11 (section 2), which takes the count past that budget by one.
 
-| Deferred tool           | Why deferred                                                                                                                                                                                                                                                                                                                        |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `assign_issue`          | Fold into a future general `update_issue` tool rather than adding a single-field write now.                                                                                                                                                                                                                                         |
-| `list_users`            | The 4-user roster is small and static; it is embedded in the Phase 3 system prompt instead (see domain-model.md).                                                                                                                                                                                                                   |
-| `publish_release_notes` | Drafting covers the demo scenarios; publishing adds a second gated write with little new signal.                                                                                                                                                                                                                                    |
-| `cancel_deployment`     | Cancel comes from a button, so it is an api route (`POST /api/deployments/:id/cancel`), not a tool call. Routing it through the model would make whether the deploy stops depend on the model choosing to call it, and it could not be reached mid-tool-call at all — [ADR-0013](./adr/0013-deployment-cancel-as-an-api-route.md).  |
-| `undo_change`           | Undo comes from a button on an applied card, so it is an api route (`POST /api/workspace/undo { changeId }`), not a tool. It reverses `create_issue` or `update_issue_status` from the workspace's own record, once, and refuses with `UNDO_CONFLICT` once the board has moved on — [ADR-0023](./adr/0023-approve-all-and-undo.md). |
+| Deferred tool           | Why deferred                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `update_issue`          | A general field-editing write. `assign_issue` was first deferred into it, then built as its own single-field write on 2026-10-25 (section 2, tool 11), so each change keeps one-line approval copy and a one-field inverse.                                                                                                                         |
+| `list_users`            | The 4-user roster is small and static; it is embedded in the Phase 3 system prompt instead (see domain-model.md).                                                                                                                                                                                                                                   |
+| `publish_release_notes` | Drafting covers the demo scenarios; publishing adds a second gated write with little new signal.                                                                                                                                                                                                                                                    |
+| `cancel_deployment`     | Cancel comes from a button, so it is an api route (`POST /api/deployments/:id/cancel`), not a tool call. Routing it through the model would make whether the deploy stops depend on the model choosing to call it, and it could not be reached mid-tool-call at all — [ADR-0013](./adr/0013-deployment-cancel-as-an-api-route.md).                  |
+| `undo_change`           | Undo comes from a button on an applied card, so it is an api route (`POST /api/workspace/undo { changeId }`), not a tool. It reverses `create_issue`, `update_issue_status` or `assign_issue` from the workspace's own record, once, and refuses with `UNDO_CONFLICT` once the board has moved on — [ADR-0023](./adr/0023-approve-all-and-undo.md). |
 
 If a later phase needs one of these, promote it here first and update
 [demo-scenarios.md](./demo-scenarios.md), [wireframes.md](./wireframes.md), and the affected ADRs

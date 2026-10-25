@@ -335,12 +335,12 @@ Canonical error codes:
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | ISSUE_NOT_FOUND        | No issue with the given key (e.g. `DS-42` in scenario S-E)                                                                             |
 | SPRINT_NOT_FOUND       | No sprint with the given id                                                                                                            |
-| USER_NOT_FOUND         | No user with the given id (bad `assigneeId` filter or assignment)                                                                      |
+| USER_NOT_FOUND         | No user with the given id (bad `assigneeId` filter, or an assignment to someone not on the roster)                                     |
 | VERSION_EXISTS         | Release notes for that version already exist, or version already live                                                                  |
 | DEPLOY_IN_PROGRESS     | A deployment is already running for that environment                                                                                   |
 | DEPLOY_ALREADY_SETTLED | Cancel was requested for a deployment that already finished (cancel route, HTTP 409)                                                   |
 | STAGE_FAILED           | Reserved: a deployment stage failed. The simulation has no failure path, so it is never raised                                         |
-| INVALID_INPUT          | Input failed schema or domain validation (catch-all for bad arguments)                                                                 |
+| INVALID_INPUT          | Input failed schema or domain validation (catch-all; also a status or assignee the issue already has)                                  |
 | WORKSPACE_FULL         | A write would push the persisted board past its size cap; reset the board                                                              |
 | UNDO_CONFLICT          | Undo route only (HTTP 409): the issue changed since the write, it was already undone, or no record of it remains (a reset clears them) |
 
@@ -357,3 +357,9 @@ The 4-user roster is small and static. It is embedded verbatim in the system pro
 (`apps/api/src/agent/system-prompt.ts`) so the model can resolve names and handles to `assigneeId`s
 ("assign it to Dana" → `u-dana`) without a `list_users` tool. See the "Considered and deferred"
 section of [tool-inventory.md](./tool-inventory.md).
+
+`assign_issue` (tool 11) is the one write that changes an existing issue's `assigneeId`, and `null`
+unassigns. The model takes the id from that roster, and the workspace checks it against
+`Workspace.users` before writing, so a name resolved wrongly is refused with `USER_NOT_FOUND`
+instead of handing the issue to someone the board does not have. Wherever the board or the chat
+names a person, it uses the @handle ("@dana"), and nobody reads "Unassigned".

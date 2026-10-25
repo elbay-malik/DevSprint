@@ -73,9 +73,9 @@ storyboard; recording pending), then the ADRs and tests on GitHub.
 **Capabilities**
 
 - **Ask:** grounded answers from read tools.
-- **Act with approval:** gated writes, namely issue status changes, new issues, saving release
-  notes, and deployments. Several open board changes can be approved in one press, and an applied
-  status change or new issue can be undone from its card.
+- **Act with approval:** gated writes, namely issue status changes, reassignments, new issues,
+  saving release notes, and deployments. Several open board changes can be approved in one press,
+  and an applied status change, reassignment or new issue can be undone from its card.
 - **Watch:** a multi-stage deployment streams progress live and can be cancelled.
 - **See:** results render as cards: an issue table, a burndown chart, a release-notes diff, a
   deployment card and an error card.

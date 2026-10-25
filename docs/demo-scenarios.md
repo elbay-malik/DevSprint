@@ -255,19 +255,19 @@ Conventions used in the step tables:
   open in a browser alongside the external host. This scenario has no suggestion button — it is
   driven from the external host, and the SPA's empty transcript shows the endpoint to copy.
 
-| Step | Actor                         | Action or prompt (verbatim)                                                                                                                   | Expected tool call                                                                                                  | Expected stream parts | Expected UI (workspace / chat)                                                     |
-| ---- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------- |
-| 1    | Operator                      | Copies the public issues MCP server URL (Streamable HTTP) from the README and adds it to Claude Desktop (or Cursor) as a remote MCP server    | —                                                                                                                   | —                     | Host: server connected                                                             |
-| 2    | Host                          | Lists the server's tools                                                                                                                      | (MCP tools/list)                                                                                                    | —                     | Host: shows `list_issues`, `search_issues`, `create_issue`, `update_issue_status`  |
-| 3    | Operator                      | In the external host: "Create a DevSprint issue titled \"Add CSV export progress indicator\", type feature, medium priority, in the backlog." | —                                                                                                                   | —                     | Host: prompt sent                                                                  |
-| 4    | Host                          | Requests the write; shows its own tool-permission prompt (this replaces our ApprovalCard; server-side validation still applies)               | `create_issue({ title: 'Add CSV export progress indicator', type: 'feature', priority: 'medium', sprintId: null })` | — (host-native UI)    | Host: permission prompt → allow                                                    |
-| 5    | Server                        | Executes the validated write                                                                                                                  | (same call)                                                                                                         | —                     | Host: tool result with the new issue DS-14                                         |
-| 6    | Operator                      | Switches to the DevSprint SPA                                                                                                                 | —                                                                                                                   | —                     | Workspace: new backlog issue DS-14 visible on the board                            |
-| 7    | Operator (optional follow-up) | In the external host: "Move DS-14 to in progress."                                                                                            | `update_issue_status({ issueKey: 'DS-14', status: 'in_progress' })`                                                 | — (host-native UI)    | Host: permission prompt → allow; workspace: DS-14's backlog card reads In progress |
+| Step | Actor                         | Action or prompt (verbatim)                                                                                                                   | Expected tool call                                                                                                  | Expected stream parts | Expected UI (workspace / chat)                                                                    |
+| ---- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------- |
+| 1    | Operator                      | Copies the public issues MCP server URL (Streamable HTTP) from the README and adds it to Claude Desktop (or Cursor) as a remote MCP server    | —                                                                                                                   | —                     | Host: server connected                                                                            |
+| 2    | Host                          | Lists the server's tools                                                                                                                      | (MCP tools/list)                                                                                                    | —                     | Host: shows `list_issues`, `search_issues`, `create_issue`, `update_issue_status`, `assign_issue` |
+| 3    | Operator                      | In the external host: "Create a DevSprint issue titled \"Add CSV export progress indicator\", type feature, medium priority, in the backlog." | —                                                                                                                   | —                     | Host: prompt sent                                                                                 |
+| 4    | Host                          | Requests the write; shows its own tool-permission prompt (this replaces our ApprovalCard; server-side validation still applies)               | `create_issue({ title: 'Add CSV export progress indicator', type: 'feature', priority: 'medium', sprintId: null })` | — (host-native UI)    | Host: permission prompt → allow                                                                   |
+| 5    | Server                        | Executes the validated write                                                                                                                  | (same call)                                                                                                         | —                     | Host: tool result with the new issue DS-14                                                        |
+| 6    | Operator                      | Switches to the DevSprint SPA                                                                                                                 | —                                                                                                                   | —                     | Workspace: new backlog issue DS-14 visible on the board                                           |
+| 7    | Operator (optional follow-up) | In the external host: "Move DS-14 to in progress."                                                                                            | `update_issue_status({ issueKey: 'DS-14', status: 'in_progress' })`                                                 | — (host-native UI)    | Host: permission prompt → allow; workspace: DS-14's backlog card reads In progress                |
 
 **Success criteria**
 
-- The external host can list and call the four issue tools without any DevSprint-specific client
+- The external host can list and call the five issue tools without any DevSprint-specific client
   code.
 - The write performed in the external host is visible in the SPA's workspace pane (same
   workspace, two clients).
@@ -275,7 +275,7 @@ Conventions used in the step tables:
 **Eval assertions**
 
 - The MCP server exposes exactly `list_issues`, `search_issues`, `create_issue`,
-  `update_issue_status`.
+  `update_issue_status`, `assign_issue`.
 - `create_issue` produces DS-14 with `sprintId: null` (backlog) and the exact title above.
 - Server-side input validation runs even though the approval UX belongs to the host.
 
@@ -283,8 +283,10 @@ Conventions used in the step tables:
 
 ## Coverage matrix
 
-Every one of the 10 tools in [tool-inventory.md](./tool-inventory.md) appears in at least one
-scenario.
+Every one of the 10 original tools in [tool-inventory.md](./tool-inventory.md) appears in at least
+one scenario. Tool 11, `assign_issue`, was added after the scenarios and appears in none; S-F's host
+can list and call it, and its own end-to-end test assigns DS-12 to Dana
+(`apps/web/e2e/chat.spec.ts`).
 
 ### Tools × scenarios
 
@@ -300,10 +302,11 @@ scenario.
 | update_issue_status    |     | x   |     |     | x   | x   |
 | create_release_notes   | x   |     |     |     |     |     |
 | run_deployment         |     |     | x   |     |     |     |
+| assign_issue           |     |     |     |     |     |     |
 
-Note: in S-F, `list_issues` and `search_issues` are also exposed to the external host (step 2)
-but are not required by the script; `update_issue_status` is exercised by the optional follow-up
-(step 7).
+Note: in S-F, `list_issues`, `search_issues` and `assign_issue` are also exposed to the external
+host (step 2) but are not required by the script; `update_issue_status` is exercised by the optional
+follow-up (step 7).
 
 ### UI components × scenarios
 
