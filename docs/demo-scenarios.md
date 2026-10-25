@@ -9,7 +9,11 @@ the fixed demo clock `WORKSPACE_NOW = 2026-07-01T09:00:00Z`. The original plan g
 (except S-F, which runs in an external MCP host) a one-click scripted-scenario button in the chat
 composer; that button is **not built**, so today a reviewer types the verbatim prompts below.
 
-Current repo status: Phases 0–14 are implemented and deployed (ADR-0019). Every scenario
+Current repo status: Phases 0–14 are implemented and deployed (ADR-0019). The live site runs a
+real model (`MODEL_PROVIDER=auto`: Groq `openai/gpt-oss-120b`, Gemini `gemini-3.8-flash` fallback,
+ADR-0021), so a reviewer there sees each scenario's meaning but not always the exact trajectory
+below. The step tables describe the scripted mock, which CI uses, and ADR-0021's two eval tiers say
+which parts every model must meet. Every scenario
 runs end to end against the scripted mock model in two suites that transcribe its "Eval
 assertions" block: the trajectory evals (`apps/api/src/evals/scenarios.eval.test.ts`) and the
 browser specs (`apps/web/e2e/scenarios.spec.ts`), which also assert what the page drew, what the
@@ -49,16 +53,16 @@ Conventions used in the step tables:
 - **Preconditions:** fresh seed; `rn-1` (v1.4.2, published) is the latest published release note;
   DS-5 and DS-6 are the only `done` issues in `sprint-12`.
 
-| Step | Actor | Action or prompt (verbatim)                               | Expected tool call                                             | Expected stream parts    | Expected UI (workspace / chat)                                                                                                        |
-| ---- | ----- | --------------------------------------------------------- | -------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | User  | "Summarize Sprint 12 and draft release notes for v1.5.0." | —                                                              | —                        | Chat: user message appears                                                                                                            |
-| 2    | Agent | Reads sprint health                                       | `get_sprint_status({ sprintId: 'sprint-12' })`                 | tool call + result       | Chat: tool chip; streamed summary text (8/31 points done, DS-11 blocked)                                                              |
-| 3    | Agent | Lists completed work                                      | `list_issues({ sprintId: 'sprint-12', status: 'done' })`       | tool call + result       | Chat: IssueTable with DS-5, DS-6                                                                                                      |
-| 4    | Agent | Composes v1.5.0 draft markdown from DS-5/DS-6 (no tool)   | —                                                              | text                     | Chat: draft streams as text (plain, not rendered markdown — see the status note above)                                                |
-| 5    | Agent | Diffs draft vs last published                             | `diff_release_notes({ draftMarkdown, baseVersion: 'v1.4.2' })` | tool call + result       | Chat: ReleaseNotesDiff card, before/after vs rn-1                                                                                     |
-| 6    | User  | "Looks good, save it."                                    | —                                                              | —                        | Chat: user message                                                                                                                    |
-| 7    | Agent | Requests the gated save                                   | `create_release_notes({ version: 'v1.5.0', markdown })`        | approval request part    | Chat: ApprovalCard (pending)                                                                                                          |
-| 8    | User  | Clicks Approve                                            | (tool now executes)                                            | tool result + final text | Chat: ApprovalCard resolved + confirmation text. (The "v1.5.0 draft" badge in the workspace pane is **not built** — no phase owns it) |
+| Step | Actor | Action or prompt (verbatim)                               | Expected tool call                                             | Expected stream parts    | Expected UI (workspace / chat)                                                                                                                       |
+| ---- | ----- | --------------------------------------------------------- | -------------------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | User  | "Summarize Sprint 12 and draft release notes for v1.5.0." | —                                                              | —                        | Chat: user message appears                                                                                                                           |
+| 2    | Agent | Reads sprint health                                       | `get_sprint_status({ sprintId: 'sprint-12' })`                 | tool call + result       | Chat: tool chip; streamed summary text (8/31 points done, DS-11 blocked)                                                                             |
+| 3    | Agent | Lists completed work                                      | `list_issues({ sprintId: 'sprint-12', status: 'done' })`       | tool call + result       | Chat: IssueTable with DS-5, DS-6                                                                                                                     |
+| 4    | Agent | Composes v1.5.0 draft markdown from DS-5/DS-6 (no tool)   | —                                                              | text                     | Chat: draft streams as text; its headings, bullets and bold render as the safe subset (ADR-0022), and links stay literal — see the status note above |
+| 5    | Agent | Diffs draft vs last published                             | `diff_release_notes({ draftMarkdown, baseVersion: 'v1.4.2' })` | tool call + result       | Chat: ReleaseNotesDiff card, before/after vs rn-1                                                                                                    |
+| 6    | User  | "Looks good, save it."                                    | —                                                              | —                        | Chat: user message                                                                                                                                   |
+| 7    | Agent | Requests the gated save                                   | `create_release_notes({ version: 'v1.5.0', markdown })`        | approval request part    | Chat: ApprovalCard (pending)                                                                                                                         |
+| 8    | User  | Clicks Approve                                            | (tool now executes)                                            | tool result + final text | Chat: ApprovalCard resolved + confirmation text. (The "v1.5.0 draft" badge in the workspace pane is **not built** — no phase owns it)                |
 
 **Success criteria**
 
@@ -104,7 +108,8 @@ Conventions used in the step tables:
 - Nothing is written until a card is answered, and DS-11 never leaves the Blocked column.
 
 > **Choreography note (Phase 5).** The step table above reads as a strict alternation of card and
-> execution. In practice the agent asks for all five writes in one step, so the five cards appear
+> execution. The scripted mock asks for all five writes in one step (a live model may ask one card
+> at a time, ADR-0021), so the five cards appear
 > together and the approved writes execute once the last card is answered — the board therefore
 > updates in one go rather than card by card. The policy the scenario exists to prove is
 > unchanged: five separate calls, five separate approvals, no batch card, and the denial honoured.

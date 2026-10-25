@@ -24,9 +24,11 @@ linked from the README.
 - [ ] Open https://devsprint-web.eleo-666.workers.dev in a clean browser profile, so there are no
       extensions or bookmarks bar in shot. A 1920×1080 window at 100% zoom works well.
 - [ ] Click **Reset board** in the header. Check the board reads **Committed 31 / Completed 8**.
-- [ ] Light theme to start. You switch to dark once, in shot 4.
-- [ ] Copy this file's prompts somewhere you can paste them from. Typing live is fine too: the
-      mock matches on keywords, but pasting avoids typos on camera.
+- [ ] Click the theme toggle in the header until its tooltip reads **Theme: Light** (a clean
+      profile starts on System). You switch to dark once, in shot 4.
+- [ ] Copy this file's prompts somewhere you can paste them from. Typing live is fine too (the
+      live model reads free text; the local mock matches on keywords), but pasting avoids typos on
+      camera.
 - [ ] For shot 7, add the MCP server to Claude Desktop **before** recording (see that shot). Start
       a fresh chat there.
 - [ ] Turn on Do Not Disturb.
