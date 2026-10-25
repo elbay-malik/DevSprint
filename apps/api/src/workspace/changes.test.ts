@@ -4,12 +4,13 @@ import {
   CHANGES_MAX,
   MAX_CHANGE_ID_LENGTH,
   appendChange,
+  assignIssueTracked,
   createIssueTracked,
   undoChange,
   updateIssueStatusTracked,
   type BoardChange,
 } from './changes'
-import { createReleaseNotes, updateIssueStatus } from './mutations'
+import { assignIssue, createReleaseNotes, updateIssueStatus } from './mutations'
 
 const AT = '2026-10-25T14:05:00.000Z'
 
@@ -69,6 +70,43 @@ describe('recording a board write', () => {
       before: null,
       after: { status: 'todo' },
     })
+  })
+
+  it('records an assignment with the assignee it replaced', () => {
+    const workspace = createWorkspaceSeed()
+
+    const { result, changes } = assignIssueTracked(
+      workspace,
+      { issueKey: 'ds-12', assigneeId: 'u-dana' },
+      { changes: [], changeId: 'c-1', at: AT },
+    )
+
+    expect(result.ok && result.data.changeId).toBe('c-1')
+    expect(changes).toEqual([
+      {
+        id: 'c-1',
+        tool: 'assign_issue',
+        issueKey: 'DS-12',
+        before: { status: 'todo', assigneeId: null, blockedReason: null, completedAt: null },
+        after: { status: 'todo', assigneeId: 'u-dana', blockedReason: null, completedAt: null },
+        appliedAt: AT,
+        undoneAt: null,
+      },
+    ])
+  })
+
+  it('records nothing for an assignment that was refused', () => {
+    const workspace = createWorkspaceSeed()
+    const track = { changes: [], changeId: 'c-1', at: AT }
+    for (const [input, code] of [
+      [{ issueKey: 'DS-999', assigneeId: 'u-dana' }, 'ISSUE_NOT_FOUND'],
+      [{ issueKey: 'DS-12', assigneeId: 'u-zoe' }, 'USER_NOT_FOUND'],
+      [{ issueKey: 'DS-12', assigneeId: null }, 'INVALID_INPUT'],
+    ] as const) {
+      const refused = assignIssueTracked(workspace, input, track)
+      expect(errorCode(refused.result), input.issueKey).toBe(code)
+      expect(refused.changes).toBeUndefined()
+    }
   })
 
   it('records nothing for a write that failed', () => {
@@ -281,6 +319,95 @@ describe('undoing a recorded write', () => {
       expect(errorCode(undoChange(workspace, changes, id, AT).result), id).toBe('UNDO_CONFLICT')
     }
     expect(issue(workspace, key)).toMatchObject({ title: 'Unrelated', status: 'todo' })
+  })
+
+  it('puts an assignment back to whoever held the issue before', () => {
+    const workspace = createWorkspaceSeed()
+    const { changes } = assignIssueTracked(
+      workspace,
+      { issueKey: 'DS-7', assigneeId: 'u-chidi' },
+      { changes: [], changeId: 'c-1', at: AT },
+    )
+
+    const { result } = undoChange(workspace, changes!, 'c-1', AT)
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { tool: 'assign_issue', issueKey: 'DS-7', outcome: 'restored' },
+    })
+    expect(issue(workspace, 'DS-7')!.assigneeId).toBe('u-ben')
+  })
+
+  it('puts a first assignment back to nobody', () => {
+    const workspace = createWorkspaceSeed()
+    const { changes } = assignIssueTracked(
+      workspace,
+      { issueKey: 'DS-12', assigneeId: 'u-dana' },
+      { changes: [], changeId: 'c-1', at: AT },
+    )
+
+    const { result } = undoChange(workspace, changes!, 'c-1', AT)
+
+    expect(result.ok && result.data.issue?.assigneeId).toBeNull()
+    expect(issue(workspace, 'DS-12')!.assigneeId).toBeNull()
+  })
+
+  it('puts an unassignment back to the person it took the issue from', () => {
+    const workspace = createWorkspaceSeed()
+    const { changes } = assignIssueTracked(
+      workspace,
+      { issueKey: 'DS-11', assigneeId: null },
+      { changes: [], changeId: 'c-1', at: AT },
+    )
+
+    undoChange(workspace, changes!, 'c-1', AT)
+
+    expect(issue(workspace, 'DS-11')!.assigneeId).toBe('u-dana')
+  })
+
+  it('refuses to undo an assignment under a later recorded reassignment or status change', () => {
+    for (const later of ['reassign', 'status'] as const) {
+      const workspace = createWorkspaceSeed()
+      let changes = assignIssueTracked(
+        workspace,
+        { issueKey: 'DS-12', assigneeId: 'u-dana' },
+        { changes: [], changeId: 'c-1', at: AT },
+      ).changes!
+      changes =
+        later === 'reassign'
+          ? assignIssueTracked(
+              workspace,
+              { issueKey: 'DS-12', assigneeId: 'u-ben' },
+              { changes, changeId: 'c-2', at: AT },
+            ).changes!
+          : updateIssueStatusTracked(
+              workspace,
+              { issueKey: 'DS-12', status: 'in_progress' },
+              { changes, changeId: 'c-2', at: AT },
+            ).changes!
+
+      expect(errorCode(undoChange(workspace, changes, 'c-1', AT).result), later).toBe(
+        'UNDO_CONFLICT',
+      )
+      // Untouched: the later write is what stands.
+      expect(issue(workspace, 'DS-12')!.assigneeId, later).toBe(
+        later === 'reassign' ? 'u-ben' : 'u-dana',
+      )
+      // Unwinding the later one first frees it, so the chain still undoes in order.
+      changes = undoChange(workspace, changes, 'c-2', AT).changes!
+      expect(undoChange(workspace, changes, 'c-1', AT).result.ok, later).toBe(true)
+      expect(issue(workspace, 'DS-12'), later).toMatchObject({ assigneeId: null, status: 'todo' })
+    }
+  })
+
+  it('refuses to undo a status change over a reassignment the journal never saw', () => {
+    // The MCP server is not the only way in: a field that no longer reads what
+    // the write left refuses on its own, recorded or not.
+    const { workspace, changes } = statusChange()
+    assignIssue(workspace, { issueKey: 'DS-7', assigneeId: 'u-chidi' })
+
+    expect(errorCode(undoChange(workspace, changes, 'c-1', AT).result)).toBe('UNDO_CONFLICT')
+    expect(issue(workspace, 'DS-7')).toMatchObject({ status: 'done', assigneeId: 'u-chidi' })
   })
 
   it('refuses an id it has no record of', () => {

@@ -30,6 +30,7 @@ describe('tool contracts', () => {
       'update_issue_status',
       'create_release_notes',
       'run_deployment',
+      'assign_issue',
     ])
     expect(Object.keys(WRITE_TOOL_INPUT_SCHEMAS).sort()).toEqual([...WRITE_TOOL_NAMES].sort())
     expect(Object.keys(TOOL_DESCRIPTIONS).sort()).toEqual(
@@ -41,6 +42,20 @@ describe('tool contracts', () => {
     const schema = WRITE_TOOL_INPUT_SCHEMAS.update_issue_status
     expect(schema.safeParse({ issueKey: 'DS-7', status: 'done' }).success).toBe(true)
     expect(schema.safeParse({ issueKey: ['DS-7', 'DS-8'], status: 'done' }).success).toBe(false)
+  })
+
+  it('keeps an assignment single-issue, and lets null mean unassign', () => {
+    const schema = WRITE_TOOL_INPUT_SCHEMAS.assign_issue
+    expect(schema.safeParse({ issueKey: 'DS-12', assigneeId: 'u-dana' }).success).toBe(true)
+    expect(schema.safeParse({ issueKey: 'DS-12', assigneeId: null }).success).toBe(true)
+    // Leaving the assignee out is not a way to say "nobody": it has to be explicit.
+    expect(schema.safeParse({ issueKey: 'DS-12' }).success).toBe(false)
+    expect(schema.safeParse({ issueKey: ['DS-7', 'DS-8'], assigneeId: 'u-dana' }).success).toBe(
+      false,
+    )
+    expect(schema.safeParse({ issueKey: 'DS-12', assigneeId: 'u-'.repeat(100) }).success).toBe(
+      false,
+    )
   })
 
   it('writes descriptions as trigger conditions', () => {

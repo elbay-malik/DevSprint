@@ -158,9 +158,15 @@ export async function smoke(options: { proveSharedBoard: boolean } = { proveShar
   // The public MCP server (scenario S-F), and that it reads the same board.
   const tools = (await mcp('tools/list', {})) as { tools: Array<{ name: string }> }
   check(
-    'MCP lists exactly the four issue tools',
+    'MCP lists exactly the five issue tools',
     JSON.stringify(tools.tools.map((tool) => tool.name).sort()) ===
-      JSON.stringify(['create_issue', 'list_issues', 'search_issues', 'update_issue_status']),
+      JSON.stringify([
+        'assign_issue',
+        'create_issue',
+        'list_issues',
+        'search_issues',
+        'update_issue_status',
+      ]),
   )
   const viaMcp = (
     await callTool<{ issues: Array<{ key: string }> }>('list_issues', { limit: 200 })

@@ -4,6 +4,7 @@ import type { Tool } from 'ai'
 import type { ToolResult } from '@devsprint/shared'
 import {
   TOOL_DESCRIPTIONS,
+  assignIssueInputSchema,
   createIssueInputSchema,
   listIssuesInputSchema,
   searchIssuesInputSchema,
@@ -11,7 +12,7 @@ import {
 } from '@devsprint/shared/tools'
 
 /**
- * The four issue tools, sourced over MCP instead of defined locally.
+ * The five issue tools, sourced over MCP instead of defined locally.
  *
  * This is the half of ADR-0002 that makes the app itself an MCP client: the
  * agent calls `apps/mcp-issues` for these, exactly as an external host does, so
@@ -23,6 +24,7 @@ const ISSUE_TOOLS = [
   { name: 'search_issues', schema: searchIssuesInputSchema, gated: false },
   { name: 'create_issue', schema: createIssueInputSchema, gated: true },
   { name: 'update_issue_status', schema: updateIssueStatusInputSchema, gated: true },
+  { name: 'assign_issue', schema: assignIssueInputSchema, gated: true },
 ] as const
 
 export const MCP_ISSUE_TOOL_NAMES = ISSUE_TOOLS.map((tool) => tool.name)

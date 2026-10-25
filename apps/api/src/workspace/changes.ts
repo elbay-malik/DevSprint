@@ -15,6 +15,8 @@
  */
 import type { Issue, ToolResult, Workspace } from '@devsprint/shared'
 import type {
+  AssignIssueData,
+  AssignIssueInput,
   CreateIssueData,
   CreateIssueInput,
   UndoableToolName,
@@ -22,12 +24,13 @@ import type {
   UpdateIssueStatusData,
   UpdateIssueStatusInput,
 } from '@devsprint/shared/tools'
-import { createIssue, updateIssueStatus } from './mutations'
+import { assignIssue, createIssue, updateIssueStatus } from './mutations'
 
 /**
  * The issue fields a board write can change, and so the ones an undo puts back
- * and checks against. `assigneeId` is here though no tool reassigns yet: a
- * status write must still refuse to undo over someone's reassignment.
+ * and checks against. Every recorded write snapshots all four, whichever it
+ * touched: that is what makes a status write refuse to undo over a later
+ * reassignment, and a reassignment refuse to undo over a later status change.
  */
 export type ChangedFields = Pick<Issue, 'status' | 'assigneeId' | 'blockedReason' | 'completedAt'>
 
@@ -91,7 +94,7 @@ function sameFields(a: ChangedFields, b: ChangedFields): boolean {
   )
 }
 
-/** Same matching `updateIssueStatus` uses, so the before-state is the issue it is about to write. */
+/** Same matching the issue writes use, so the before-state is the issue they are about to write. */
 function findIssue(workspace: Workspace, key: string): Issue | undefined {
   const wanted = key.trim().toLowerCase()
   return workspace.issues.find((issue) => issue.key.toLowerCase() === wanted)
@@ -150,6 +153,32 @@ export function updateIssueStatusTracked(
     changes: appendChange(changes, {
       id: changeId,
       tool: 'update_issue_status',
+      issueKey: issue.key,
+      before,
+      after: fieldsOf(issue),
+      appliedAt: at,
+      undoneAt: null,
+    }),
+  }
+}
+
+export function assignIssueTracked(
+  workspace: Workspace,
+  input: AssignIssueInput,
+  { changes, changeId, at }: TrackOptions,
+): Tracked<AssignIssueData> {
+  // Same as a status change: the before-state is the board's, so undoing a
+  // first assignment puts the issue back to nobody rather than to a guess.
+  const target = findIssue(workspace, input.issueKey)
+  const before = target ? fieldsOf(target) : undefined
+  const result = assignIssue(workspace, input)
+  if (!result.ok || before === undefined) return { result }
+  const { issue } = result.data
+  return {
+    result: { ok: true, data: { ...result.data, changeId } },
+    changes: appendChange(changes, {
+      id: changeId,
+      tool: 'assign_issue',
       issueKey: issue.key,
       before,
       after: fieldsOf(issue),

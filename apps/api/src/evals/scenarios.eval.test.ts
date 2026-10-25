@@ -313,15 +313,16 @@ describe('S-E — a typed error, recovered by searching', () => {
 })
 
 describe('S-F — the same workspace, from an external MCP host', () => {
-  it('sources exactly the four issue tools from the MCP server', async () => {
+  it('sources exactly the five issue tools from the MCP server', async () => {
     // S-F's point is that the write arrives from a host we do not own, so this
     // is asserted from the side apps/api actually owns: which tools it hands
     // over to the MCP server rather than defining itself. That the server
-    // registers exactly these four is asserted in apps/mcp-issues' own suite,
+    // registers exactly these five is asserted in apps/mcp-issues' own suite,
     // against the real `McpServer` — a dependency this package does not have.
     const { MCP_OWNED_TOOL_NAMES } = await import('../agent/tools')
 
     expect([...MCP_OWNED_TOOL_NAMES].sort()).toEqual([
+      'assign_issue',
       'create_issue',
       'list_issues',
       'search_issues',

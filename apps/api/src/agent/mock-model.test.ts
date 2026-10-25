@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createWorkspaceSeed } from '@devsprint/shared'
 import { getBurndown, getSprintStatus } from '../workspace/queries'
 import { planUserText, routeUserText, scriptChunks, summarizeToolOutput } from './mock-model'
+import { buildSystemPrompt } from './system-prompt'
 
 const ALL_TOOLS = new Set([
   'list_issues',
@@ -392,5 +393,128 @@ describe('scenario S-A — draft, diff, then a gated save', () => {
     }
     expect(input.version).toBe('v1.5.0')
     expect(input.markdown).toBe(draft)
+  })
+})
+
+describe('assigning an issue — read first, then the gated write', () => {
+  const ASSIGN_TOOLS = new Set([...ALL_TOOLS, 'update_issue_status', 'assign_issue'])
+  const SYSTEM = buildSystemPrompt(createWorkspaceSeed())
+
+  /** The turn after the grounding search came back with `matches`. */
+  function afterSearch(text: string, matches: Array<{ key: string; title: string }>) {
+    return scriptChunks({
+      prompt: [
+        { role: 'system', content: SYSTEM },
+        { role: 'user', content: [{ type: 'text', text }] },
+        {
+          role: 'assistant',
+          content: [{ type: 'tool-call', toolCallId: 's1', toolName: 'search_issues', input: {} }],
+        },
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 's1',
+              toolName: 'search_issues',
+              output: {
+                type: 'json',
+                value: {
+                  ok: true,
+                  data: { matches: matches.map((m) => ({ ...m, status: 'todo', score: 1 })) },
+                },
+              },
+            },
+          ],
+        },
+      ],
+      tools: [...ASSIGN_TOOLS].map((name) => ({
+        type: 'function',
+        name,
+        inputSchema: { type: 'object' },
+      })),
+    } as never)
+  }
+
+  function callOf(chunks: ReturnType<typeof scriptChunks>) {
+    const call = chunks.find((chunk) => chunk.type === 'tool-call') as
+      { toolName: string; input: string } | undefined
+    return call && { toolName: call.toolName, input: JSON.parse(call.input) as unknown }
+  }
+
+  function textOf(chunks: ReturnType<typeof scriptChunks>) {
+    return chunks.map((chunk) => (chunk.type === 'text-delta' ? chunk.delta : '')).join('')
+  }
+
+  const DS_12 = [{ key: 'DS-12', title: 'Dark mode theme audit' }]
+
+  it('opens with a read of the named key, not a write', () => {
+    expect(planUserText('Assign DS-12 to Dana', ASSIGN_TOOLS)).toEqual([
+      { kind: 'tool-call', toolName: 'search_issues', input: { query: 'DS-12' } },
+    ])
+  })
+
+  it('resolves the person from the roster the system prompt lists', () => {
+    for (const text of [
+      'Assign DS-12 to Dana',
+      'assign ds-12 to @dana',
+      'Hand DS-12 to Dana Petrova',
+    ]) {
+      expect(callOf(afterSearch(text, DS_12)), text).toEqual({
+        toolName: 'assign_issue',
+        input: { issueKey: 'DS-12', assigneeId: 'u-dana' },
+      })
+    }
+  })
+
+  it('unassigns with null', () => {
+    expect(callOf(afterSearch('Unassign DS-12', DS_12))).toEqual({
+      toolName: 'assign_issue',
+      input: { issueKey: 'DS-12', assigneeId: null },
+    })
+  })
+
+  it('asks rather than inventing an id for someone the roster does not have', () => {
+    const chunks = afterSearch('Assign DS-12 to Zoe', DS_12)
+    expect(callOf(chunks)).toBeUndefined()
+    expect(textOf(chunks)).toBe('No one on the team goes by that name. Who should DS-12 go to?')
+  })
+
+  it('writes nothing for a key the search did not find', () => {
+    const chunks = afterSearch('Assign DS-42 to Dana', [])
+    expect(callOf(chunks)).toBeUndefined()
+    expect(textOf(chunks)).toBe('No matching issues.')
+  })
+
+  it('reports the change by @handle, and an unassignment as such', () => {
+    const issue = createWorkspaceSeed().issues.find((candidate) => candidate.key === 'DS-12')!
+    const handles = new Map([['u-dana', 'dana']])
+    const result = (assigneeId: string | null) => ({
+      ok: true,
+      data: { issue: { ...issue, assigneeId }, previousAssigneeId: 'u-ben' },
+    })
+    expect(summarizeToolOutput('assign_issue', result('u-dana'), undefined, handles)).toBe(
+      'DS-12 is now assigned to @dana.',
+    )
+    expect(summarizeToolOutput('assign_issue', result(null), undefined, handles)).toBe(
+      'DS-12 is now unassigned.',
+    )
+    expect(
+      summarizeToolOutput(
+        'assign_issue',
+        { ok: false, error: { code: 'INVALID_INPUT', message: 'already' } },
+        { issueKey: 'DS-11', assigneeId: 'u-dana' },
+      ),
+    ).toBe('DS-11 already has that assignee.')
+  })
+
+  it('leaves the status-change route as it was', () => {
+    expect(planUserText('Mark DS-12 as done', ASSIGN_TOOLS)).toEqual([
+      {
+        kind: 'tool-call',
+        toolName: 'update_issue_status',
+        input: { issueKey: 'DS-12', status: 'done' },
+      },
+    ])
   })
 })

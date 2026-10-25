@@ -19,6 +19,8 @@ import type {
   Workspace,
 } from '@devsprint/shared'
 import type {
+  AssignIssueData,
+  AssignIssueInput,
   CreateIssueData,
   CreateIssueInput,
   CreateReleaseNotesData,
@@ -325,4 +327,45 @@ export function finishDeployment(
     }
   }
   return ok({ deployment })
+}
+
+// --- 11. assign_issue --------------------------------------------------------
+
+export function assignIssue(
+  workspace: Workspace,
+  input: AssignIssueInput,
+): ToolResult<AssignIssueData> {
+  const issue = workspace.issues.find(
+    (candidate) => candidate.key.toLowerCase() === input.issueKey.trim().toLowerCase(),
+  )
+  if (!issue) {
+    return fail(
+      'ISSUE_NOT_FOUND',
+      `No issue with key '${input.issueKey}'. Search by title to find the issue you meant (search_issues).`,
+    )
+  }
+  // Checked against the roster rather than trusted, so a name the model got
+  // wrong is refused instead of leaving the issue held by someone who is not on
+  // the team. The roster is the one the system prompt resolves names from.
+  if (input.assigneeId !== null && !workspace.users.some((user) => user.id === input.assigneeId)) {
+    const known = workspace.users.map((user) => user.id).join(', ')
+    return fail('USER_NOT_FOUND', `No user with id '${input.assigneeId}'. Known users: ${known}.`)
+  }
+
+  // Refused like a status change to the status the issue already has: an
+  // approval for a write that changes nothing would leave an undo with nothing
+  // to put back.
+  const previousAssigneeId = issue.assigneeId
+  if (previousAssigneeId === input.assigneeId) {
+    return fail(
+      'INVALID_INPUT',
+      input.assigneeId === null
+        ? `${issue.key} is already unassigned.`
+        : `${issue.key} is already assigned to ${input.assigneeId}.`,
+    )
+  }
+
+  issue.assigneeId = input.assigneeId
+  issue.updatedAt = workspace.now
+  return ok({ issue, previousAssigneeId })
 }

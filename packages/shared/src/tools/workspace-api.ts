@@ -15,6 +15,7 @@ import type {
   Workspace,
 } from '../workspace/types'
 import type {
+  AssignIssueInput,
   CreateIssueInput,
   CreateReleaseNotesInput,
   DiffReleaseNotesInput,
@@ -27,6 +28,7 @@ import type {
   UpdateIssueStatusInput,
 } from './schemas'
 import type {
+  AssignIssueData,
   BurndownData,
   CreateIssueData,
   CreateReleaseNotesData,
@@ -87,11 +89,12 @@ export interface WorkspaceApi {
 
   createIssue(input: CreateIssueInput): Promise<ToolResult<CreateIssueData>>
   updateIssueStatus(input: UpdateIssueStatusInput): Promise<ToolResult<UpdateIssueStatusData>>
+  assignIssue(input: AssignIssueInput): Promise<ToolResult<AssignIssueData>>
   createReleaseNotes(input: CreateReleaseNotesInput): Promise<ToolResult<CreateReleaseNotesData>>
 
   /**
-   * Reverses one recorded board write — `createIssue` or `updateIssueStatus`,
-   * whose results carry the `changeId` — from the workspace's own record of
+   * Reverses one recorded board write — `createIssue`, `updateIssueStatus` or
+   * `assignIssue`, whose results carry the `changeId` — from the workspace's own record of
    * what it changed. One-shot, and refused with `UNDO_CONFLICT` once the issue
    * has moved on from what that write left, so it never overwrites a later
    * change. Not a tool: like reset, it is a person's action in the SPA.
