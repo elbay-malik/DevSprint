@@ -125,9 +125,11 @@
 
 /* A card the last read of the board moved (CHANGE_HIGHLIGHT_MS in the workspace
    store, which removes the attribute after the same 1.5s). A Graphite ring
-   settles onto the card on an exponential ease-out over a faint ink tint, holds,
-   then fades: the move is seen landing. Under reduced motion the ring is simply
-   there for the same 1.5s, so the change is still marked. */
+   settles onto the card on an exponential ease-out, holds, then fades: the move
+   is seen landing. Under reduced motion the ring is simply there for the same
+   1.5s, so the change is still marked. No background tint: the card's muted
+   key and assignee are 4.73:1 on Paper, and any ink tint past about 2% takes
+   them under AA's 4.5:1. */
 @layer components {
   [data-board-change] {
     outline: 2px solid transparent;
@@ -138,19 +140,16 @@
     0% {
       outline-color: var(--ring);
       outline-offset: 5px;
-      background-color: color-mix(in oklch, var(--foreground) 6%, var(--card));
       animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
     }
     45% {
       outline-color: var(--ring);
       outline-offset: 2px;
-      background-color: color-mix(in oklch, var(--foreground) 6%, var(--card));
       animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
     }
     100% {
       outline-color: transparent;
       outline-offset: 2px;
-      background-color: var(--card);
     }
   }
   @media (prefers-reduced-motion: reduce) {

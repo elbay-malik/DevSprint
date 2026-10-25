@@ -290,7 +290,7 @@ outline would be clipped. That rule lives once in `main.css`, not per component.
 
 Two more rings belong to the board, both outlines 2px off the card, so neither touches its 10%
 hairline. A **dashed** `--ring` outline marks an issue a pending approval would move, and a
-**solid** `--ring` outline over a faint ink tint marks, for 1.5s, an issue the last read of the
+**solid** `--ring` outline marks, for 1.5s, an issue the last read of the
 board moved (see Board cards).
 
 ### Named Rules
@@ -356,7 +356,8 @@ decision or a result lives.
   cards, and it goes the moment the card is answered. New issues have no card to mark.
 - **Changed (board card):** when a read of the board finds an issue's status changed since the
   last read, the card is marked for 1.5s: a 2px solid `--ring` outline settles from 5px out to 2px
-  on an exponential ease-out over a 6% ink tint, holds, then fades. Under reduced motion the
+  on an exponential ease-out, holds, then fades. It takes no background tint, since
+  the card's muted text is 4.73:1 on Paper and any ink tint past about 2% drops it under 4.5:1. Under reduced motion the
   outline is simply there for the same 1.5s. The first read, which replaces the seed, marks
   nothing.
 - **Chat cards:** a shared shell of 8px corners, a 1px Rule border on Paper, 8 by 12px padding and
