@@ -148,6 +148,40 @@ read that card, says `… — not applied (<CODE>).`). A call that threw, with n
 `✕ Approved by you at 14:02, but it failed: <reason>`. A deployment reads
 `Approved by you at 14:02 — deployment <status>.` (for example `deployment succeeded`).
 
+**Reassignment.** An `assign_issue` card reads like a status change, with people in place of
+statuses: by @handle as the board names them, and nobody as "Unassigned". The headline keeps its
+"from" assignee after the decision the same way. An id nobody on the team has gets the Stop Red
+warning line, and Deny takes the Ink, as a missing key does:
+
+```
++----------------------------------------------------------+
+| DS-12: Unassigned → @dana                                |
+| "Dark mode theme audit"                                  |
+| assign_issue                                             |
++----------------------------------------------------------+
+
++----------------------------------------------------------+
+| DS-12: Unassigned → u-zed                                |
+| "Dark mode theme audit"                                  |
+| No one on the team has the id u-zed.        (Stop Red)   |
+| assign_issue                                             |
++----------------------------------------------------------+
+```
+
+While the card is open, the issue's board card takes the same dashed ring as a pending move, and
+stays in its column: a caption under the current assignee names who it would go to (`→ @dana`, or
+`→ Unassigned`; screen readers hear "Awaiting approval to assign to @dana"). Backlog cards show
+their assignee too, so the hand-on reads there as well:
+
+```
++- - - - - - - - - - - - - - - -+
+: DS-12                     [3] :
+: Dark mode theme audit         :
+: → @dana                       :
+: Todo                          :
++- - - - - - - - - - - - - - - -+
+```
+
 **Group header and Approve all.** Two or more approval cards in one message get a header line
 above the first. When two or more of the open cards on the last message are board writes that
 can land, it also carries "Approve all N", the message's one Ink, and every card below decides in
@@ -164,11 +198,12 @@ DS-42 needs its own decision.
 ```
 
 After a card is answered on its own the button reads "Approve remaining 3". Deploys, release notes
-and a status change for a key the board does not hold never count. The press still answers each
-card through its own approval, so each keeps its own record line.
+and a status change for a key the board does not hold never count, and neither does a reassignment
+whose key or person the board does not hold, or that would hand the issue to whoever already has it.
+The press still answers each card through its own approval, so each keeps its own record line.
 
-**Undo.** An applied status change or new issue gets a quiet ghost Undo on its record line; once
-undone, a second line follows it, or the board's refusal in Stop Red:
+**Undo.** An applied status change, reassignment or new issue gets a quiet ghost Undo on its record
+line; once undone, a second line follows it, or the board's refusal in Stop Red:
 
 ```
 +----------------------------------------------------------+
@@ -183,8 +218,9 @@ undone, a second line follows it, or the board's refusal in Stop Red:
 +----------------------------------------------------------+
 ```
 
-Release notes and deployments have no Undo. A refusal reads `That change to DS-9 can’t be undone:
-the board has moved on.`, and the Undo does not come back.
+A reassignment undone reads `↶ Undone by you at 14:05 — DS-12 back to unassigned.` (or `— DS-7 back
+to @ben.`). Release notes and deployments have no Undo. A refusal reads `That change to DS-9 can’t
+be undone: the board has moved on.`, and the Undo does not come back.
 
 ## 4. HITL approval sequence
 
@@ -216,18 +252,18 @@ trusted, so the Worker re-checks the tool input and the approval policy before e
 Canonical component names for Phase 7 — spell them exactly like this everywhere (docs, code,
 scenario specs).
 
-| Component                                | Fed by                                                                                                     | First built in phase |
-| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------- |
-| ChatMessageList                          | every message (user and assistant bubbles; wraps all parts below)                                          | 1                    |
-| ChatText                                 | assistant text parts, safe markdown subset without v-html (ADR-0022)                                       | 15                   |
-| ToolResultCard                           | picks the card per tool for a finished call (ErrorCard for `ok: false`); falls back to ToolCallChip        | 7                    |
-| ToolCallChip                             | fallback for every tool call; permanent rendering for get_sprint_status and get_deployment_history results | 3                    |
-| IssueTable                               | list_issues; search_issues (compact variant)                                                               | 7                    |
-| BurndownChart (inline SVG, see ADR-0012) | get_burndown                                                                                               | 7                    |
-| ReleaseNotesDiff                         | diff_release_notes                                                                                         | 7                    |
-| DeploymentProgressCard                   | run_deployment, redrawn from each preliminary tool result                                                  | 8                    |
-| ApprovalCard                             | approval requests from create_issue, update_issue_status, create_release_notes, run_deployment             | 5                    |
-| ErrorCard                                | any tool result with ok: false                                                                             | 5                    |
+| Component                                | Fed by                                                                                                       | First built in phase |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------- |
+| ChatMessageList                          | every message (user and assistant bubbles; wraps all parts below)                                            | 1                    |
+| ChatText                                 | assistant text parts, safe markdown subset without v-html (ADR-0022)                                         | 15                   |
+| ToolResultCard                           | picks the card per tool for a finished call (ErrorCard for `ok: false`); falls back to ToolCallChip          | 7                    |
+| ToolCallChip                             | fallback for every tool call; permanent rendering for get_sprint_status and get_deployment_history results   | 3                    |
+| IssueTable                               | list_issues; search_issues (compact variant)                                                                 | 7                    |
+| BurndownChart (inline SVG, see ADR-0012) | get_burndown                                                                                                 | 7                    |
+| ReleaseNotesDiff                         | diff_release_notes                                                                                           | 7                    |
+| DeploymentProgressCard                   | run_deployment, redrawn from each preliminary tool result                                                    | 8                    |
+| ApprovalCard                             | approval requests from create_issue, update_issue_status, assign_issue, create_release_notes, run_deployment | 5                    |
+| ErrorCard                                | any tool result with ok: false                                                                               | 5                    |
 
 ## 6. Notes
 
