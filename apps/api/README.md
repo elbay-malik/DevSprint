@@ -5,14 +5,14 @@ model key) and exposes the mock workspace over HTTP.
 
 ## Endpoints
 
-| Route                         | Method | Purpose                                                                 |
-| ----------------------------- | ------ | ----------------------------------------------------------------------- |
-| `/api/health`                 | GET    | Liveness probe — `{ "ok": true }`                                       |
-| `/api/workspace`              | GET    | The current workspace snapshot; the SPA hydrates its board from it      |
-| `/api/workspace/reset`        | POST   | Restores the seed board — the demo's manual reset control               |
-| `/api/workspace/undo`         | POST   | Reverses one approved board write, `{ changeId }` — a card's Undo       |
-| `/api/deployments/:id/cancel` | POST   | Ends a running deployment — the progress card's Cancel button           |
-| `/api/chat`                   | POST   | AI SDK v6 UI message stream — tool calls, tool results, streamed answer |
+| Route                         | Method | Purpose                                                                   |
+| ----------------------------- | ------ | ------------------------------------------------------------------------- |
+| `/api/health`                 | GET    | Liveness probe — `{ "ok": true }`                                         |
+| `/api/workspace`              | GET    | The current workspace snapshot; the SPA hydrates its board from it        |
+| `/api/workspace/reset`        | POST   | Restores the seed board — the demo's manual reset control (30 s cooldown) |
+| `/api/workspace/undo`         | POST   | Reverses one approved board write, `{ changeId }` — a card's Undo         |
+| `/api/deployments/:id/cancel` | POST   | Ends a running deployment, `{ cancelToken }` — the card's Cancel button   |
+| `/api/chat`                   | POST   | AI SDK v6 UI message stream — tool calls, tool results, streamed answer   |
 
 ## Tools
 
@@ -36,11 +36,12 @@ call it, and the worst it can do is put the mock workspace back to a known board
 
 It is deliberately left open rather than restricted to dev, because
 [wireframes.md](../../docs/wireframes.md) §1 puts a Reset board button in the live demo's header and
-a dev-only guard would remove it exactly where it is useful. The per-IP rate limit from Phase 11
-covers `/api/chat` only
-([ADR-0016](../../docs/adr/0016-two-spend-controls-and-an-honest-injection-posture.md)), so reset
-stays unthrottled. The worst it can do is restore the seed board, and the board also resets itself
-once a day regardless
+a dev-only guard would remove it exactly where it is useful. Open is not the same as unthrottled,
+though ([ADR-0024](../../docs/adr/0024-harden-the-shared-board.md)). The workspace refuses a reset within
+30 seconds of the last one, from anyone, with `429 RESET_COOLDOWN`, so a loop can't keep the board
+at its seed and wipe everyone's writes. Undo and cancel share a per-IP limit of 30 a minute
+(`WRITE_RATE_LIMIT`). `RESET_COOLDOWN_SECONDS` sets the cooldown, and the
+e2e stack passes 0. The board also resets itself once a day
 ([ADR-0014](../../docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
 
 `POST /api/workspace/undo` is open on the same terms: anyone who can press Reset can already do
@@ -59,7 +60,10 @@ reset is not: it is a person's action, and the copilot re-reads the board before
 `POST /api/deployments/:id/cancel` is the same story for a different reason: it comes from a
 button, not the agent, so routing it through a tool would make whether a deploy stops depend on the
 model choosing to call one — see
-[ADR-0013](../../docs/adr/0013-deployment-cancel-as-an-api-route.md).
+[ADR-0013](../../docs/adr/0013-deployment-cancel-as-an-api-route.md). Its body is
+`{ cancelToken }`, the token every frame of that run's stream carries. The board lists every
+deployment's id, so an id alone would let anyone stop anyone's run. A wrong or missing token is a
+`404`, the same as an unknown id.
 
 ## Approvals
 

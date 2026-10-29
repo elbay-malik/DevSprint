@@ -56,8 +56,10 @@ request cannot push the single-value workspace past its storage ceiling. The ske
 those `.max()` calls.
 
 Every write (tools 7–11) can also return `WORKSPACE_FULL` when the persisted board would exceed its
-512 KB cap ([ADR-0020](./adr/0020-rate-limit-the-public-mcp-endpoint.md)); resetting the board
-clears it.
+512 KB cap ([ADR-0020](./adr/0020-rate-limit-the-public-mcp-endpoint.md)), and `create_issue`
+returns it once a day has added 40 issues to the seed. Text a write stores may not contain control
+characters other than tab, newline and carriage return, or unpaired surrogates
+([ADR-0024](./adr/0024-harden-the-shared-board.md)). Resetting the board clears both limits.
 
 ### 1. `list_issues`
 
@@ -336,13 +338,16 @@ progress-event payload of its own. Every stage is persisted as it happens, so a 
 is still recorded where it got to.
 
 Cancellation is a `POST /api/deployments/:id/cancel` route, not the request's abort signal, and not
-a tool — see section 4 and [ADR-0013](./adr/0013-deployment-cancel-as-an-api-route.md). A cancelled
+a tool — see section 4 and [ADR-0013](./adr/0013-deployment-cancel-as-an-api-route.md). Its body is
+`{ cancelToken }`: every frame of the run carries `data.cancelToken`, which the board never shows,
+so only the visitor who started the run can cancel it
+([ADR-0024](./adr/0024-harden-the-shared-board.md)). A cancelled
 run finishes with deployment status `'cancelled'` and its unreached stages marked `'skipped'`.
 
 **Final output**
 
 ```ts
-{ ok: true, data: { deployment: Deployment } }
+{ ok: true, data: { deployment: Deployment, cancelToken?: string } }
 ```
 
 **Errors:** `DEPLOY_IN_PROGRESS`, `VERSION_EXISTS` (version already live in that environment),

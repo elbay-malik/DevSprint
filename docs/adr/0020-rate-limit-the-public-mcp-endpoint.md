@@ -1,6 +1,6 @@
 # ADR-0020: Rate-limit the public MCP endpoint, and give the agent its own way in
 
-- Status: Accepted
+- Status: Accepted (amended by ADR-0024)
 - Date: 2026-10-22
 - Deciders: repo owner (solo project)
 
@@ -54,6 +54,11 @@ turns still sourced their tools over MCP (`X-DevSprint-Tools: mcp`).
   already scopes.
 - **An issue-count cap:** redundant next to the byte cap, which already bounds storage. The
   problem was speed, not size.
+
+Status note 2026-10-29: the "tens of minutes per IP" figure was wrong. Control characters
+serialize as six-character escapes, so about 17 creates filled the board, and JSON-RPC batches put
+many calls on one token. ADR-0024 refuses both, and adds the issue-count cap rejected above: the
+problem turned out to be size after all.
 
 ## References
 

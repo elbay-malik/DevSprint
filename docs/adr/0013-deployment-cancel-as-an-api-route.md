@@ -1,6 +1,6 @@
 # ADR-0013: Deployment cancel as an api route, not the request's abort signal
 
-- Status: Accepted
+- Status: Accepted (amended by ADR-0024)
 - Date: 2026-09-06
 - Deciders: repo owner (solo project)
 
