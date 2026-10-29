@@ -327,6 +327,7 @@ type ToolErrorCode =
   | 'INVALID_INPUT'
   | 'WORKSPACE_FULL'
   | 'UNDO_CONFLICT'
+  | 'RESET_COOLDOWN'
 ```
 
 Canonical error codes:
@@ -341,8 +342,9 @@ Canonical error codes:
 | DEPLOY_ALREADY_SETTLED | Cancel was requested for a deployment that already finished (cancel route, HTTP 409)                                                   |
 | STAGE_FAILED           | Reserved: a deployment stage failed. The simulation has no failure path, so it is never raised                                         |
 | INVALID_INPUT          | Input failed schema or domain validation (catch-all; also a status or assignee the issue already has)                                  |
-| WORKSPACE_FULL         | A write would push the persisted board past its size cap; reset the board                                                              |
+| WORKSPACE_FULL         | A write would push the persisted board past its size cap, or `create_issue` past the day's 40 new issues; reset the board              |
 | UNDO_CONFLICT          | Undo route only (HTTP 409): the issue changed since the write, it was already undone, or no record of it remains (a reset clears them) |
+| RESET_COOLDOWN         | Reset route only (HTTP 429): the board was reset less than 30 seconds ago, by anyone                                                   |
 
 Notes:
 
