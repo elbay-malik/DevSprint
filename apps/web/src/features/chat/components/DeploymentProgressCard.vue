@@ -13,7 +13,15 @@ import { useWorkspaceStore } from '@/stores/workspace'
  *
  * Cancel posts to the api rather than aborting the turn; see `cancel()` below.
  */
-const props = defineProps<{ deployment: Deployment; live?: boolean }>()
+const props = defineProps<{
+  deployment: Deployment
+  live?: boolean
+  /**
+   * What proves this visitor started the run. The cancel route refuses
+   * without it, so the button only shows when the stream carried one.
+   */
+  cancelToken?: string
+}>()
 
 const workspace = useWorkspaceStore()
 
@@ -126,7 +134,11 @@ async function cancel(): Promise<void> {
   try {
     // fetch() only throws on a network failure; a refused cancel arrives as a
     // response, and treating it as success would leave the run going silently.
-    const res = await fetch(deploymentCancelEndpoint(props.deployment.id), { method: 'POST' })
+    const res = await fetch(deploymentCancelEndpoint(props.deployment.id), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cancelToken: props.cancelToken }),
+    })
     if (!res.ok) throw new Error(`cancel answered ${res.status}`)
   } catch (error) {
     console.warn('[deployment] cancel failed:', error)
@@ -139,7 +151,9 @@ async function cancel(): Promise<void> {
   }
 }
 
-const canCancel = computed(() => props.live === true && !settled.value)
+const canCancel = computed(
+  () => props.live === true && !settled.value && props.cancelToken !== undefined,
+)
 </script>
 
 <template>

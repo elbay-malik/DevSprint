@@ -135,6 +135,12 @@ export interface CreateReleaseNotesData {
  */
 export interface RunDeploymentData {
   deployment: Deployment
+  /**
+   * What the Cancel button sends back to stop this run. Only the turn that
+   * started the deployment carries it — it is never on the board — so only
+   * the visitor watching the run can cancel it.
+   */
+  cancelToken?: string
 }
 
 /**

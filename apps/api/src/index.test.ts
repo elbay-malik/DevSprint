@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Workspace } from '@devsprint/shared'
+import type { WorkspaceApi } from '@devsprint/shared/tools'
 import app from './index'
 import { fakeWorkspaceBinding } from '../test/workspace-binding'
 
@@ -59,6 +60,64 @@ describe('POST /api/workspace/reset', () => {
 
     expect(res.status).toBe(200)
     expect(workspace.store.get().issues.find((i) => i.key === 'DS-7')?.status).toBe('in_review')
+  })
+})
+
+describe('POST /api/workspace/reset — cooldown and write limit', () => {
+  it('refuses a second reset inside the cooldown, for every client', async () => {
+    // One reset per cooldown for the whole board: a loop of resets would
+    // otherwise wipe every visitor's writes as they land (ADR-0024).
+    // Well clear of the resets earlier tests in this file made.
+    const now = Date.now() + 120_000
+    vi.spyOn(Date, 'now').mockReturnValue(now)
+    const cooled = { ...env, RESET_COOLDOWN_SECONDS: '30' }
+    const first = await app.request('/api/workspace/reset', { method: 'POST' }, cooled)
+    expect(first.status).toBe(200)
+
+    const { updateIssueStatus } = await import('./workspace/mutations')
+    updateIssueStatus(workspace.store.get(), { issueKey: 'DS-7', status: 'done' })
+
+    const second = await app.request(
+      '/api/workspace/reset',
+      { method: 'POST', headers: { 'CF-Connecting-IP': '203.0.113.9' } },
+      cooled,
+    )
+
+    expect(second.status).toBe(429)
+    expect(second.headers.get('retry-after')).toBe('30')
+    const body: { ok: boolean; error: { code: string } } = await second.json()
+    expect(body.error.code).toBe('RESET_COOLDOWN')
+    // The write it would have wiped is still there.
+    expect(workspace.store.get().issues.find((i) => i.key === 'DS-7')?.status).toBe('done')
+
+    // Once the cooldown has passed, the next reset goes through.
+    vi.mocked(Date.now).mockReturnValue(now + 30_000)
+    const later = await app.request('/api/workspace/reset', { method: 'POST' }, cooled)
+    expect(later.status).toBe(200)
+    vi.restoreAllMocks()
+  })
+
+  it('throttles undo and cancel per client, but leaves reset to its cooldown', async () => {
+    const limit = vi.fn().mockResolvedValue({ success: false })
+    const throttled = { ...env, WRITE_RATE_LIMIT: { limit } }
+    const headers = { 'CF-Connecting-IP': '203.0.113.9', 'Content-Type': 'application/json' }
+
+    const responses = await Promise.all([
+      app.request('/api/workspace/reset', { method: 'POST', headers }, throttled),
+      app.request(
+        '/api/workspace/undo',
+        { method: 'POST', headers, body: JSON.stringify({ changeId: 'x' }) },
+        throttled,
+      ),
+      app.request(
+        '/api/deployments/dep-1/cancel',
+        { method: 'POST', headers, body: JSON.stringify({ cancelToken: 'x' }) },
+        throttled,
+      ),
+    ])
+
+    expect(responses.map((res) => res.status)).toEqual([200, 429, 429])
+    expect(limit).toHaveBeenCalledWith({ key: '203.0.113.9' })
   })
 })
 
@@ -246,17 +305,37 @@ describe('POST /api/deployments/:id/cancel', () => {
     await app.request('/api/workspace/reset', { method: 'POST' }, env)
   })
 
-  it('settles a running deployment as cancelled', async () => {
-    const { startDeployment } = await import('./workspace/mutations')
-    const started = startDeployment(workspace.store.get(), {
+  const api = workspace.binding.get() as unknown as WorkspaceApi
+
+  /** A running deployment and the token only its own turn would have seen. */
+  async function startRun() {
+    const started = await api.startDeployment({
       environment: 'staging',
       version: 'v9.9.9',
       skipTests: false,
     })
-    expect(started.ok).toBe(true)
-    const id = started.ok ? started.data.deployment.id : ''
+    if (!started.ok || started.data.cancelToken === undefined) {
+      throw new Error('the run did not start with a cancel token')
+    }
+    return { id: started.data.deployment.id, cancelToken: started.data.cancelToken }
+  }
 
-    const res = await app.request(`/api/deployments/${id}/cancel`, { method: 'POST' }, env)
+  function cancel(id: string, body: unknown) {
+    return app.request(
+      `/api/deployments/${id}/cancel`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+      env,
+    )
+  }
+
+  it('settles a running deployment as cancelled', async () => {
+    const { id, cancelToken } = await startRun()
+
+    const res = await cancel(id, { cancelToken })
 
     expect(res.status).toBe(200)
     const stored = workspace.store.get().deployments.find((d) => d.id === id)
@@ -265,26 +344,57 @@ describe('POST /api/deployments/:id/cancel', () => {
     expect(stored?.stages.some((stage) => stage.status === 'running')).toBe(false)
   })
 
+  it("will not cancel someone else's run from its id alone", async () => {
+    // The board lists every deployment's id, so before the token anyone
+    // polling it could stop every run (ADR-0024).
+    const { id } = await startRun()
+
+    const res = await cancel(id, { cancelToken: 'guessed' })
+
+    expect(res.status).toBe(404)
+    const body: { ok: boolean; error: { code: string } } = await res.json()
+    expect(body.error.code).toBe('INVALID_INPUT')
+    expect(workspace.store.get().deployments.find((d) => d.id === id)?.status).toBe('running')
+  })
+
+  it('never puts a cancel token on the board', async () => {
+    const { cancelToken } = await startRun()
+
+    const res = await app.request('/api/workspace', {}, env)
+
+    expect(await res.text()).not.toContain(cancelToken)
+  })
+
   it('refuses to cancel a run that already finished', async () => {
-    // dep-5 in the seed shipped v1.4.2 to production. Answering 200 here would
-    // tell the user their cancel landed on a release that is already live.
-    const res = await app.request('/api/deployments/dep-5/cancel', { method: 'POST' }, env)
+    // Answering 200 here would tell the user their cancel landed on a release
+    // that is already live.
+    const { id, cancelToken } = await startRun()
+    await api.finishDeployment({ deploymentId: id, status: 'succeeded' })
+
+    const res = await cancel(id, { cancelToken })
 
     expect(res.status).toBe(409)
     const body: { ok: boolean; error: { code: string } } = await res.json()
     expect(body.error.code).toBe('DEPLOY_ALREADY_SETTLED')
-    expect(workspace.store.get().deployments.find((d) => d.id === 'dep-5')?.status).toBe(
-      'succeeded',
-    )
+    expect(workspace.store.get().deployments.find((d) => d.id === id)?.status).toBe('succeeded')
   })
 
   it('says so rather than inventing a deployment to cancel', async () => {
-    const res = await app.request('/api/deployments/dep-nope/cancel', { method: 'POST' }, env)
+    const res = await cancel('dep-nope', { cancelToken: 'anything' })
 
     expect(res.status).toBe(404)
     const body: { ok: boolean; error: { code: string } } = await res.json()
     expect(body.ok).toBe(false)
     expect(body.error.code).toBe('INVALID_INPUT')
+  })
+
+  it('needs a token in the body', async () => {
+    const { id } = await startRun()
+
+    const res = await app.request(`/api/deployments/${id}/cancel`, { method: 'POST' }, env)
+
+    expect(res.status).toBe(400)
+    expect(workspace.store.get().deployments.find((d) => d.id === id)?.status).toBe('running')
   })
 })
 

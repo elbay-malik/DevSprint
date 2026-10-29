@@ -1,5 +1,6 @@
 import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
+import { createMiddleware } from 'hono/factory'
 import {
   convertToModelMessages,
   validateUIMessages,
@@ -25,7 +26,9 @@ import {
   messageOnlyResponse,
   RATE_LIMITED_MESSAGE,
   rateLimitKey,
+  RESET_RETRY_AFTER_SECONDS,
   resolveDailyTokenCap,
+  resolveResetCooldownMs,
   type RateLimitBinding,
 } from './agent/limits'
 
@@ -100,6 +103,43 @@ app.use('/api/*', (c, next) =>
   })(c, next),
 )
 
+/**
+ * A per-IP throttle on undo and cancel, the board writes that skip the model.
+ * Before it, only the chat route was limited, so a loop could call them as
+ * fast as the network allowed (ADR-0024). The looser per-location accounting
+ * is fine here for the same reason it is on chat (ADR-0016): the job is to
+ * stop a script, not to count precisely. The cancel token and the undo
+ * record are what actually protect other visitors; this keeps one client
+ * from hammering the Durable Object while they say no.
+ *
+ * Reset is not on it. Its whole-board cooldown is stricter than any per-IP
+ * limit, and the e2e suite resets before every test, faster than a sane
+ * limit would allow.
+ */
+const writeLimit = createMiddleware<{ Bindings: AppEnv }>(async (c, next) => {
+  // Typed `| undefined` for the same reason as the chat limiter below.
+  const limiter: RateLimitBinding | undefined = c.env.WRITE_RATE_LIMIT
+  const clientKey = rateLimitKey(c.req.raw)
+  if (limiter && clientKey !== undefined) {
+    const { success } = await limiter.limit({ key: clientKey })
+    if (!success) {
+      console.warn(JSON.stringify({ event: 'write-rate-limited', path: c.req.path }))
+      return c.json(
+        {
+          ok: false as const,
+          error: {
+            code: 'RATE_LIMITED',
+            message: 'Too many changes in a short time. Try again in a minute.',
+          },
+        },
+        429,
+        { 'Retry-After': '60' },
+      )
+    }
+  }
+  await next()
+})
+
 app.get('/api/health', (c) => c.json({ ok: true }))
 
 app.get(API_ROUTES.workspace, async (c) => c.json(await workspaceOf(c.env).snapshot()))
@@ -110,8 +150,18 @@ app.get(API_ROUTES.workspace, async (c) => c.json(await workspaceOf(c.env).snaps
  * tests need a way back to a known board. Independent of the workspace
  * Durable Object's own daily reset alarm (ADR-0014) — this is the manual
  * trigger for the same effect, not something the alarm supersedes.
+ *
+ * One reset per cooldown for the whole board, not per client: a reset loop
+ * from many addresses would otherwise keep the board at its seed and wipe
+ * every visitor's approved writes as they land (ADR-0024).
  */
-app.post(API_ROUTES.workspaceReset, async (c) => c.json(await workspaceOf(c.env).reset()))
+app.post(API_ROUTES.workspaceReset, async (c) => {
+  const result = await workspaceOf(c.env).requestReset({
+    cooldownMs: resolveResetCooldownMs(c.env.RESET_COOLDOWN_SECONDS),
+  })
+  if (result.ok) return c.json(result.data)
+  return c.json(result, 429, { 'Retry-After': String(RESET_RETRY_AFTER_SECONDS) })
+})
 
 /**
  * Undoes one approved board write — an approval card's Undo button.
@@ -127,7 +177,7 @@ app.post(API_ROUTES.workspaceReset, async (c) => c.json(await workspaceOf(c.env)
  * The copilot's transcript never hears about it. That is fine, because the
  * agent re-reads the board through its tools before it answers.
  */
-app.post(API_ROUTES.workspaceUndo, async (c) => {
+app.post(API_ROUTES.workspaceUndo, writeLimit, async (c) => {
   let body: unknown
   try {
     body = await c.req.json()
@@ -165,11 +215,28 @@ app.post(API_ROUTES.workspaceUndo, async (c) => {
  * It stays an http route rather than becoming a `cancel_deployment` tool: the
  * cancel comes from a button, so routing it through the model would make the
  * outcome depend on the model choosing to call it (docs/tool-inventory.md §4).
+ *
+ * The body is `{ cancelToken }`, the token the run's own stream frames carry.
+ * The board lists every deployment's id, so an id alone let anyone stop
+ * anyone's run (ADR-0024); a wrong or missing token is
+ * answered like an unknown id.
  */
-app.post(API_ROUTES.deploymentCancel, async (c) => {
-  const result = await workspaceOf(c.env).finishDeployment({
+app.post(API_ROUTES.deploymentCancel, writeLimit, async (c) => {
+  let body: unknown
+  try {
+    body = await c.req.json()
+  } catch {
+    return undoInvalid(c, 'Request body must be JSON.')
+  }
+  const cancelToken =
+    typeof body === 'object' && body !== null && 'cancelToken' in body
+      ? body.cancelToken
+      : undefined
+  if (typeof cancelToken !== 'string') return undoInvalid(c, '`cancelToken` must be a string.')
+
+  const result = await workspaceOf(c.env).cancelDeployment({
     deploymentId: c.req.param('id'),
-    status: 'cancelled',
+    cancelToken,
   })
   if (result.ok) return c.json(result)
   // A run that already finished is a conflict, not a missing one — saying 200
@@ -178,8 +245,9 @@ app.post(API_ROUTES.deploymentCancel, async (c) => {
 })
 
 /**
- * The undo route answers in the `ToolResult` envelope the SPA reads every
- * outcome through, so a refused body still carries `ok: false` and its code.
+ * The undo and cancel routes answer in the `ToolResult` envelope the SPA reads
+ * every outcome through, so a refused body still carries `ok: false` and its
+ * code.
  */
 function undoInvalid(c: Context<{ Bindings: AppEnv }>, message: string) {
   return c.json({ ok: false as const, error: { code: 'INVALID_INPUT', message } }, 400)

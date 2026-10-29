@@ -52,6 +52,14 @@ export interface WorkspaceApi {
    * (ADR-0014).
    */
   reset(): Promise<Workspace>
+  /**
+   * `reset`, when a visitor asks for it: refused with `RESET_COOLDOWN` if the
+   * board was reset less than `cooldownMs` ago. The check lives here rather
+   * than in the Worker because it has to hold across every isolate and every
+   * client at once — a loop of resets would otherwise keep the board at its
+   * seed and wipe every visitor's writes as they land (ADR-0024).
+   */
+  requestReset(input: { cooldownMs: number }): Promise<ToolResult<Workspace>>
 
   /**
    * Spends each id in `ids`, returning whichever were already spent — by an
@@ -110,6 +118,19 @@ export interface WorkspaceApi {
   startDeployment(input: RunDeploymentInput): Promise<ToolResult<RunDeploymentData>>
   setDeploymentStage(input: SetDeploymentStageInput): Promise<ToolResult<RunDeploymentData>>
   finishDeployment(input: FinishDeploymentInput): Promise<ToolResult<RunDeploymentData>>
+  /**
+   * The Cancel button's way in. `finishDeployment` takes any id, and the board
+   * lists every deployment's id, so a cancel route built on it let anyone stop
+   * anyone's run. This one also needs the token `startDeployment` handed to
+   * the turn that started the run, which only that visitor's stream carries
+   * (ADR-0024).
+   */
+  cancelDeployment(input: CancelDeploymentInput): Promise<ToolResult<RunDeploymentData>>
+}
+
+export interface CancelDeploymentInput {
+  deploymentId: string
+  cancelToken: string
 }
 
 export interface DailyModelUsage {

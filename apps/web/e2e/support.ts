@@ -6,10 +6,19 @@ export const MCP = 'http://localhost:8788'
 /**
  * Back to the seed. The response is checked because a reset that silently
  * failed would run every later test on whatever the last one left behind.
+ *
+ * A 429 almost always means a reused local api that was started without
+ * `--var RESET_COOLDOWN_SECONDS:0` (e2e/servers.ts), so it says that rather
+ * than leaving a bare status to puzzle over.
  */
 export async function resetBoard(request: APIRequestContext) {
   const res = await request.post(`${API}/api/workspace/reset`)
-  expect(res.ok(), 'the board reset before this test').toBe(true)
+  expect(
+    res.ok(),
+    res.status() === 429
+      ? 'the board reset before this test (429: is a reused api running with a reset cooldown?)'
+      : 'the board reset before this test',
+  ).toBe(true)
 }
 
 /** The workspace as the api's Durable Object holds it, not as the page shows it. */

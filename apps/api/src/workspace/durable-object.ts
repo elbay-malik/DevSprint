@@ -21,6 +21,7 @@ import type {
   RunDeploymentInput,
   SetDeploymentStageInput,
   FinishDeploymentInput,
+  CancelDeploymentInput,
   UndoChangeInput,
 } from '@devsprint/shared/tools'
 import {
@@ -87,6 +88,17 @@ const MAX_WORKSPACE_BYTES = 512_000
  * (ADR-0016).
  */
 const USAGE_KEY = 'daily-model-usage'
+/** When the board was last reset, in real wall-clock ms, for `requestReset`'s cooldown. */
+const LAST_RESET_KEY = 'last-reset-at'
+/**
+ * The cancel token of each running deployment, by id. Kept off the board so
+ * nothing that reads the board — the snapshot, `get_deployment_history`, the
+ * public MCP server — can hand one out. A settled run keeps its token, so a
+ * cancel that arrives late is told the run already settled rather than that
+ * it does not exist. They all go with a reset; between resets there is one per
+ * approved deployment, which a person had to click for.
+ */
+const CANCEL_TOKENS_KEY = 'deployment-cancel-tokens'
 
 /**
  * The one copy of the workspace.
@@ -117,6 +129,8 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
   private ledger: Set<string> | undefined
   /** Cached between calls, same as the workspace above. */
   private changes: BoardChange[] | undefined
+  /** Cached between calls, same as the workspace above. */
+  private cancelTokens: Record<string, string> | undefined
 
   constructor(ctx: DurableObjectState, env: Cloudflare.Env) {
     super(ctx, env)
@@ -254,12 +268,33 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
    */
   async reset(): Promise<Workspace> {
     const seeded = createWorkspaceSeed()
-    await this.ctx.storage.put({ [STORAGE_KEY]: seeded, [CHANGES_KEY]: [] })
+    await this.ctx.storage.put({
+      [STORAGE_KEY]: seeded,
+      [CHANGES_KEY]: [],
+      [CANCEL_TOKENS_KEY]: {},
+      [LAST_RESET_KEY]: Date.now(),
+    })
     this.workspace = seeded
     this.changes = []
+    this.cancelTokens = {}
     this.ledger = new Set()
     await this.saveLedger()
     return seeded
+  }
+
+  async requestReset(input: { cooldownMs: number }): Promise<ToolResult<Workspace>> {
+    const last = (await this.ctx.storage.get<number>(LAST_RESET_KEY)) ?? 0
+    const wait = last + input.cooldownMs - Date.now()
+    if (input.cooldownMs > 0 && wait > 0) {
+      return {
+        ok: false,
+        error: {
+          code: 'RESET_COOLDOWN',
+          message: `The board was reset moments ago. Try again in ${Math.ceil(wait / 1000)} seconds.`,
+        },
+      }
+    }
+    return { ok: true, data: await this.reset() }
   }
 
   /**
@@ -393,7 +428,14 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
   // interrupted leaves the board showing exactly how far it got.
 
   async startDeployment(input: RunDeploymentInput) {
-    return this.mutate((draft) => startDeployment(draft, input))
+    const started = await this.mutate((draft) => startDeployment(draft, input))
+    if (!started.ok) return started
+    const cancelToken = crypto.randomUUID()
+    await this.saveCancelTokens({
+      ...(await this.loadCancelTokens()),
+      [started.data.deployment.id]: cancelToken,
+    })
+    return { ok: true as const, data: { ...started.data, cancelToken } }
   }
 
   async setDeploymentStage(input: SetDeploymentStageInput) {
@@ -402,6 +444,30 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
 
   async finishDeployment(input: FinishDeploymentInput) {
     return this.mutate((draft) => finishDeployment(draft, input))
+  }
+
+  async cancelDeployment(input: CancelDeploymentInput) {
+    if ((await this.loadCancelTokens())[input.deploymentId] !== input.cancelToken) {
+      return {
+        ok: false as const,
+        error: {
+          code: 'INVALID_INPUT' as const,
+          message: `No running deployment '${input.deploymentId}' that this cancel can stop.`,
+        },
+      }
+    }
+    return this.finishDeployment({ deploymentId: input.deploymentId, status: 'cancelled' })
+  }
+
+  private async loadCancelTokens(): Promise<Record<string, string>> {
+    this.cancelTokens ??=
+      (await this.ctx.storage.get<Record<string, string>>(CANCEL_TOKENS_KEY)) ?? {}
+    return this.cancelTokens
+  }
+
+  private async saveCancelTokens(tokens: Record<string, string>): Promise<void> {
+    await this.ctx.storage.put(CANCEL_TOKENS_KEY, tokens)
+    this.cancelTokens = tokens
   }
 }
 

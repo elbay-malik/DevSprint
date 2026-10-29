@@ -36,6 +36,20 @@ export function resolveDailyTokenCap(configured: string | undefined): number | u
 }
 
 /**
+ * How long after one reset the board refuses the next, from the
+ * `RESET_COOLDOWN_SECONDS` var. Unset or `0` means no cooldown, which is what
+ * the unit suite and the e2e stack want: they reset before every test. The
+ * deployed value is in wrangler.jsonc.
+ */
+export function resolveResetCooldownMs(configured: string | undefined): number {
+  const parsed = Number.parseInt(configured ?? '', 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed * 1000 : 0
+}
+
+/** What a refused reset tells the client to wait, whatever is left of the cooldown. */
+export const RESET_RETRY_AFTER_SECONDS = 30
+
+/**
  * The client this request should be rate-limited as.
  *
  * Cloudflare sets `CF-Connecting-IP` on every request that reaches a Worker,
