@@ -3,6 +3,7 @@ import { createWorkspaceSeed, WORKSPACE_NOW, type Workspace } from '@devsprint/s
 import {
   assignIssue,
   createIssue,
+  MAX_CREATED_ISSUES,
   createReleaseNotes,
   finishDeployment,
   setDeploymentStage,
@@ -115,6 +116,24 @@ describe('createIssue', () => {
       ).code,
     ).toBe('USER_NOT_FOUND')
     expect(workspace.issues).toHaveLength(13)
+  })
+})
+
+describe('createIssue — the day cap', () => {
+  it('refuses a new issue once the day has added MAX_CREATED_ISSUES', () => {
+    const workspace = seed()
+    const input = {
+      title: 'filler',
+      type: 'chore' as const,
+      priority: 'medium' as const,
+      sprintId: null,
+    }
+    for (let i = 0; i < MAX_CREATED_ISSUES; i += 1) expectOk(createIssue(workspace, input))
+
+    const refused = createIssue(workspace, input)
+
+    expect(refused).toMatchObject({ ok: false, error: { code: 'WORKSPACE_FULL' } })
+    expect(workspace.issues).toHaveLength(13 + MAX_CREATED_ISSUES)
   })
 })
 
