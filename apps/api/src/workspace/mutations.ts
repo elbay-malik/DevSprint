@@ -8,15 +8,16 @@
  * write lands on the fixed demo clock and the scripted scenarios stay
  * replayable.
  */
-import type {
-  Deployment,
-  DeploymentStage,
-  Issue,
-  ReleaseNote,
-  StageName,
-  ToolErrorCode,
-  ToolResult,
-  Workspace,
+import {
+  createWorkspaceSeed,
+  type Deployment,
+  type DeploymentStage,
+  type Issue,
+  type ReleaseNote,
+  type StageName,
+  type ToolErrorCode,
+  type ToolResult,
+  type Workspace,
 } from '@devsprint/shared'
 import type {
   AssignIssueData,
@@ -64,10 +65,30 @@ function nextIssueKey(workspace: Workspace): string {
 
 // --- 7. create_issue ----------------------------------------------------------
 
+/**
+ * How many issues a day on the demo board can add to the seed.
+ *
+ * `create_issue` is public and ungated over MCP (ADR-0020), so the board's
+ * byte cap alone let one client fill it in a few minutes, and from then on
+ * *every* write failed for every visitor — status changes and reassignments
+ * included (ADR-0024). Counting issues reaches its limit long
+ * before the byte cap can: 40 issues at the largest body the schemas allow
+ * stay well under it. So a client that floods the board stops new issues
+ * until the reset, and everything else keeps working.
+ */
+export const MAX_CREATED_ISSUES = 40
+const SEED_ISSUE_COUNT = createWorkspaceSeed().issues.length
+
 export function createIssue(
   workspace: Workspace,
   input: CreateIssueInput,
 ): ToolResult<CreateIssueData> {
+  if (workspace.issues.length >= SEED_ISSUE_COUNT + MAX_CREATED_ISSUES) {
+    return fail(
+      'WORKSPACE_FULL',
+      `The demo board already holds ${MAX_CREATED_ISSUES} new issues, which is as many as it takes in a day. Reset it to add more.`,
+    )
+  }
   if (
     input.sprintId !== null &&
     !workspace.sprints.some((sprint) => sprint.id === input.sprintId)

@@ -102,6 +102,27 @@ const LIMITS = {
   query: 200,
 } as const
 
+/**
+ * Text a write stores on the board.
+ *
+ * The length bounds above count characters, but the board cap in the
+ * workspace Durable Object counts the serialized JSON, where a C0 control
+ * character or a lone surrogate becomes a six-character `\uXXXX` escape. Left
+ * in, they make every bound here six times looser than it reads, and a few
+ * public `create_issue` calls fill the board for everyone (ADR-0024). Tab,
+ * newline and carriage return stay: real prose uses them.
+ */
+const DISALLOWED_TEXT = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]|\p{Cs}/u
+
+function storedText(max: number) {
+  return z
+    .string()
+    .max(max)
+    .refine((value) => !DISALLOWED_TEXT.test(value), {
+      message: 'Must not contain control characters or unpaired surrogates.',
+    })
+}
+
 export const listIssuesInputSchema = z.object({
   sprintId: z.string().max(LIMITS.id).optional(),
   status: issueStatusSchema.optional(),
@@ -138,41 +159,41 @@ export const diffReleaseNotesInputSchema = z.object({
 })
 
 export const createIssueInputSchema = z.object({
-  title: z.string().min(1).max(LIMITS.title),
-  description: z.string().max(LIMITS.description).optional(),
+  title: storedText(LIMITS.title).min(1),
+  description: storedText(LIMITS.description).optional(),
   type: issueTypeSchema,
   priority: prioritySchema.default('medium'),
   /** null puts the issue in the backlog. */
-  sprintId: z.string().max(LIMITS.id).nullable().default(null),
-  assigneeId: z.string().max(LIMITS.id).optional(),
+  sprintId: storedText(LIMITS.id).nullable().default(null),
+  assigneeId: storedText(LIMITS.id).optional(),
   points: z.number().int().positive().max(100).optional(),
-  labels: z.array(z.string().max(LIMITS.label)).max(LIMITS.labelCount).optional(),
+  labels: z.array(storedText(LIMITS.label)).max(LIMITS.labelCount).optional(),
 })
 
 export const updateIssueStatusInputSchema = z.object({
   /** Human key, e.g. 'DS-7'. */
-  issueKey: z.string().max(LIMITS.issueKey),
+  issueKey: storedText(LIMITS.issueKey),
   status: issueStatusSchema,
-  comment: z.string().max(LIMITS.comment).optional(),
+  comment: storedText(LIMITS.comment).optional(),
 })
 
 export const assignIssueInputSchema = z.object({
   /** Human key, e.g. 'DS-12'. */
-  issueKey: z.string().max(LIMITS.issueKey),
+  issueKey: storedText(LIMITS.issueKey),
   /** A roster id such as 'u-dana'; null takes the issue off whoever holds it. */
-  assigneeId: z.string().max(LIMITS.id).nullable(),
+  assigneeId: storedText(LIMITS.id).nullable(),
 })
 
 export const createReleaseNotesInputSchema = z.object({
   /** e.g. 'v1.5.0'. */
-  version: z.string().max(LIMITS.version),
-  markdown: z.string().min(1).max(LIMITS.markdown),
-  sprintId: z.string().max(LIMITS.id).optional(),
+  version: storedText(LIMITS.version),
+  markdown: storedText(LIMITS.markdown).min(1),
+  sprintId: storedText(LIMITS.id).optional(),
 })
 
 export const runDeploymentInputSchema = z.object({
   environment: environmentSchema,
-  version: z.string().max(LIMITS.version),
+  version: storedText(LIMITS.version),
   /** Only ever on an explicit request from the user. */
   skipTests: z.boolean().default(false),
 })

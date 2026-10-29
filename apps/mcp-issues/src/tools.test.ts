@@ -97,6 +97,30 @@ describe('registerIssueTools', () => {
     expect(workspace.calls.updateIssueStatus).not.toHaveBeenCalled()
   })
 
+  it('refuses text the board would store as escapes', async () => {
+    // A control character serializes as a six-character `\u0001`, so it let a
+    // few public creates fill the board for everyone (ADR-0024).
+    const { server, registered } = fakeServer()
+    const workspace = fakeWorkspace()
+    registerIssueTools(server, workspace.api)
+
+    const controls = await registered
+      .get('create_issue')!
+      .handler({ title: '\u0001'.repeat(200), type: 'bug' })
+    const surrogate = await registered
+      .get('create_issue')!
+      .handler({ title: 'ok', description: 'half a pair \uD800', type: 'bug' })
+    const prose = await registered
+      .get('create_issue')!
+      .handler({ title: 'Fix it', description: 'line one\n\tline two 🚀', type: 'bug' })
+
+    expect(parse(controls)).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } })
+    expect(parse(surrogate)).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } })
+    // Tabs, newlines and whole emoji are ordinary text and still go through.
+    expect(workspace.calls.createIssue).toHaveBeenCalledTimes(1)
+    expect(parse(prose).ok).toBe(true)
+  })
+
   it('applies the schema defaults before the call', async () => {
     const { server, registered } = fakeServer()
     const workspace = fakeWorkspace()
