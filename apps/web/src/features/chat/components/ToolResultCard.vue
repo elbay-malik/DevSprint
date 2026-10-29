@@ -85,6 +85,7 @@ const card = computed(() => {
   <DeploymentProgressCard
     v-else-if="card === 'deployment' && deploymentData"
     :deployment="deploymentData.deployment"
+    :cancel-token="deploymentData.cancelToken"
     :live="live"
   />
   <ToolCallChip v-else :part="part" :live="live" />

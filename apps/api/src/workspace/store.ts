@@ -33,6 +33,10 @@ export interface WorkspaceStore {
   /** What each recorded board write changed, mirroring the DO's undo journal. */
   changes(): readonly BoardChange[]
   setChanges(changes: BoardChange[]): void
+  /** Running deployments' cancel tokens, mirroring the DO's. */
+  cancelTokens(): Map<string, string>
+  /** When the board was last reset, real wall-clock ms; 0 before the first. */
+  lastResetAt(): number
   /** Model tokens spent today, mirroring the DO's daily budget (ADR-0016). */
   modelUsage(): DailyModelUsage
   recordModelUsage(tokens: number): DailyModelUsage
@@ -58,13 +62,19 @@ export function createWorkspaceStore(): WorkspaceStore {
   }
   let ledger = new Set<string>()
   let changes: BoardChange[] = []
+  let cancelTokens = new Map<string, string>()
+  let lastResetAt = 0
   return {
     get: () => workspace,
     reset: () => {
       workspace = createWorkspaceSeed()
       ledger = new Set()
       changes = []
+      cancelTokens = new Map()
+      lastResetAt = Date.now()
     },
+    cancelTokens: () => cancelTokens,
+    lastResetAt: () => lastResetAt,
     spentApprovals: () => ledger,
     changes: () => changes,
     setChanges: (next) => {
@@ -102,6 +112,20 @@ export function createLocalWorkspaceApi(store: WorkspaceStore): WorkspaceApi {
       store.reset()
       return Promise.resolve(store.get())
     },
+    requestReset: ({ cooldownMs }) => {
+      const wait = store.lastResetAt() + cooldownMs - Date.now()
+      if (cooldownMs > 0 && wait > 0) {
+        return Promise.resolve({
+          ok: false as const,
+          error: {
+            code: 'RESET_COOLDOWN' as const,
+            message: `The board was reset moments ago. Try again in ${Math.ceil(wait / 1000)} seconds.`,
+          },
+        })
+      }
+      store.reset()
+      return Promise.resolve({ ok: true as const, data: store.get() })
+    },
     listIssues: (input) => Promise.resolve(listIssues(store.get(), input)),
     searchIssues: (input) => Promise.resolve(searchIssues(store.get(), input)),
     getSprintStatus: (input) => Promise.resolve(getSprintStatus(store.get(), input)),
@@ -116,9 +140,27 @@ export function createLocalWorkspaceApi(store: WorkspaceStore): WorkspaceApi {
       return tracked(undoChange(store.get(), changes, input.changeId, at))
     },
     createReleaseNotes: (input) => Promise.resolve(createReleaseNotes(store.get(), input)),
-    startDeployment: (input) => Promise.resolve(startDeployment(store.get(), input)),
+    startDeployment: (input) => {
+      const started = startDeployment(store.get(), input)
+      if (!started.ok) return Promise.resolve(started)
+      const cancelToken = crypto.randomUUID()
+      store.cancelTokens().set(started.data.deployment.id, cancelToken)
+      return Promise.resolve({ ok: true as const, data: { ...started.data, cancelToken } })
+    },
     setDeploymentStage: (input) => Promise.resolve(setDeploymentStage(store.get(), input)),
     finishDeployment: (input) => Promise.resolve(finishDeployment(store.get(), input)),
+    cancelDeployment: ({ deploymentId, cancelToken }) => {
+      if (store.cancelTokens().get(deploymentId) !== cancelToken) {
+        return Promise.resolve({
+          ok: false as const,
+          error: {
+            code: 'INVALID_INPUT' as const,
+            message: `No running deployment '${deploymentId}' that this cancel can stop.`,
+          },
+        })
+      }
+      return Promise.resolve(finishDeployment(store.get(), { deploymentId, status: 'cancelled' }))
+    },
     // The in-memory twin of the DO's daily budget: same contract, no storage,
     // so a test can drive the cap without a Durable Object.
     modelUsage: () => Promise.resolve(store.modelUsage()),

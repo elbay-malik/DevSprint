@@ -136,6 +136,8 @@ export type ToolErrorCode =
    * them all).
    */
   | 'UNDO_CONFLICT'
+  /** A visitor's reset that came too soon after the last one. */
+  | 'RESET_COOLDOWN'
   | 'INVALID_INPUT'
 
 export interface ToolError {

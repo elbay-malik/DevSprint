@@ -45,6 +45,23 @@ describe('runDeployment', () => {
     expect(final.triggeredById).toBe('agent')
   })
 
+  it('carries the cancel token on every frame, so the card can always cancel', async () => {
+    const frames: unknown[] = []
+    for await (const frame of runDeployment({
+      workspace: workspace.api,
+      input: { environment: 'staging', version: 'v1.5.0-rc.1', skipTests: false },
+      durations: FAST,
+    })) {
+      frames.push(frame)
+    }
+
+    const tokens = new Set(
+      frames.map((frame) => (frame as { data?: { cancelToken?: string } }).data?.cancelToken),
+    )
+    expect(tokens.size).toBe(1)
+    expect([...tokens][0]).toEqual(expect.any(String))
+  })
+
   it('reports progress as it goes rather than only at the end', async () => {
     const snapshots = await collect(
       runDeployment({

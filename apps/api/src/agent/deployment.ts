@@ -86,6 +86,17 @@ export async function* runDeployment({
   const deploymentId = started.data.deployment.id
   const sha = started.data.deployment.commitSha
 
+  /**
+   * Every frame carries the run's cancel token, not just the first: the card
+   * redraws from whichever frame is latest, and its Cancel button needs the
+   * token to be heard (ADR-0024).
+   */
+  const { cancelToken } = started.data
+  const withToken = (result: ToolResult<RunDeploymentData>): ToolResult<RunDeploymentData> =>
+    result.ok && cancelToken !== undefined
+      ? { ok: true, data: { ...result.data, cancelToken } }
+      : result
+
   // Read through a call: the signal fires while we await, and a direct check
   // would be narrowed away by the earlier one.
   const cancelled = () => abortSignal?.aborted === true
@@ -172,7 +183,7 @@ export async function* runDeployment({
       if (cancelled()) break stages
 
       const opened = await workspace.setDeploymentStage({ deploymentId, stage, status: 'running' })
-      yield opened
+      yield withToken(opened)
       if (stopped(opened)) break stages
 
       await sleep(durations[stage] ?? 0, abortSignal)
@@ -185,7 +196,7 @@ export async function* runDeployment({
           status: 'running',
           logLine: line,
         })
-        yield logged
+        yield withToken(logged)
         // Cancelling writes the terminal status straight to the workspace, so
         // the next write is what tells us to stop.
         if (stopped(logged)) break stages
@@ -196,14 +207,14 @@ export async function* runDeployment({
         stage,
         status: 'succeeded',
       })
-      yield closed
+      yield withToken(closed)
       if (stopped(closed)) break stages
     }
 
     // How the run ended, however it ended. A consumer still listening sees it;
     // one that has gone away does not, which is why settling never waits on the
     // yield itself.
-    yield await settle(writeFailed ? 'failed' : cancelled() ? 'cancelled' : 'succeeded')
+    yield withToken(await settle(writeFailed ? 'failed' : cancelled() ? 'cancelled' : 'succeeded'))
   } finally {
     abortSignal?.removeEventListener('abort', cancel)
     // The generator can be closed early — the SDK may simply stop consuming it,

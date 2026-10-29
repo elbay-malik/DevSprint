@@ -43,7 +43,7 @@ function stagesWith(map: Partial<Record<StageName, StageStatus>>, logs: string[]
   }))
 }
 
-function mountCard(props: { deployment: Deployment; live?: boolean }) {
+function mountCard(props: { deployment: Deployment; live?: boolean; cancelToken?: string }) {
   return mount(DeploymentProgressCard, { props })
 }
 
@@ -138,23 +138,27 @@ describe('DeploymentProgressCard', () => {
   })
 
   it('offers Cancel only while a live run is going', () => {
-    const running = { deployment: deployment(), live: true }
+    const running = { deployment: deployment(), live: true, cancelToken: 'tok' }
     expect(mountCard(running).find('[data-testid="deployment-cancel"]').exists()).toBe(true)
 
     // Settled: there is nothing left to cancel.
-    const done = { deployment: deployment({ status: 'succeeded' }), live: true }
+    const done = { deployment: deployment({ status: 'succeeded' }), live: true, cancelToken: 'tok' }
     expect(mountCard(done).find('[data-testid="deployment-cancel"]').exists()).toBe(false)
 
     // Replayed from the transcript: the run is long over.
-    const replayed = { deployment: deployment() }
+    const replayed = { deployment: deployment(), cancelToken: 'tok' }
     expect(mountCard(replayed).find('[data-testid="deployment-cancel"]').exists()).toBe(false)
+
+    // No token: the api would refuse the cancel, so the button would lie.
+    const tokenless = { deployment: deployment(), live: true }
+    expect(mountCard(tokenless).find('[data-testid="deployment-cancel"]').exists()).toBe(false)
   })
 
   it('cancels by posting to the api, not by aborting the turn', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('{}'))
     vi.stubGlobal('fetch', fetchMock)
 
-    const wrapper = mountCard({ deployment: deployment(), live: true })
+    const wrapper = mountCard({ deployment: deployment(), live: true, cancelToken: 'tok-1' })
     await wrapper.get('[data-testid="deployment-cancel"]').trigger('click')
 
     // A stopped read of the stream does not reliably abort the Worker's
@@ -163,6 +167,9 @@ describe('DeploymentProgressCard', () => {
 
     expect(url).toContain('/api/deployments/dep-99/cancel')
     expect(init.method).toBe('POST')
+    // The run's token, which is what lets the api tell this visitor's cancel
+    // from anyone else's.
+    expect(JSON.parse(init.body as string)).toEqual({ cancelToken: 'tok-1' })
   })
 
   it('reads a settled run back from the board, not from the message', () => {

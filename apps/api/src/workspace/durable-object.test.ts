@@ -159,19 +159,17 @@ describe('WorkspaceDO — write durability', () => {
 
   it('refuses a write that would push the board past its ceiling', async () => {
     // Field-level bounds stop one huge string; this is the other direction —
-    // many ordinary writes, which the public MCP server's ungated create_issue
-    // makes reachable. Reaching the storage backend's own cliff instead would
-    // take the board down for everyone until a reset.
+    // many ordinary writes. New issues hit their own day cap long before this
+    // (see the hardening tests below), so release notes, the other write that
+    // grows the board, are what reach it. Reaching the storage backend's own
+    // cliff instead would take the board down for everyone until a reset.
     const { stub } = await freshDO()
 
     let full
     for (let i = 0; i < 400; i += 1) {
-      full = await stub.createIssue({
-        title: `filler ${i}`,
-        description: 'x'.repeat(4_000),
-        type: 'chore',
-        priority: 'medium',
-        sprintId: null,
+      full = await stub.createReleaseNotes({
+        version: `v9.${i}.0`,
+        markdown: 'x'.repeat(20_000),
       })
       if (!full.ok) break
     }
@@ -443,5 +441,92 @@ describe('WorkspaceDO — daily model budget', () => {
     await fake.ready()
 
     expect((await second.modelUsage()).tokens).toBe(4_200)
+  })
+})
+
+describe('WorkspaceDO — shared-board hardening (ADR-0024)', () => {
+  it('stops new issues at the day cap, before the byte cap can stop every write', async () => {
+    // The byte cap alone let a few dozen public creates refuse every
+    // write for everyone. Quotes are the costliest text the schemas still allow
+    // (each serializes as two characters), so this is the largest board a
+    // flood can build.
+    const { stub } = await freshDO()
+    const heavy = {
+      title: '"'.repeat(200),
+      description: '"'.repeat(4_000),
+      type: 'chore' as const,
+      priority: 'medium' as const,
+      sprintId: null,
+      labels: Array.from({ length: 10 }, () => '"'.repeat(40)),
+    }
+
+    for (let i = 0; i < 40; i += 1) {
+      expect((await stub.createIssue(heavy)).ok).toBe(true)
+    }
+    const refused = await stub.createIssue(heavy)
+
+    expect(refused.ok === false && refused.error.code).toBe('WORKSPACE_FULL')
+    // Everything else still works for everyone else.
+    const moved = await stub.updateIssueStatus({ issueKey: 'DS-7', status: 'done' })
+    expect(moved.ok).toBe(true)
+  })
+
+  it('refuses a visitor reset inside the cooldown, and allows it after', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-01T09:00:00Z'))
+    const { stub } = await freshDO()
+
+    expect((await stub.requestReset({ cooldownMs: 30_000 })).ok).toBe(true)
+    vi.setSystemTime(new Date('2026-07-01T09:00:10Z'))
+    const early = await stub.requestReset({ cooldownMs: 30_000 })
+    vi.setSystemTime(new Date('2026-07-01T09:00:31Z'))
+    const later = await stub.requestReset({ cooldownMs: 30_000 })
+
+    expect(early.ok === false && early.error.code).toBe('RESET_COOLDOWN')
+    expect(later.ok).toBe(true)
+  })
+
+  it('cancels a run only with its own token, which never reaches the board', async () => {
+    // The board lists every deployment id, so an id alone is public.
+    const fake = fakeDurableObjectState()
+    const first = new WorkspaceDO(fake.ctx, {} as Cloudflare.Env)
+    await fake.ready()
+    const started = await first.startDeployment({
+      environment: 'staging',
+      version: 'v9.9.9',
+      skipTests: false,
+    })
+    if (!started.ok || started.data.cancelToken === undefined) throw new Error('no token')
+    const { cancelToken } = started.data
+    const deploymentId = started.data.deployment.id
+
+    expect(JSON.stringify(await first.snapshot())).not.toContain(cancelToken)
+    const guessed = await first.cancelDeployment({ deploymentId, cancelToken: 'guess' })
+    expect(guessed.ok).toBe(false)
+
+    // The token is in storage, not only this instance's cache.
+    const second = new WorkspaceDO(fake.ctx, {} as Cloudflare.Env)
+    await fake.ready()
+    const cancelled = await second.cancelDeployment({ deploymentId, cancelToken })
+    expect(cancelled.ok && cancelled.data.deployment.status).toBe('cancelled')
+  })
+
+  it('forgets every cancel token on reset, so a stale one cannot stop a new run', async () => {
+    // Ids restart from the seed after a reset, so the next run can reuse one.
+    const { stub } = await freshDO()
+    const input = { environment: 'staging' as const, version: 'v9.9.9', skipTests: false }
+    const before = await stub.startDeployment(input)
+    if (!before.ok || before.data.cancelToken === undefined) throw new Error('no token')
+
+    await stub.reset()
+    const after = await stub.startDeployment(input)
+    if (!after.ok) throw new Error('did not start')
+
+    expect(after.data.deployment.id).toBe(before.data.deployment.id)
+    const stale = await stub.cancelDeployment({
+      deploymentId: after.data.deployment.id,
+      cancelToken: before.data.cancelToken,
+    })
+    expect(stale.ok).toBe(false)
   })
 })
