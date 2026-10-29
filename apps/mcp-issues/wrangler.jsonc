@@ -21,9 +21,11 @@
   // same class cross-script so both Workers see one board. Locally that means
   // `devsprint-api` must be running too — `pnpm dev` starts both.
   // Per-IP throttle on the public /mcp endpoint (ADR-0020). 30 a minute is
-  // several times what an MCP host uses in a session, and makes filling the
-  // board to its size cap a matter of tens of minutes per IP, not seconds. The
-  // in-app agent comes in through the `Internal` entrypoint and is not counted.
+  // several times what an MCP host uses in a session. It slows a flood rather
+  // than stopping one: what keeps the board usable is the day's cap on new
+  // issues (workspace/mutations.ts) and refusing JSON-RPC batches, which would
+  // otherwise carry many calls on one token (src/index.ts). The in-app agent
+  // comes in through the `Internal` entrypoint and is not counted.
   "ratelimits": [
     { "name": "MCP_RATE_LIMIT", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } },
   ],

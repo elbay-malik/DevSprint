@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { WorkerEntrypoint } from 'cloudflare:workers'
+import { refuseBatch } from './batch'
 import { refuseIfThrottled } from './limit'
 import { registerIssueTools } from './tools'
 import { workspaceOf } from './workspace'
@@ -20,7 +21,7 @@ import { workspaceOf } from './workspace'
  * those two ideas apart is what stops this server growing session state it does
  * not need.
  */
-async function serve(request: Request, env: Env): Promise<Response> {
+async function serve(request: Request, env: Env, parsedBody?: unknown): Promise<Response> {
   const url = new URL(request.url)
 
   if (url.pathname === '/health') {
@@ -37,17 +38,22 @@ async function serve(request: Request, env: Env): Promise<Response> {
   // isolate without shared session state.
   const transport = new WebStandardStreamableHTTPServerTransport()
   await server.connect(transport)
-  return await transport.handleRequest(request)
+  return await transport.handleRequest(
+    request,
+    parsedBody === undefined ? undefined : { parsedBody },
+  )
 }
 
 /** The public endpoint: external MCP hosts, throttled per client IP (ADR-0020). */
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    if (new URL(request.url).pathname === '/mcp') {
-      const refused = await refuseIfThrottled(request, env.MCP_RATE_LIMIT)
-      if (refused) return refused
-    }
-    return await serve(request, env)
+    if (new URL(request.url).pathname !== '/mcp') return await serve(request, env)
+
+    const refused = await refuseIfThrottled(request, env.MCP_RATE_LIMIT)
+    if (refused) return refused
+    const body = await refuseBatch(request)
+    if ('refused' in body) return body.refused
+    return await serve(request, env, body.parsedBody)
   },
 } satisfies ExportedHandler<Env>
 
