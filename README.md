@@ -219,6 +219,12 @@ each one actually found.
 - TypeScript strict everywhere; one shared `tsconfig.base.json`; no project references.
 - Single root ESLint flat config + Prettier; per-package configs are forbidden.
 
+## Acknowledgements
+
+DevSprint was built with Claude, Anthropic's AI model, through
+[Claude Code](https://claude.com/claude-code). Claude worked on every commit in this repository,
+from the first design docs to the code, the tests and this write-up.
+
 ## License
 
 [MIT](LICENSE)
