@@ -185,6 +185,9 @@ request time:
 | `gemini`         | Gemini only; **503** `MODEL_NOT_CONFIGURED` if the Google key is missing        |
 | `mock`           | Scripted local model — no network, no quota                                     |
 
+The 503's message does not name the missing key, so an operator finds that in Workers Logs, as the
+`model-not-configured` event.
+
 Defaults are `openai/gpt-oss-120b` (Groq) and `gemini-3.8-flash` (Gemini), overridable via
 `GROQ_MODEL` / `GEMINI_MODEL`. Groq retired `llama-3.3-70b-versatile`, and gpt-oss beat Groq's other
 tool-calling model on the live scenario evals

@@ -1176,11 +1176,39 @@ describe('POST /api/chat', () => {
     await expect(res.json()).resolves.toMatchObject({ error: { code: 'INVALID_INPUT' } })
   })
 
+  it('does not echo the request back in the refusal for invalid messages', async () => {
+    // The validator quotes what it rejected, and that text is not ours to repeat.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const res = await app.request(
+      '/api/chat',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ id: 'm1', role: 'assistant', parts: [{ type: 'MARKER-from-the-request' }] }],
+        }),
+      },
+      env,
+    )
+
+    expect(res.status).toBe(400)
+    const body: { error: { code: string; message: string } } = await res.json()
+    expect(body.error).toEqual({ code: 'INVALID_INPUT', message: 'Invalid UI messages.' })
+    // The operator still gets a bounded reason.
+    const logged = warn.mock.calls.map(([line]) => String(line))
+    const record = logged.find((line) => line.includes('invalid-ui-messages'))
+    expect(record).toBeDefined()
+    expect((JSON.parse(record!) as { message: string }).message.length).toBeLessThanOrEqual(200)
+    warn.mockRestore()
+  })
+
   it('reports a provider that was requested without its key', async () => {
     const res = await ask('How is the sprint going?', { MODEL_PROVIDER: 'groq' })
     expect(res.status).toBe(503)
     const body: { error: { code: string; message: string } } = await res.json()
     expect(body.error.code).toBe('MODEL_NOT_CONFIGURED')
-    expect(body.error.message).toContain('GROQ_API_KEY')
+    // The name of the missing secret is for the logs, not for whoever asked.
+    expect(body.error.message).toBe('The model is not configured.')
+    expect(JSON.stringify(body)).not.toContain('GROQ_API_KEY')
   })
 })
