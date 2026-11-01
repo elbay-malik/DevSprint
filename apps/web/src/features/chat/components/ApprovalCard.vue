@@ -183,7 +183,11 @@ const summary = computed((): { headline: string; detail?: string } => {
     typeof input.version === 'string' &&
     typeof input.environment === 'string'
   ) {
-    return { headline: `Deploy ${input.version} to ${input.environment}` }
+    // In the headline, so the aria-labels and the decided record say it too. Not
+    // a warning: that means the write cannot land, and a person may have asked for
+    // this in so many words.
+    const skipped = input.skipTests === true ? ', tests skipped' : ''
+    return { headline: `Deploy ${input.version} to ${input.environment}${skipped}` }
   }
   return { headline: `Run ${toolName.value}` }
 })

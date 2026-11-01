@@ -299,6 +299,38 @@ describe('ApprovalCard', () => {
     )
   })
 
+  it('says when a deployment would skip the tests, without warning against it', () => {
+    const input = { environment: 'production', version: 'v1.5.0', skipTests: true }
+    const wrapper = mountCard(requested(input, 'run_deployment'))
+    const headline = 'Deploy v1.5.0 to production, tests skipped'
+
+    expect(wrapper.get('[data-testid="approval-headline"]').text()).toBe(headline)
+    // Screen readers get it from the names built on the headline.
+    expect(wrapper.get('[data-testid="approval-approve"]').attributes('aria-label')).toBe(
+      `Approve: ${headline}`,
+    )
+    // The person may have asked for this, so Approve stays the Ink.
+    expect(isInk(wrapper, 'approval-approve')).toBe(true)
+    expect(wrapper.find('[data-testid="approval-warning"]').exists()).toBe(false)
+
+    // Asked for or not, a decided card keeps saying it.
+    const decided = mountCard({
+      ...requested(input, 'run_deployment'),
+      state: 'approval-responded',
+      approval: { id: 'approval-1', approved: true, signature: 'sig' },
+    })
+    expect(decided.get('[data-testid="approval-headline"]').text()).toBe(headline)
+  })
+
+  it('leaves the deployment headline alone when the tests run', () => {
+    const headline = (input: Record<string, unknown>) =>
+      mountCard(requested(input, 'run_deployment')).get('[data-testid="approval-headline"]').text()
+    expect(headline({ environment: 'staging', version: 'v1.5.0', skipTests: false })).toBe(
+      'Deploy v1.5.0 to staging',
+    )
+    expect(headline({ environment: 'staging', version: 'v1.5.0' })).toBe('Deploy v1.5.0 to staging')
+  })
+
   it('reports a deployment by its own status, not as applied', () => {
     // run_deployment reaches output-available on its first frame and stays
     // there for the whole run, so a plain ok:true would read "applied" while
