@@ -296,7 +296,11 @@ pnpm --filter @devsprint/api dev    # wrangler dev on http://localhost:8787
 `.dev.vars` is gitignored; in production the same names are set with
 `pnpm --filter @devsprint/api exec wrangler secret put GROQ_API_KEY` (and likewise for
 `GOOGLE_GENERATIVE_AI_API_KEY`). CORS is locked to the origin in the `CORS_ORIGIN` var
-(`http://localhost:5173` in dev), and stream responses carry `Content-Encoding: Identity` to defeat
+(`http://localhost:5173` in dev). A POST with any other `Origin` gets a 403 with `FORBIDDEN_ORIGIN`,
+so a dev SPA on a fallback port such as 5174 can't write until the var names it. A request with no
+`Origin`, like the curl below, still passes: the board is public by design (ADR-0014), and this
+only stops other sites using a visitor's browser. Stream responses carry
+`Content-Encoding: Identity` to defeat
 wrangler dev / miniflare buffering ([workers-sdk#8004](https://github.com/cloudflare/workers-sdk/issues/8004)).
 
 Smoke test both routes:

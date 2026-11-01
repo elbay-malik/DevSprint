@@ -5,12 +5,15 @@
  * and its PR previews, which Cloudflare serves at
  * `<alias>-devsprint-web.<subdomain>.workers.dev` (ADR-0019). An entry may hold
  * one `*`, and it matches a run of letters, digits and hyphens only — never a
- * dot — so `https://*-devsprint-web.example.workers.dev` admits every preview
- * alias but not `https://evil.com/-devsprint-web.example.workers.dev` or a
- * host that merely ends with the same suffix.
+ * dot — so `https://pr-*-devsprint-web.example.workers.dev` admits every PR
+ * alias but not `https://evil.com/-devsprint-web.example.workers.dev`, a
+ * host that merely ends with the same suffix, or the hash-named URL Cloudflare
+ * gives every uploaded version.
  *
- * CORS is not this api's access control (the board is public by design,
- * ADR-0014); it only decides which pages a browser lets read the responses.
+ * This decides which pages a browser lets read the responses, and which pages
+ * may POST at all (the refusal in index.ts). Neither is access control: the
+ * board is public by design (ADR-0014), and only a browser can't lie about its
+ * origin. A client that isn't one sends what it likes.
  */
 export function corsOriginMatcher(config: string): (origin: string) => string | null {
   const patterns = config

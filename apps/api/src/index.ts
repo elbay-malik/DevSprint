@@ -116,6 +116,35 @@ app.use('/api/*', (c, next) =>
 )
 
 /**
+ * CORS alone never refuses anything: a hostile page can still send a simple
+ * POST and only loses the right to read the answer, while the write lands and
+ * the chat turn spends tokens against its visitor's IP. Browsers always send
+ * `Origin` on a cross-origin POST, and a page can't forge it, so that is what
+ * this reads. A sandboxed frame sends `Origin: null`, which matches nothing.
+ *
+ * No `Origin` still passes. The board is open by design (ADR-0014), and curl and
+ * scripts aren't browsers, so they could send any header anyway. This takes away
+ * a free ride on visitors' browsers and is not access control.
+ */
+app.use('/api/*', async (c, next) => {
+  const origin = c.req.header('Origin')
+  if (c.req.method === 'POST' && origin && !corsOriginMatcher(c.env.CORS_ORIGIN)(origin)) {
+    console.warn(JSON.stringify({ event: 'foreign-origin-refused', path: c.req.path }))
+    return c.json(
+      {
+        ok: false as const,
+        error: {
+          code: 'FORBIDDEN_ORIGIN',
+          message: 'This origin may not write to the demo board.',
+        },
+      },
+      403,
+    )
+  }
+  await next()
+})
+
+/**
  * A per-IP throttle on undo and cancel, the board writes that skip the model.
  * Before it, only the chat route was limited, so a loop could call them as
  * fast as the network allowed (ADR-0024). The looser per-location accounting
