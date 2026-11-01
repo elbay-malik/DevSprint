@@ -9,6 +9,14 @@ import type { DevSprintTools } from './tools'
  */
 export const MAX_STEPS = 6
 
+/**
+ * Most a single model call may write. Without it a client can ask for an essay
+ * and let the provider's default decide what that costs. Real release-notes
+ * drafts fit well inside it. One at the 20,000-character limit would not, and
+ * its tool call would be cut off and fail.
+ */
+export const MAX_OUTPUT_TOKENS = 4096
+
 export interface CopilotAgentOptions {
   model: LanguageModel
   /** System prompt; the agent's own `instructions`, not a message in the history. */
@@ -33,6 +41,11 @@ export interface CopilotAgentOptions {
    * still been billed for the steps it took.
    */
   onUsage?: (tokens: number) => void
+  /**
+   * Asked after each tool step whether to end the turn early. Used to stop a
+   * turn once the day's budget has run out while it was going (ADR-0016).
+   */
+  shouldStop?: () => boolean | PromiseLike<boolean>
 }
 
 /**
@@ -49,6 +62,7 @@ export function createCopilotAgent({
   approvalSecret,
   tracer,
   onUsage,
+  shouldStop,
 }: CopilotAgentOptions) {
   return new ToolLoopAgent({
     model,
@@ -72,7 +86,7 @@ export function createCopilotAgent({
           },
         }
       : {}),
-    stopWhen: stepCountIs(MAX_STEPS),
+    stopWhen: [stepCountIs(MAX_STEPS), ...(shouldStop ? [shouldStop] : [])],
     // On the final permitted step take the tools away, so the budget is spent
     // writing an answer instead of asking for one more tool. Without this a
     // model that keeps reaching for tools ends the turn on bare tool chips —
@@ -80,6 +94,7 @@ export function createCopilotAgent({
     prepareStep: ({ stepNumber }) => (stepNumber === MAX_STEPS - 1 ? { toolChoice: 'none' } : {}),
     // Low but not zero: the agent picks tools, it does not need to be creative.
     temperature: 0.2,
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
     maxRetries: 1,
   })
 }

@@ -229,6 +229,14 @@ one lives in the Durable Object, which is global and serialises. Two consequence
 - **It rolls over on the real UTC date**, by comparing the stored day to today rather than by being
   cleared on a schedule — so a Worker asleep across midnight wakes with a fresh budget.
 
+Usage is recorded per step, so a turn someone stopped still counts the steps it took, and a turn
+re-reads the cap between steps and ends once it has been reached. Concurrent turns can overshoot by
+about a step each.
+
+Each request is bounded as well: a 256 KB body (413), 4,000 characters in a user message (400), and
+4,096 output tokens per model call. Older history is dropped rather than refused, keeping the latest
+user message and everything after it, then what fits in 20 messages and 32,000 characters.
+
 The scripted mock is exempt, so local dev, CI and e2e spend nothing and are never rationed. Set
 `DAILY_TOKEN_CAP=0` to turn the cap off entirely; a missing or nonsense value falls back to the
 default rather than to a cap of zero.

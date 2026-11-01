@@ -569,6 +569,61 @@ describe('POST /api/chat — spend controls', () => {
     expect(fresh.store.modelUsage().tokens).toBe(1500)
   })
 
+  it('stops a running turn once its spend has used up the budget', async () => {
+    // Every concurrent turn passes the check at the door before any has recorded
+    // spend, so a turn has to look again between steps or the cap does not hold.
+    const chunk = (extra: Record<string, unknown>) =>
+      `data: ${JSON.stringify({ id: '1', object: 'chat.completion.chunk', created: 1, model: 'm', ...extra })}\n\n`
+    const provider = vi.fn(() =>
+      Promise.resolve(
+        new Response(
+          chunk({
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  role: 'assistant',
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: `call-${provider.mock.calls.length}`,
+                      type: 'function',
+                      function: { name: 'get_sprint_status', arguments: '{}' },
+                    },
+                  ],
+                },
+              },
+            ],
+          }) +
+            chunk({
+              choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+              x_groq: { usage: { prompt_tokens: 1200, completion_tokens: 300 } },
+            }) +
+            'data: [DONE]\n\n',
+          { headers: { 'content-type': 'text/event-stream' } },
+        ),
+      ),
+    )
+    vi.stubGlobal('fetch', provider)
+    const fresh = fakeWorkspaceBinding()
+
+    const res = await app.request(
+      '/api/chat',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hello' }] }],
+        }),
+      },
+      { ...env, ...paid, WORKSPACE: fresh.binding, DAILY_TOKEN_CAP: '1000' },
+    )
+    await res.text()
+
+    expect(provider).toHaveBeenCalledTimes(1)
+    expect(fresh.store.modelUsage().tokens).toBe(1500)
+  })
+
   it('does not let Reset buy back budget', async () => {
     // The board and the ledger both mean "start the demo over"; the budget does
     // not, or a visitor could clear the spend cap by pressing a button. Asserted
