@@ -184,6 +184,9 @@ minutes. Use it whenever GitHub Actions cannot run. `--checks` or `--e2e` runs o
 - **It never kills a process it did not start.** If a port the stack needs is taken, it names the
   process holding it and stops.
 - **Logs go to `.ci-local/`.**
+- **Edits under `apps/api` during a run fail the test on screen.** `wrangler dev` restarts the
+  Worker and has no flag to stop it, which ends any stream in flight. The web server runs without
+  HMR, so edits to the SPA's files can't reload a page mid-test.
 
 Prefer it to a bare `CI=1 … test:e2e` on a workstation. Playwright's own readiness probe reuses
 its first connection, so another process on a port it polls can stall it until it times out.
