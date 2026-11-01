@@ -257,6 +257,47 @@ describe('useWorkspaceStore', () => {
   })
 })
 
+describe('changesSinceReset', () => {
+  const answer = (workspace: unknown) =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response(JSON.stringify(workspace), { status: 200 }))),
+    )
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('is zero on the seed, and on a read of a board nobody has touched', async () => {
+    const store = useWorkspaceStore()
+    expect(store.changesSinceReset).toBe(0)
+    answer(createWorkspaceSeed())
+    await store.hydrate()
+    expect(store.changesSinceReset).toBe(0)
+  })
+
+  it('counts each issue moved, handed on or new once, and comes back to zero', async () => {
+    const store = useWorkspaceStore()
+    const board = createWorkspaceSeed()
+    const issue = (key: string) => board.issues.find((candidate) => candidate.key === key)!
+    issue('DS-7').status = 'done'
+    issue('DS-7').assigneeId = 'u-dana'
+    issue('DS-9').assigneeId = null
+    board.issues.push({ ...issue('DS-7'), id: 'issue-new', key: 'DS-99' })
+    answer(board)
+    await store.hydrate()
+    expect(store.changesSinceReset).toBe(3)
+
+    // An undo, or a reset, puts it back.
+    answer(createWorkspaceSeed())
+    await store.hydrate()
+    expect(store.changesSinceReset).toBe(0)
+  })
+})
+
 describe('changedIssueKeys', () => {
   it('names the issues that moved, were handed on or are new, and no others', () => {
     const before = createWorkspaceSeed()

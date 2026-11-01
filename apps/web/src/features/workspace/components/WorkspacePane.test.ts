@@ -132,6 +132,54 @@ describe('WorkspacePane', () => {
     expect(card('DS-9').attributes()).not.toHaveProperty('data-board-change')
   })
 
+  describe('changes since the last reset', () => {
+    const caption = (wrapper: ReturnType<typeof mount>) =>
+      wrapper.find('[data-testid="workspace-changes"]')
+
+    it('says how far a board someone else left has come from the seed', async () => {
+      const board = createWorkspaceSeed()
+      board.issues.find((issue) => issue.key === 'DS-7')!.status = 'done'
+      board.issues.find((issue) => issue.key === 'DS-9')!.status = 'done'
+      fetchMock.mockImplementation(() => Promise.resolve(respond(board)))
+      const wrapper = mount(WorkspacePane)
+      await flushPromises()
+
+      expect(caption(wrapper).text()).toContain('2 changes since the last reset')
+      // The first read replaces the seed, so nothing is marked as having landed.
+      expect(wrapper.find('[data-board-change]').exists()).toBe(false)
+    })
+
+    it('counts one change as one', async () => {
+      const board = createWorkspaceSeed()
+      board.issues.find((issue) => issue.key === 'DS-7')!.status = 'done'
+      fetchMock.mockImplementation(() => Promise.resolve(respond(board)))
+      const wrapper = mount(WorkspacePane)
+      await flushPromises()
+
+      expect(caption(wrapper).text()).toContain('1 change since the last reset')
+    })
+
+    it('says nothing on a board still at the seed', async () => {
+      const wrapper = mount(WorkspacePane)
+      await flushPromises()
+      expect(caption(wrapper).exists()).toBe(false)
+    })
+
+    it('says nothing while the board shown is the seed, whatever the seed holds', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+      fetchMock.mockImplementation(() => Promise.reject(new Error('ECONNREFUSED')))
+      const wrapper = mount(WorkspacePane)
+      await flushPromises()
+      // Not a real state: it shows the guard is on the source, not only the count.
+      const { useWorkspaceStore } = await import('@/stores/workspace')
+      const store = useWorkspaceStore()
+      store.workspace.issues.find((issue) => issue.key === 'DS-7')!.status = 'done'
+      await flushPromises()
+      expect(store.changesSinceReset).toBe(1)
+      expect(caption(wrapper).exists()).toBe(false)
+    })
+  })
+
   it('does not re-read while a chat turn is streaming', async () => {
     mount(WorkspacePane)
     await flushPromises()

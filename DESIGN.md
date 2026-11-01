@@ -423,7 +423,10 @@ decision or a result lives.
   30s, with the exact time in its title, so "Offline · Updated 3 min ago" says how old it is. The board is re-read when a
   turn settles and when the reader returns to the tab (window focus, or the page turning visible),
   at most once every 5s and never while a turn streams, through the same read that marks a changed
-  card. It does not poll.
+  card. It does not poll. "Updated" says when this tab read the board, not when anyone changed it, so
+  on a Worker read that differs from the seed one more 12px Graphite caption follows: "· 3 changes
+  since the last reset", counting each issue that is new or whose status or assignee differs. It
+  says nothing at zero or on the seed.
 - **Pending move (board card):** while an approval card asks to change an issue's status, its
   board card swaps its hairline for a 1px dashed `--ring` outline drawn inside its edge (offset
   -1px), so it keeps its footprint and aligns with the column heading, and takes a 12px medium

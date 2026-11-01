@@ -42,6 +42,18 @@ const updated = computed(() =>
 )
 
 /**
+ * "Updated" says when this tab read the board, not when anyone changed it, so a
+ * visitor arriving on a board someone left half closed would see a fresh-looking
+ * time over a half-closed board. A seed read says nothing, since the seed is what
+ * it is being compared with, and nor does a board still at the seed.
+ */
+const changesLabel = computed(() => {
+  const count = store.changesSinceReset
+  if (store.source !== 'api' || count === 0) return undefined
+  return `${count} ${count === 1 ? 'change' : 'changes'} since the last reset`
+})
+
+/**
  * The backlog sits under the sprint's columns, and a full Done column pushes it
  * out of view. Its count rides on the rule above the board, and the jump moves
  * focus to its heading, which scrolls whichever container holds it.
@@ -97,6 +109,13 @@ watch(
         >
           {{ updated.label }}
         </time>
+        <span
+          v-if="changesLabel"
+          data-testid="workspace-changes"
+          class="text-muted-foreground text-xs tabular-nums"
+        >
+          <span aria-hidden="true">· </span>{{ changesLabel }}
+        </span>
       </div>
       <p class="text-muted-foreground text-sm">{{ store.activeSprint?.goal }}</p>
     </header>
