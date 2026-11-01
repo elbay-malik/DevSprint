@@ -31,6 +31,9 @@ its answers its own way, and may take a slightly different route than described 
 The board is shared by every visitor and resets itself at midnight UTC. **Reset board** in the
 header restores it at any time, once you confirm it for everyone.
 
+Messages go to third-party AI providers (Groq, Google Gemini) and may be logged. Don't enter
+personal information.
+
 ## How it works
 
 ```mermaid

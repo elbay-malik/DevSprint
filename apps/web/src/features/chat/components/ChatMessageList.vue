@@ -463,6 +463,10 @@ watch(lastUndo, (undo) => {
       </div>
       <div class="text-muted-foreground flex flex-col gap-1 text-xs text-pretty">
         <p>Every visitor shares this board. It resets at 00:00 UTC.</p>
+        <p data-testid="chat-privacy">
+          Messages go to third-party AI providers (Groq, Google Gemini) and may be logged. Don’t
+          enter personal information.
+        </p>
         <!-- Product chrome, not model text, so ADR-0022's no-links rule is not
              in play; a copy suits an address meant for an MCP client anyway. -->
         <!-- Copy rides on the sentence, and the address gets a line of its own:

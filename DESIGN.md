@@ -296,8 +296,9 @@ the copilot follows, divided by a hairline, with a full screen of its own.
   controls need the width. The user's bubble aligns to the end and the assistant's to the start.
 - **First run:** the empty transcript is the product's help. One 14px Graphite line says what to
   ask, then a labelled group ("Suggested requests") of five suggestion chips, wrapping, and then
-  two 12px Graphite lines: "Every visitor shares this board. It resets at 00:00 UTC." and "Any
-  MCP client can work on it too:" with a ghost Copy beside it, then the public MCP endpoint on a
+  12px Graphite lines: "Every visitor shares this board. It resets at 00:00 UTC.", then "Messages
+  go to third-party AI providers (Groq, Google Gemini) and may be logged. Don’t enter personal
+  information.", then "Any MCP client can work on it too:" with a ghost Copy beside it, then the public MCP endpoint on a
   line of its own, in mono and the text colour (the live address alone nearly fills the 440px
   column, so a Copy after it always wrapped onto a line by itself). Copy reads "Copied" for 2s;
   its accessible name stays "Copy MCP address", and the status line says "MCP address copied.",
