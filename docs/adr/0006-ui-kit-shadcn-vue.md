@@ -58,3 +58,12 @@ chat. The rest of the stack stands: shadcn-vue on Reka UI v2 with Tailwind v4, a
 Correction to the note above: chat text now renders a safe markdown subset (ADR-0022). It is our
 own small parser, rendered by interpolation, with no `v-html` and no links. No streaming-markdown
 library was adopted.
+
+## Status note — 2026-11-01
+
+`shadcn-vue` is no longer a dependency. The only thing the app took from the package was its
+`tailwind.css`, and the CLI behind it pulled a second MCP SDK and an older zod into the production
+tree. That stylesheet now lives at `apps/web/src/assets/shadcn-tailwind.css`, vendored like the
+components, and the built CSS did not change. `apps/web/components.json` stays, so the CLI still
+works through `pnpm dlx shadcn-vue@2.7.4 add <component>`. Check the diff after running it, because
+it may add the package import back to `main.css`.

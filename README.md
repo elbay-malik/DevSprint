@@ -216,6 +216,7 @@ each one actually found.
 
 - Per-phase [Conventional Commits](https://www.conventionalcommits.org/); readable history is part of the portfolio.
 - Dependency versions are pinned exactly in the `pnpm-workspace.yaml` default catalog (`catalog:` protocol); the AI SDK stays on the v6 line (`ai-v6` dist-tag) — npm `latest` is v7.
+- shadcn-vue components are vendored, and the package is not a dependency. Add one with `pnpm dlx shadcn-vue@2.7.4 add <component>` from `apps/web`, then check the diff ([ADR-0006](docs/adr/0006-ui-kit-shadcn-vue.md)).
 - TypeScript strict everywhere; one shared `tsconfig.base.json`; no project references.
 - Single root ESLint flat config + Prettier; per-package configs are forbidden.
 
