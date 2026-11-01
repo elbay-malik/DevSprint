@@ -87,6 +87,27 @@ describe('approvalOutcome', () => {
     )
   })
 
+  it('does not call a write not applied when its outcome is unknown', () => {
+    // INTERNAL can mean the write landed and only the reply was lost.
+    const outcome = approvalOutcome(
+      {
+        state: 'output-available',
+        approval: { approved: true },
+        output: { ok: false, error: { code: 'INTERNAL', message: 'The call failed.' } },
+      },
+      '14:02',
+    )
+    expect(outcome).toEqual({
+      failed: true,
+      mark: '✕',
+      text: 'Approved by you at 14:02 — outcome unknown',
+      code: 'INTERNAL',
+    })
+    expect(approvalOutcomeLine(outcome!)).toBe(
+      'Approved by you at 14:02 — outcome unknown (INTERNAL).',
+    )
+  })
+
   it('keeps the reason for a call that threw, since no ErrorCard follows it', () => {
     const outcome = approvalOutcome({
       state: 'output-error',
