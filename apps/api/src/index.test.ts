@@ -955,9 +955,14 @@ describe('POST /api/chat — spend controls', () => {
       await landed(() => fresh.store.modelUsage().tokens - 5_000)
       expect(fresh.store.modelUsage().tokens).toBe(6_500)
 
+      // Past what a share would allow, because no shared count is building up.
+      const again = await askAs(undefined, { ...SHARE, WORKSPACE: fresh.binding })
+      expect(again.limit).toBeNull()
+      await landed(() => fresh.store.modelUsage().tokens - 6_500)
+
       const capped = await askAs(undefined, {
         ...SHARE,
-        DAILY_TOKEN_CAP: '6000',
+        DAILY_TOKEN_CAP: '8000',
         WORKSPACE: fresh.binding,
       })
       expect(capped.limit).toBe('budget')
