@@ -132,65 +132,99 @@ const denyVariant = computed(() =>
   props.lead && warning.value !== undefined ? 'default' : 'outline',
 )
 
+/** Free text a write would store, if there is any to show. */
+function storedText(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined
+}
+
+/** A new issue's other fields, as the board names them: "@dana · high · 3 pts · billing". */
+function newIssueMeta(input: Record<string, unknown>): string | undefined {
+  const { assigneeId, priority, points, labels } = input
+  const parts = [
+    ...(typeof assigneeId === 'string' ? [assigneeLabel(workspace.users, assigneeId)] : []),
+    ...(typeof priority === 'string' ? [priority] : []),
+    ...(typeof points === 'number' ? [`${points} ${points === 1 ? 'pt' : 'pts'}`] : []),
+    ...(Array.isArray(labels) && labels.length > 0 ? [labels.join(', ')] : []),
+  ]
+  return parts.length > 0 ? parts.join(' · ') : undefined
+}
+
 /**
  * What the change means, not what it looks like as JSON. The workspace pane
  * already holds the board, so the card can name the issue being moved and where
- * it is moving from.
+ * it is moving from. `meta` and `body` are what else the write would store, up
+ * front, because this card is the control against a prompt injection (ADR-0016)
+ * and nobody can be asked to open the raw arguments of every card in a batch.
  */
-const summary = computed((): { headline: string; detail?: string } => {
-  const input = props.part.input as Record<string, unknown> | undefined
-  if (input === undefined) return { headline: 'Preparing the change…' }
+const summary = computed(
+  (): { headline: string; detail?: string; meta?: string; body?: string } => {
+    const input = props.part.input as Record<string, unknown> | undefined
+    if (input === undefined) return { headline: 'Preparing the change…' }
 
-  if (toolName.value === 'update_issue_status' && typeof input.issueKey === 'string') {
-    const issue = targetIssue.value
-    // While pending, the "from" status is the board's. Once decided it is the one
-    // captured at the decision: read live, the board catching up an executed write
-    // would rewrite this record into a nonsense "done → done".
-    const fromStatus = decided.value ? record.value?.from : issue?.status
-    const from = fromStatus === undefined ? '' : `${statusLabel(fromStatus)} → `
-    // Named as the board spells it, so the card and the board agree on "DS-7".
-    return {
-      headline: `${issue?.key ?? input.issueKey}: ${from}${statusLabel(input.status)}`,
-      ...(issue ? { detail: issue.title } : {}),
+    if (toolName.value === 'update_issue_status' && typeof input.issueKey === 'string') {
+      const issue = targetIssue.value
+      // While pending, the "from" status is the board's. Once decided it is the one
+      // captured at the decision: read live, the board catching up an executed write
+      // would rewrite this record into a nonsense "done → done".
+      const fromStatus = decided.value ? record.value?.from : issue?.status
+      const from = fromStatus === undefined ? '' : `${statusLabel(fromStatus)} → `
+      // Named as the board spells it, so the card and the board agree on "DS-7".
+      const comment = storedText(input.comment)
+      return {
+        headline: `${issue?.key ?? input.issueKey}: ${from}${statusLabel(input.status)}`,
+        ...(issue ? { detail: issue.title } : {}),
+        ...(comment === undefined ? {} : { body: comment }),
+      }
     }
-  }
-  if (toolName.value === 'assign_issue' && typeof input.issueKey === 'string') {
-    const issue = targetIssue.value
-    // The same rule as a status change: the board's assignee while pending,
-    // the one captured at the decision after, so the record never reads
-    // "@dana → @dana" once the board catches up. Named by @handle, as the
-    // board's cards name people; nobody is "Unassigned".
-    const fromId = decided.value ? record.value?.fromAssignee : issue?.assigneeId
-    const users = workspace.users
-    const from = fromId === undefined ? '' : `${assigneeLabel(users, fromId)} → `
-    const to = requestedAssignee.value
-    const toLabel = to === undefined ? String(input.assigneeId) : assigneeLabel(users, to)
-    return {
-      headline: `${issue?.key ?? input.issueKey}: ${from}${toLabel}`,
-      ...(issue ? { detail: issue.title } : {}),
+    if (toolName.value === 'assign_issue' && typeof input.issueKey === 'string') {
+      const issue = targetIssue.value
+      // The same rule as a status change: the board's assignee while pending,
+      // the one captured at the decision after, so the record never reads
+      // "@dana → @dana" once the board catches up. Named by @handle, as the
+      // board's cards name people; nobody is "Unassigned".
+      const fromId = decided.value ? record.value?.fromAssignee : issue?.assigneeId
+      const users = workspace.users
+      const from = fromId === undefined ? '' : `${assigneeLabel(users, fromId)} → `
+      const to = requestedAssignee.value
+      const toLabel = to === undefined ? String(input.assigneeId) : assigneeLabel(users, to)
+      return {
+        headline: `${issue?.key ?? input.issueKey}: ${from}${toLabel}`,
+        ...(issue ? { detail: issue.title } : {}),
+      }
     }
-  }
-  if (toolName.value === 'create_issue' && typeof input.title === 'string') {
-    const where = typeof input.sprintId === 'string' ? input.sprintId : 'the backlog'
-    const type = typeof input.type === 'string' ? input.type : 'issue'
-    return { headline: `New ${type} in ${where}`, detail: input.title }
-  }
-  if (toolName.value === 'create_release_notes' && typeof input.version === 'string') {
-    return { headline: `Save ${input.version} release notes as a draft` }
-  }
-  if (
-    toolName.value === 'run_deployment' &&
-    typeof input.version === 'string' &&
-    typeof input.environment === 'string'
-  ) {
-    // In the headline, so the aria-labels and the decided record say it too. Not
-    // a warning: that means the write cannot land, and a person may have asked for
-    // this in so many words.
-    const skipped = input.skipTests === true ? ', tests skipped' : ''
-    return { headline: `Deploy ${input.version} to ${input.environment}${skipped}` }
-  }
-  return { headline: `Run ${toolName.value}` }
-})
+    if (toolName.value === 'create_issue' && typeof input.title === 'string') {
+      const where = typeof input.sprintId === 'string' ? input.sprintId : 'the backlog'
+      const type = typeof input.type === 'string' ? input.type : 'issue'
+      const meta = newIssueMeta(input)
+      const description = storedText(input.description)
+      return {
+        headline: `New ${type} in ${where}`,
+        detail: input.title,
+        ...(meta === undefined ? {} : { meta }),
+        ...(description === undefined ? {} : { body: description }),
+      }
+    }
+    if (toolName.value === 'create_release_notes' && typeof input.version === 'string') {
+      const markdown = storedText(input.markdown)
+      return {
+        headline: `Save ${input.version} release notes as a draft`,
+        ...(markdown === undefined ? {} : { body: markdown }),
+      }
+    }
+    if (
+      toolName.value === 'run_deployment' &&
+      typeof input.version === 'string' &&
+      typeof input.environment === 'string'
+    ) {
+      // In the headline, so the aria-labels and the decided record say it too. Not
+      // a warning: that means the write cannot land, and a person may have asked for
+      // this in so many words.
+      const skipped = input.skipTests === true ? ', tests skipped' : ''
+      return { headline: `Deploy ${input.version} to ${input.environment}${skipped}` }
+    }
+    return { headline: `Run ${toolName.value}` }
+  },
+)
 
 const argumentsJson = computed(() => JSON.stringify(props.part.input ?? {}, null, 2))
 
@@ -264,6 +298,9 @@ function respond(approved: boolean) {
         {{ summary.headline }}
       </p>
       <p v-if="summary.detail" class="text-muted-foreground">{{ summary.detail }}</p>
+      <p v-if="summary.meta" data-testid="approval-meta" class="text-muted-foreground">
+        {{ summary.meta }}
+      </p>
       <p v-if="warning" :id="warningId" data-testid="approval-warning" class="text-destructive">
         <template v-for="(piece, index) in warning" :key="index">
           <span v-if="typeof piece === 'string'">{{ piece }}</span>
@@ -271,6 +308,22 @@ function respond(approved: boolean) {
         </template>
       </p>
       <p data-testid="approval-tool" class="text-muted-foreground font-mono">{{ toolName }}</p>
+    </div>
+
+    <!-- What the write would store, exactly as it would store it: interpolated
+         and never rendered as markdown, so it cannot dress itself up as the card.
+         All of it is here to scroll through, since a clamp would let injected text
+         sit below the cut. It scrolls, so it needs a tab stop (axe's
+         scrollable-region-focusable), and a tab stop needs a name. -->
+    <div
+      v-if="summary.body"
+      role="group"
+      tabindex="0"
+      data-testid="approval-body"
+      :aria-label="`Full text: ${summary.headline}`"
+      class="text-muted-foreground max-h-48 overflow-auto rounded-sm border px-2 py-1 wrap-anywhere whitespace-pre-wrap"
+    >
+      {{ summary.body }}
     </div>
 
     <details>
