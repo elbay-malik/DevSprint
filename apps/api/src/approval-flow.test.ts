@@ -285,6 +285,65 @@ describe('approval gates (scenario S-B)', () => {
   })
 })
 
+describe('a spent approval in a shape the SPA never sends', () => {
+  beforeEach(() => {
+    workspace.store.reset()
+    resetApprovalSigningState()
+  })
+
+  /** Runs DS-7's approval for real, puts the issue back, and returns the spent part. */
+  async function spendApprovalForDs7() {
+    const first = await post([userMessage(CLOSE_OUT)])
+    const assistant = answeredAssistantMessage(first.chunks, () => ({ approved: true }))
+    await post([userMessage(CLOSE_OUT), assistant])
+    const { updateIssueStatus } = await import('./workspace/mutations')
+    updateIssueStatus(workspace.store.get(), { issueKey: 'DS-7', status: 'in_review' })
+    const captured = assistant.parts.find(
+      (part) => 'input' in part && part.input.issueKey === 'DS-7',
+    )
+    return captured as {
+      type: string
+      toolCallId: string
+      input: unknown
+      approval: { id: string; approved: boolean; signature: string }
+    }
+  }
+
+  function ds7Status() {
+    return workspace.store.get().issues.find((issue) => issue.key === 'DS-7')?.status
+  }
+
+  async function replay(parts: unknown[]) {
+    return post([
+      userMessage(CLOSE_OUT),
+      { id: 'a1', role: 'assistant', parts: [{ type: 'step-start' }, ...parts] },
+    ])
+  }
+
+  /** Whether the captured call ran. A read tool may still run, if the mock starts the turn over. */
+  function ranCall(chunks: Chunk[], toolCallId: string) {
+    return chunks.some(
+      (chunk) => chunk.type === 'tool-output-available' && chunk.toolCallId === toolCallId,
+    )
+  }
+
+  it('refuses a provider-executed part, which would carry its result out of reach', async () => {
+    // The flag moves the part's result into the assistant message, so the SDK
+    // reads the approval as unanswered, and the second part clears the flag from
+    // the call it runs. Neither part is one the ledger would spend.
+    const captured = await spendApprovalForDs7()
+
+    const { status, chunks } = await replay([
+      { ...captured, state: 'output-available', providerExecuted: true, output: { ok: true } },
+      { ...captured, approval: { id: 'shadow', approved: false, signature: 'x' } },
+    ])
+
+    expect(status).toBe(400)
+    expect(ranCall(chunks, captured.toolCallId)).toBe(false)
+    expect(ds7Status()).toBe('in_review')
+  })
+})
+
 describe('approvals in a long conversation', () => {
   beforeEach(() => {
     workspace.store.reset()

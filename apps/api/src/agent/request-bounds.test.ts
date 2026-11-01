@@ -41,6 +41,21 @@ describe('chatRequestRefusal', () => {
     expect(chatRequestRefusal([user({ type: 'data-x', data: {} })])).toContain('only hold text')
   })
 
+  it('refuses a provider-executed tool part, and only a true flag', () => {
+    const part = (flag: unknown) => ({
+      type: 'tool-update_issue_status',
+      toolCallId: 'c1',
+      state: 'output-available',
+      input: {},
+      output: {},
+      providerExecuted: flag,
+    })
+    const assistant = (flag: unknown) => ({ id: 'a1', role: 'assistant', parts: [part(flag)] })
+
+    expect(chatRequestRefusal([user(text('hi')), assistant(true)])).toContain('Provider-executed')
+    expect(chatRequestRefusal([user(text('hi')), assistant(false)])).toBeUndefined()
+  })
+
   it('accepts the shape of a real SPA transcript', () => {
     const assistant = {
       id: 'a1',

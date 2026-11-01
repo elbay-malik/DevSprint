@@ -26,15 +26,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  *
  * A system message would give the client the system prompt's authority, and the
  * SDK's schema lets one through. A non-text user part is only ever a file, which
- * the Worker would fetch from a URL the client chose. The SPA sends text and
- * nothing else, so neither costs it anything.
+ * the Worker would fetch from a URL the client chose. A provider-executed tool
+ * part has its result written into the assistant message, where the SDK does not
+ * look for it, and this agent has no such tools. The SPA sends none of these, so
+ * refusing them costs it nothing.
  */
 export function chatRequestRefusal(messages: unknown[]): string | undefined {
   for (const message of messages) {
     if (!isRecord(message)) continue
     if (message.role === 'system') return 'System messages are not accepted.'
-    if (message.role !== 'user' || !Array.isArray(message.parts)) continue
+    if (!Array.isArray(message.parts)) continue
     for (const part of message.parts as unknown[]) {
+      if (isRecord(part) && part.providerExecuted === true) {
+        return 'Provider-executed tool parts are not accepted.'
+      }
+      if (message.role !== 'user') continue
       if (!isRecord(part) || part.type !== 'text') {
         return 'A user message can only hold text.'
       }
