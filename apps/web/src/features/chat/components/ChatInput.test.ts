@@ -18,6 +18,9 @@ vi.mock('../composables/useDevSprintChat', () => ({
   useDevSprintChat: () => chat,
 }))
 
+const toastError = vi.hoisted(() => vi.fn())
+vi.mock('vue-sonner', () => ({ toast: { error: toastError } }))
+
 const { default: ChatInput } = await import('./ChatInput.vue')
 
 /** The last assistant turn, holding `count` open approval cards. */
@@ -41,10 +44,36 @@ describe('ChatInput', () => {
   beforeEach(() => {
     chat.messages = []
     chat.status = 'ready'
+    chat.error = undefined
     sendMessage.mockClear()
+    toastError.mockClear()
   })
   afterEach(() => {
     document.body.innerHTML = ''
+  })
+
+  it('toasts a refused request in words, not the raw body the SDK hands over', async () => {
+    mount(ChatInput)
+
+    chat.error = new Error(
+      JSON.stringify({ error: { code: 'MODEL_NOT_CONFIGURED', message: 'needs GROQ_API_KEY' } }),
+    )
+    await nextTick()
+
+    expect(toastError).toHaveBeenCalledWith("The copilot couldn't reply", {
+      description: 'The copilot’s model isn’t available right now. The board still works.',
+    })
+  })
+
+  it('toasts an error from inside the stream as the api wrote it', async () => {
+    mount(ChatInput)
+
+    chat.error = new Error('The model quota is exhausted for now. Try again in a minute.')
+    await nextTick()
+
+    expect(toastError).toHaveBeenCalledWith("The copilot couldn't reply", {
+      description: 'The model quota is exhausted for now. Try again in a minute.',
+    })
   })
 
   it('stops at the length the api accepts', () => {

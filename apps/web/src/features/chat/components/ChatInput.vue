@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useDevSprintChat } from '../composables/useDevSprintChat'
 import { pendingApprovalCount } from '../lib/approvals'
+import { chatErrorDescription } from '../lib/error-copy'
 import { promptHistory, stepHistory, type HistoryStep } from '../lib/prompt-history'
 
 const chat = useDevSprintChat()
@@ -64,7 +65,7 @@ watch(
   (error) => {
     if (error) {
       toast.error("The copilot couldn't reply", {
-        description: error.message || 'Check your connection, then send your message again.',
+        description: chatErrorDescription(error),
       })
       chat.clearError()
     }
