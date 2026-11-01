@@ -157,3 +157,46 @@ assistant parts because Gemini reads its thought signature back from there. Forg
 possible: the transcript is client-held, they mislead only that client's own turn, and they cannot
 execute a write. A text-only message can still ask for an essay, so using the demo as a free model
 is made smaller rather than impossible.
+
+## Status note — 2026-11-02
+
+The owner approved a per-client daily token share on 2026-11-01, and it reverses one line of the
+reasoning above: that per-IP accounting in the Durable Object "would funnel every request through one
+object to answer a question that does not need to be exact."
+
+That line stays right about throttling requests, and the limiter is unchanged. It is wrong about
+spend. At ADR-0021's 2,000 tokens a turn, one address at 60 turns a minute spends the day's 100,000
+tokens in about a minute, and every other visitor is then told the budget is gone until midnight. A
+tighter limiter does not fix that, since 20 a minute is still about 40,000 tokens a minute, and the
+binding only takes a period of 10 or 60 seconds, so a longer window is not available. How much one
+client has spent is an accounting question, which the binding disclaims and the object can answer. It
+is not a new funnel either: a turn already reads the object for the cap and the board, and the share
+is one more key on those same calls.
+
+- **The share is 25,000 tokens a UTC day,** about 12 turns at ADR-0021's figure, from
+  `CLIENT_DAILY_TOKEN_SHARE`. Unset means the default, and `0` or nonsense turns it off. It and the cap
+  switch off independently.
+- **The client is the rate-limit key,** so an IPv6 client is its /64. The object stores a truncated
+  SHA-256 of that key and the day, never the key. That keeps addresses out of a storage dump and a
+  log line. It is not anonymisation: anyone holding the map could hash every IPv4 address for the day
+  and compare.
+- **It follows the cap's rules.** `reset()` does not clear it, because a share a visitor can clear by
+  pressing Reset is not a share. A new day ignores the old map, the next write replaces it, and the
+  midnight alarm deletes it if no write comes.
+- **The map holds at most 2,000 clients.** When it is full the lowest spender goes, because eviction
+  hands a client a new share and the entries worth keeping are the ones near their limit.
+- **It is checked where the cap is,** before approvals are spent and again between steps. A refused
+  turn is a readable turn in its own words with `X-DevSprint-Limit: client-budget`, in a step of its
+  own so it can't start the SPA's resend. When the day's cap is also gone, the cap's message wins.
+- **A request with no client key has no share,** rather than one share between all such requests, the
+  policy in ADR-0020. The day's cap still applies to it. The mock stays exempt.
+
+What it does not do:
+
+- **It is check-then-record.** A turn is checked, then spends, then records, so concurrent turns from
+  one client can each pass the check. Overshoot of about one step per concurrent turn remains, on the
+  share as on the cap. Reserving tokens up front stays rejected for the reason above.
+- **It bounds one key, not one person.** Four clients with their own addresses can still spend the
+  whole day between them, and a host holding a /48 has many /64s.
+- **Several visitors behind one NAT share one share,** so an office can run out early. The message
+  says "this connection" for that reason.
