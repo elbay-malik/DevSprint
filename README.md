@@ -1,6 +1,6 @@
 # DevSprint Copilot
 
-[![CI](https://github.com/EleoXDA/DevSprint/actions/workflows/ci.yml/badge.svg)](https://github.com/EleoXDA/DevSprint/actions/workflows/ci.yml)
+[![CI](https://github.com/elbay-malik/DevSprint/actions/workflows/ci.yml/badge.svg)](https://github.com/elbay-malik/DevSprint/actions/workflows/ci.yml)
 
 An AI copilot for a sprint board, built to show how an agent can be **useful without being trusted**:
 
@@ -124,7 +124,7 @@ tests are checked as well as run:
 ### Getting started
 
 ```sh
-git clone git@github.com:EleoXDA/DevSprint.git
+git clone git@github.com:elbay-malik/DevSprint.git
 cd DevSprint
 corepack enable
 pnpm install
