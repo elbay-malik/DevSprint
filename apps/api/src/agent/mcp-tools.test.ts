@@ -65,6 +65,16 @@ describe('unwrapEnvelope', () => {
     expect(unwrapEnvelope(wrapped)).toMatchObject({ ok: false, error: { code: 'ISSUE_NOT_FOUND' } })
   })
 
+  it('hands on the server’s INTERNAL as it is, not as a mislabelled INVALID_INPUT', () => {
+    const envelope = {
+      ok: false,
+      error: { code: 'INTERNAL', message: 'The workspace is unavailable, try again.' },
+    }
+    const wrapped = { content: [{ type: 'text', text: JSON.stringify(envelope) }] }
+
+    expect(unwrapEnvelope(wrapped)).toEqual(envelope)
+  })
+
   it('rejects valid JSON that is not our envelope', () => {
     // The failure this guards is quiet: `.ok` would read undefined, the cards
     // would render nothing, and the model would still answer plausibly.
