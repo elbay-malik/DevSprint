@@ -1,0 +1,34 @@
+# Version updates only. Security updates and alerts are repository settings.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # `pnpm install --frozen-lockfile` re-verifies the lockfile against pnpm's
+    # release-age policy, so a day-old version would fail CI.
+    cooldown:
+      default-days: 3
+    groups:
+      npm:
+        patterns: ['*']
+    # The lines pnpm-workspace.yaml says to stay on, and ADR-0008's Vue 3.5.
+    ignore:
+      - dependency-name: ai
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@ai-sdk/*'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@modelcontextprotocol/sdk'
+        update-types: ['version-update:semver-major']
+      - dependency-name: vue
+        versions: ['>=3.6.0']
+  # Bumps the commit pins in ci.yml and the version comment beside each one.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    groups:
+      actions:
+        patterns: ['*']

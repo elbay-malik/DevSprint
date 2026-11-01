@@ -92,9 +92,9 @@ jobs:
       - run: pnpm deploy:all
 
   # A PR gets its SPA as a preview version of the web Worker, against the
-  # production api. Forks have no secrets, so they get no preview.
+  # production api. Forks and Dependabot have no secrets, so they get no preview.
   preview:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
     needs: [checks]
     runs-on: ubuntu-latest
     timeout-minutes: 10

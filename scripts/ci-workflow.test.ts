@@ -64,3 +64,32 @@ void test('no checkout leaves the token in .git/config', () => {
   assert.equal(checkouts.length, 4)
   for (const step of checkouts) assert.match(step, /with:\n\s+persist-credentials: false\n/)
 })
+
+void test('dependabot watches npm and the pinned actions, past the release-age gate', () => {
+  const config = readFileSync(join(ROOT, '.github/dependabot.yml'), 'utf8')
+  const updates = config.split(/^(?= {2}- package-ecosystem:)/m).slice(1)
+  assert.deepEqual(
+    updates.map((update) => /package-ecosystem: (\S+)/.exec(update)?.[1]),
+    ['npm', 'github-actions'],
+  )
+  for (const update of updates) {
+    assert.match(update, /interval: weekly/)
+    assert.match(update, /cooldown:\n\s+default-days: 3/)
+    assert.match(update, /groups:/)
+  }
+})
+
+void test('dependabot leaves the lines the catalog holds back alone', () => {
+  const config = readFileSync(join(ROOT, '.github/dependabot.yml'), 'utf8')
+  for (const name of ['ai', "'@ai-sdk/*'", "'@modelcontextprotocol/sdk'"]) {
+    const rule = new RegExp(
+      `dependency-name: ${name.replace(/[*/]/g, '\\$&')}\\n\\s+update-types: \\['version-update:semver-major'\\]`,
+    )
+    assert.match(config, rule)
+  }
+  assert.match(config, /dependency-name: vue\n\s+versions: \['>=3\.6\.0'\]/)
+})
+
+void test('a Dependabot PR gets no preview, because it has no secrets', () => {
+  assert.match(jobBlock(workflow, 'preview'), /^ {4}if: .*github\.actor != 'dependabot\[bot\]'$/m)
+})
