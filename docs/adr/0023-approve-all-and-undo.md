@@ -140,3 +140,18 @@ itself through the same journal as the other two board writes:
   `INVALID_INPUT`, so neither writes nor records anything.
 
 `create_release_notes` and `run_deployment` still have no inverse.
+
+## Status note — 2026-11-02 (two claims above)
+
+Two claims above were not true when written, and each is now true because the code changed. The
+decision itself stands.
+
+- "The keyboard path drops from about twenty stops to one." When a turn ended, focus landed on the
+  first card's decision group, which comes after the button, so reaching "Approve all" took two
+  Shift+Tabs past that card's Raw arguments. A turn that offers the button now lands on the group
+  header, and the button is the next Tab. It does not land on the button, so a stray Enter cannot
+  approve the batch.
+- "The restored card takes its changed-card ring." Only a status change was marked, so undoing a
+  reassignment left the card unmarked. The ring now marks a card that is new or whose status or
+  assignee changed, so a card an undo restores takes it whichever write the undo reverses. Undoing
+  a `create_issue` removes the card, so there is nothing to mark.
