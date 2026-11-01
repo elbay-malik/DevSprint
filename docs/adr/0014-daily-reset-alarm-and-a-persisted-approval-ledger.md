@@ -150,9 +150,14 @@ What reaches the ledger is narrower now, and a third exception joins the two nam
   approvals from before the last user message are dropped from the request, because nothing can
   run from there and the conversion would leave a tool call with no result in the prompt.
 - **Only signed `tool-*` parts for a write tool are spent, up to 60 per request.** More than that
-  is a 400 before the ledger is touched. An answered `dynamic-tool` part is dropped rather than
-  ignored: the signature covers the tool name and not the part type, so a captured approval
-  rewritten as one would execute without being spent.
+  is a 400 before the ledger is touched.
+- **The SDK gets no other answer to read.** It takes an answer from any tool part in any state, then
+  finds the call to run through maps keyed by approval id and tool call id, where the last entry
+  wins. So a part the ledger skipped could answer for a part it denied, and a captured approval ran
+  again without being spent, as often as it was sent. Before conversion, a finished part now loses
+  its answer, which the prompt never read, and an answered part the ledger would not spend is
+  dropped: `dynamic-tool` parts, read tool parts, and unsigned ones. A part with `providerExecuted:
+true` is a 400, because this agent has no such tools.
 
 **The third exception: junk ids can evict real ones.** The ledger is written before any signature
 is checked, because the SDK verifies inside the agent loop and does not export its check. Sixty
