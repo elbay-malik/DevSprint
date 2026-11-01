@@ -326,6 +326,28 @@ void test('--plan reports a missing provider key and still exits clean', (t) => 
   assert.doesNotMatch(run.output, /Refusing/)
 })
 
+void test('--plan on a new api warns as the real deploy does, and does not predict a refusal', (t) => {
+  const repo = makeRepo(t)
+  const env = { STUB_API_EXISTS: '0', STUB_MCP_EXISTS: '0' }
+  const plan = repo.deploy(repo.main, ['--plan'], env)
+  assert.equal(plan.status, 0, plan.output)
+  assert.match(plan.output, /First deploy plan:/)
+  assert.doesNotMatch(plan.output, /would stop here/)
+  const warning = /MODEL_PROVIDER=auto needs .*set it after this deploy/
+  assert.match(plan.output, warning)
+  const real = repo.deploy(repo.main, [], env)
+  assertDeployed(real)
+  assert.match(real.output, warning)
+})
+
+void test('a new api whose MCP Worker exists is told the same by --plan', (t) => {
+  const repo = makeRepo(t)
+  const plan = repo.deploy(repo.main, ['--plan'], { STUB_API_EXISTS: '0' })
+  assert.match(plan.output, /Deploy plan:/)
+  assert.doesNotMatch(plan.output, /would stop here/)
+  assert.match(plan.output, /set it after this deploy/)
+})
+
 void test('the approval secret is still generated only when the api lacks it', (t) => {
   const repo = makeRepo(t)
   const has = repo.deploy(repo.main)

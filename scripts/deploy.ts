@@ -221,17 +221,22 @@ async function main() {
   steps.forEach((step, index) => console.log(`  ${index + 1}. ${step.label}`))
   console.log(`  then smoke checks${proveSharedBoard ? ', including the shared-board write' : ''}`)
   if (needsSecret) console.log('  TOOL_APPROVAL_SECRET will be generated (not shown)')
+  // A Worker that does not exist cannot hold secrets yet, so a first deploy goes
+  // on: set the keys afterwards, or its smoke check will fail.
+  const setAfterDeploy = `${missingLine}; a new Worker has no secrets yet, so set it after this deploy.`
   if (planOnly) {
-    if (missingLine) console.log(`  a real deploy would stop here: ${missingLine}`)
+    if (missingLine) {
+      console.log(
+        `  ${apiExists ? `a real deploy would stop here: ${missingLine}` : setAfterDeploy}`,
+      )
+    }
     return
   }
   if (missingLine) {
-    // A Worker that does not exist cannot hold secrets yet, so a first deploy
-    // goes on: set the keys afterwards, or its smoke check will fail.
     if (apiExists) {
       refuse(`${missingLine}. Set it with \`wrangler secret put\`, or commit MODEL_PROVIDER=mock.`)
     }
-    console.warn(`${missingLine}; a new Worker has no secrets yet, so set it after this deploy.`)
+    console.warn(setAfterDeploy)
   }
 
   let secretsDir: string | undefined
