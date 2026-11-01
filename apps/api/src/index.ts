@@ -337,7 +337,13 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
   try {
     uiMessages = await validateUIMessages<ChatUIMessage>({ messages, tools })
   } catch (error) {
-    return invalidInput(c, `Invalid UI messages: ${describeError(error).message}`)
+    // The validator's text quotes the messages it rejected, so it stays out of
+    // the response and only a short piece of it reaches the log.
+    const { name, message } = describeError(error)
+    console.warn(
+      JSON.stringify({ event: 'invalid-ui-messages', name, message: message.slice(0, 200) }),
+    )
+    return invalidInput(c, 'Invalid UI messages.')
   }
   // Before settling, so what gets spent is read from the array the model will see.
   uiMessages = stripUserProviderMetadata(trimChatHistory(uiMessages))
@@ -350,7 +356,12 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
     resolved = resolveModel(c.env)
   } catch (error) {
     if (error instanceof ModelConfigError) {
-      return c.json({ error: { code: 'MODEL_NOT_CONFIGURED', message: error.message } }, 503)
+      // Names the missing secret, which is for the operator and not the visitor.
+      console.error(JSON.stringify({ event: 'model-not-configured', error: error.message }))
+      return c.json(
+        { error: { code: 'MODEL_NOT_CONFIGURED', message: 'The model is not configured.' } },
+        503,
+      )
     }
     throw error
   }
