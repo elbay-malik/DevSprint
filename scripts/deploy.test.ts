@@ -37,6 +37,8 @@ case "$*" in
     exit 1 ;;
   *"secret list"*)
     echo "$STUB_SECRETS" ;;
+  *"--filter @devsprint/"*" deploy"*)
+    case "$*" in *"$STUB_DEPLOY_FAILS"*) [ -n "$STUB_DEPLOY_FAILS" ] && exit 7 ;; esac ;;
 esac
 exit 0
 `
@@ -368,4 +370,37 @@ void test('--plan shows the same answer on the shared-board write', (t) => {
   const fresh = repo.deploy(repo.main, ['--plan'], { STUB_API_EXISTS: '0', STUB_MCP_EXISTS: '0' })
   assert.match(fresh.output, /including the shared-board write/)
   assert.equal(smokeCall(fresh.calls), undefined)
+})
+
+void test('failed smoke checks print rollback commands and roll nothing back', (t) => {
+  const repo = makeRepo(t)
+  const run = repo.deploy(repo.main, [], { STUB_SMOKE_FAILS: '1' })
+  assert.notEqual(run.status, 0, run.output)
+  assert.match(run.output, /1 smoke check\(s\) failed/)
+  assert.match(run.output, /Nothing was rolled back/)
+  for (const app of ['web', 'api', 'mcp-issues']) {
+    assert.match(run.output, new RegExp(`--filter @devsprint/${app} exec wrangler rollback`))
+  }
+  assert.ok(!run.calls.some((call) => call.includes('rollback')), run.calls.join(' | '))
+})
+
+void test('a failed step names only the Workers that went out before it', (t) => {
+  const repo = makeRepo(t)
+  const run = repo.deploy(repo.main, [], { STUB_DEPLOY_FAILS: '@devsprint/api' })
+  assert.notEqual(run.status, 0, run.output)
+  assert.match(run.output, /--filter @devsprint\/mcp-issues exec wrangler rollback/)
+  assert.doesNotMatch(run.output, /--filter @devsprint\/(api|web) exec wrangler rollback/)
+  assert.ok(!run.calls.some((call) => call.includes('@devsprint/web exec wrangler deploy')))
+})
+
+void test('a step that fails before anything shipped prints no rollback', (t) => {
+  const repo = makeRepo(t)
+  const run = repo.deploy(repo.main, [], { STUB_DEPLOY_FAILS: '@devsprint/mcp-issues' })
+  assert.notEqual(run.status, 0, run.output)
+  assert.doesNotMatch(run.output, /wrangler rollback/)
+})
+
+void test('a successful deploy prints no rollback', (t) => {
+  const repo = makeRepo(t)
+  assert.doesNotMatch(repo.deploy(repo.main).output, /rollback/)
 })
