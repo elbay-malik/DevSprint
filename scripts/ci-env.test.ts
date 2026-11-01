@@ -20,6 +20,10 @@ void test('credentials are dropped and everything else is kept', () => {
   const env = ciEnv({
     CLOUDFLARE_API_TOKEN: 'x',
     CLOUDFLARE_ACCOUNT_ID: 'x',
+    CF_API_TOKEN: 'x',
+    CF_API_KEY: 'x',
+    CF_EMAIL: 'x',
+    CF_ACCOUNT_ID: 'x',
     GROQ_API_KEY: 'x',
     GOOGLE_GENERATIVE_AI_API_KEY: 'x',
     LANGFUSE_SECRET_KEY: 'x',
@@ -29,12 +33,14 @@ void test('credentials are dropped and everything else is kept', () => {
     HOME: '/home/me',
     GITHUB_ACTIONS: 'true',
     MY_GROQ_NOTE: 'kept',
+    MY_CF_NOTE: 'kept',
   })
   assert.deepEqual(env, {
     PATH: '/bin',
     HOME: '/home/me',
     GITHUB_ACTIONS: 'true',
     MY_GROQ_NOTE: 'kept',
+    MY_CF_NOTE: 'kept',
     CI: '1',
   })
 })
