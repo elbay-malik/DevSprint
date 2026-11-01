@@ -162,6 +162,10 @@ async function main() {
 
   const firstDeploy = !workerExists('devsprint-mcp-issues')
   const apiExists = workerExists('devsprint-api')
+  // The smoke check's board write resets the board afterwards, so it runs only
+  // while nobody can be using it. The api holds the Durable Object, so a new api
+  // is what says that: a recreated MCP Worker leaves the live board in place.
+  const proveSharedBoard = !apiExists
   // The approval signing secret (ADR-0010) is generated once, here, and never
   // printed. Without it every isolate signs with its own random key, so an
   // approval issued by one would not verify on another.
@@ -209,7 +213,7 @@ async function main() {
 
   console.log(`${firstDeploy ? 'First deploy' : 'Deploy'} plan:`)
   steps.forEach((step, index) => console.log(`  ${index + 1}. ${step.label}`))
-  console.log(`  then smoke checks${firstDeploy ? ', including the shared-board write' : ''}`)
+  console.log(`  then smoke checks${proveSharedBoard ? ', including the shared-board write' : ''}`)
   if (needsSecret) console.log('  TOOL_APPROVAL_SECRET will be generated (not shown)')
   if (planOnly) {
     if (missingLine) console.log(`  a real deploy would stop here: ${missingLine}`)
@@ -248,7 +252,7 @@ async function main() {
     if (secretsDir) rmSync(secretsDir, { recursive: true, force: true })
   }
 
-  await smoke({ proveSharedBoard: firstDeploy })
+  await smoke({ proveSharedBoard })
 }
 
 await main()
