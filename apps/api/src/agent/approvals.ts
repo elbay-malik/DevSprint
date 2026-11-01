@@ -104,6 +104,31 @@ function pendingApprovals(messages: UIMessage[]): RespondedApproval[] {
   return approvals
 }
 
+/**
+ * The transcript without answered approvals the person has since moved on from.
+ *
+ * A resume refused by a limit leaves its card answered but never run, and a
+ * later message carries it along. Nothing executes from there, since the SDK
+ * only acts on the last model message, but the conversion still writes the tool
+ * call into the prompt with no result after it. OpenAI-compatible providers
+ * usually reject that shape, so one refused press would wedge the chat. The limit
+ * message the person read is still in the transcript and says what happened.
+ *
+ * Returns a copy of the messages it changes, and leaves the rest as they are.
+ */
+export function dropStaleApprovals<MESSAGE extends UIMessage>(messages: MESSAGE[]): MESSAGE[] {
+  const lastUser = messages.findLastIndex((message) => message.role === 'user')
+  return messages.map((message, index) =>
+    index < lastUser && message.parts.some(isAnsweredApproval)
+      ? { ...message, parts: message.parts.filter((part) => !isAnsweredApproval(part)) }
+      : message,
+  )
+}
+
+function isAnsweredApproval(part: UIMessage['parts'][number]): boolean {
+  return 'state' in part && part.state === 'approval-responded'
+}
+
 const REPLAY_REASON = 'This approval was already used, so it was not applied again.'
 
 /** Turns an approval into a denial, unless it already was one. */

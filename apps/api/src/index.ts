@@ -19,7 +19,7 @@ import { ModelConfigError, resolveModel } from './agent/model'
 import { buildSystemPrompt } from './agent/system-prompt'
 import { createTools, MCP_OWNED_TOOL_NAMES, type DevSprintTools } from './agent/tools'
 import { createMcpIssueTools } from './agent/mcp-tools'
-import { resolveApprovalSecret, settleApprovals } from './agent/approvals'
+import { dropStaleApprovals, resolveApprovalSecret, settleApprovals } from './agent/approvals'
 import { createTurnTracer, resolveTracingConfig } from './agent/tracing'
 import {
   BUDGET_REACHED_MESSAGE,
@@ -317,17 +317,6 @@ app.post(API_ROUTES.chat, async (c) => {
     return invalidInput(c, `Invalid UI messages: ${describeError(error).message}`)
   }
 
-  // An approval that has already been acted on is downgraded to a denial rather
-  // than executed again. The SDK's signature stops forgery but carries no nonce,
-  // so a captured approval would otherwise replay indefinitely (ADR-0003 asks
-  // for both to be covered). The ledger this checks against lives in the
-  // workspace, not this isolate (ADR-0014), so the guarantee holds across
-  // restarts and across whichever isolate a later request lands on.
-  const { replayed } = await settleApprovals(uiMessages, workspace)
-  if (replayed > 0) {
-    console.warn(JSON.stringify({ event: 'approval-replay-blocked', count: replayed }))
-  }
-
   let resolved
   try {
     resolved = resolveModel(c.env)
@@ -352,6 +341,22 @@ app.post(API_ROUTES.chat, async (c) => {
         'X-DevSprint-Limit': 'budget',
       })
     }
+  }
+
+  // An approval that has already been acted on is downgraded to a denial rather
+  // than executed again. The SDK's signature stops forgery but carries no nonce,
+  // so a captured approval would otherwise replay indefinitely (ADR-0003 asks
+  // for both to be covered). The ledger this checks against lives in the
+  // workspace, not this isolate (ADR-0014), so the guarantee holds across
+  // restarts and across whichever isolate a later request lands on.
+  //
+  // Down here, after every check that can refuse the turn, so an approval is
+  // spent only by a turn that will act on it. Spent earlier, a press refused by
+  // the budget would read as a replay once the budget came back.
+  const messagesForTurn = dropStaleApprovals(uiMessages)
+  const { replayed } = await settleApprovals(messagesForTurn, workspace)
+  if (replayed > 0) {
+    console.warn(JSON.stringify({ event: 'approval-replay-blocked', count: replayed }))
   }
 
   // One trace per turn (ADR-0015). Undefined whenever Langfuse is not
@@ -379,7 +384,10 @@ app.post(API_ROUTES.chat, async (c) => {
     // Without this the NEXT message throws MessageConversionError and the chat
     // is wedged until reload — pruning the dangling call is what lets the
     // conversation continue after Stop.
-    messages: await convertToModelMessages(uiMessages, { tools, ignoreIncompleteToolCalls: true }),
+    messages: await convertToModelMessages(messagesForTurn, {
+      tools,
+      ignoreIncompleteToolCalls: true,
+    }),
     abortSignal: c.req.raw.signal,
     onStepFinish: createStepAuditLogger(label),
   })
@@ -411,7 +419,7 @@ app.post(API_ROUTES.chat, async (c) => {
     // throws "No tool invocation found for tool call ID" instead.
     ...(turnTracer
       ? {
-          originalMessages: uiMessages,
+          originalMessages: messagesForTurn,
           onFinish: () => waitUntil(turnTracer.flush()),
         }
       : {}),
