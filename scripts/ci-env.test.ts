@@ -24,6 +24,8 @@ void test('credentials are dropped and everything else is kept', () => {
     CF_API_KEY: 'x',
     CF_EMAIL: 'x',
     CF_ACCOUNT_ID: 'x',
+    WRANGLER_CF_AUTHORIZATION_TOKEN: 'x',
+    WRANGLER_BASIN_SQL_AUTH_TOKEN: 'x',
     GROQ_API_KEY: 'x',
     GOOGLE_GENERATIVE_AI_API_KEY: 'x',
     LANGFUSE_SECRET_KEY: 'x',
@@ -34,6 +36,8 @@ void test('credentials are dropped and everything else is kept', () => {
     GITHUB_ACTIONS: 'true',
     MY_GROQ_NOTE: 'kept',
     MY_CF_NOTE: 'kept',
+    WRANGLER_LOG: 'kept',
+    WRANGLER_TOKEN_URL: 'kept',
   })
   assert.deepEqual(env, {
     PATH: '/bin',
@@ -41,6 +45,8 @@ void test('credentials are dropped and everything else is kept', () => {
     GITHUB_ACTIONS: 'true',
     MY_GROQ_NOTE: 'kept',
     MY_CF_NOTE: 'kept',
+    WRANGLER_LOG: 'kept',
+    WRANGLER_TOKEN_URL: 'kept',
     CI: '1',
   })
 })
