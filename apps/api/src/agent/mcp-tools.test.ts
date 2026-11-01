@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { createMCPClient } from '@ai-sdk/mcp'
 import { TOOL_DESCRIPTIONS } from '@devsprint/shared/tools'
 import {
   adaptRemoteTools,
@@ -8,9 +9,18 @@ import {
 } from './mcp-tools'
 
 /** A minimal MCP server over fetch: enough for initialize and tools/call. */
-function fakeMcpServer(onCall: (name: string, args: unknown) => unknown) {
+function fakeMcpServer(
+  onCall: (name: string, args: unknown) => unknown,
+  { getStatus = 405 }: { getStatus?: number } = {},
+) {
   const calls: { name: string; args: unknown }[] = []
-  const fetchImpl = vi.fn((_input: unknown, init?: { body?: unknown }) => {
+  let gets = 0
+  const fetchImpl = vi.fn((_input: unknown, init?: { method?: string; body?: unknown }) => {
+    // The client's optional server-to-client stream, which the real server refuses.
+    if (init?.method === 'GET') {
+      gets += 1
+      return new Response(null, { status: getStatus })
+    }
     const message = JSON.parse(String(init?.body)) as {
       id?: number
       method: string
@@ -35,7 +45,11 @@ function fakeMcpServer(onCall: (name: string, args: unknown) => unknown) {
     }
     return new Response(null, { status: 202 })
   })
-  return { fetch: fetchImpl as unknown as typeof globalThis.fetch, calls }
+  return {
+    fetch: fetchImpl as unknown as typeof globalThis.fetch,
+    calls,
+    gets: () => gets,
+  }
 }
 
 describe('unwrapEnvelope', () => {
@@ -67,6 +81,38 @@ describe('unwrapEnvelope', () => {
       ok: false,
     })
     expect(unwrapEnvelope(undefined)).toMatchObject({ ok: false })
+  })
+})
+
+describe('the MCP client against a server that refuses GET', () => {
+  /** Connects, makes one call and reports what the client called an error. */
+  async function connectWith(getStatus: number) {
+    const server = fakeMcpServer(() => ({ ok: true, data: {} }), { getStatus })
+    const onUncaughtError = vi.fn()
+    const client = await createMCPClient({
+      transport: { type: 'http', url: 'https://mcp.test/mcp', fetch: server.fetch },
+      onUncaughtError,
+    })
+    const tools = client.toolsFromDefinitions({
+      tools: [{ name: 'list_issues', inputSchema: { type: 'object' } }],
+    })
+    const result: unknown = await tools.list_issues!.execute({}, { toolCallId: 'c1', messages: [] })
+    await client.close()
+    return { server, onUncaughtError, result }
+  }
+
+  it('takes a 405 as normal and carries on', async () => {
+    const { server, onUncaughtError, result } = await connectWith(405)
+
+    expect(server.gets()).toBeGreaterThan(0)
+    expect(onUncaughtError).not.toHaveBeenCalled()
+    expect(unwrapEnvelope(result)).toEqual({ ok: true, data: {} })
+  })
+
+  it('would report any other refusal, which is what makes that a real check', async () => {
+    const { onUncaughtError } = await connectWith(500)
+
+    expect(onUncaughtError).toHaveBeenCalled()
   })
 })
 
