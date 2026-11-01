@@ -299,7 +299,9 @@ pnpm --filter @devsprint/api dev    # wrangler dev on http://localhost:8787
 (`http://localhost:5173` in dev). A POST with any other `Origin` gets a 403 with `FORBIDDEN_ORIGIN`,
 so a dev SPA on a fallback port such as 5174 can't write until the var names it. A request with no
 `Origin`, like the curl below, still passes: the board is public by design (ADR-0014), and this
-only stops other sites using a visitor's browser. Stream responses carry
+only stops other sites using a visitor's browser
+([ADR-0025](../../docs/adr/0025-browser-bounds-origin-refusal-and-security-headers.md)). Every
+response carries Hono's `secureHeaders` defaults, and stream responses carry
 `Content-Encoding: Identity` to defeat
 wrangler dev / miniflare buffering ([workers-sdk#8004](https://github.com/cloudflare/workers-sdk/issues/8004)).
 
