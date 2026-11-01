@@ -16,7 +16,7 @@ const props = defineProps<{
    * people ("@dana"); null when it would take the issue off whoever holds it.
    */
   pendingAssignee?: string | null
-  /** The last read of the board moved this issue; main.css marks it briefly. */
+  /** The last read of the board added, moved or handed on this issue; main.css marks it briefly. */
   changed?: boolean
 }>()
 

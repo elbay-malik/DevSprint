@@ -327,7 +327,8 @@ outline would be clipped. That rule lives once in `main.css`, not per component.
 Two more rings belong to the board, both 1px and drawn inside the card's own edge, so a marked
 card keeps its footprint and stacked cards never merge. A **dashed** `--ring` outline, in place of
 the 10% hairline, marks an issue a pending approval would move or hand on, and a **solid** Go Green
-(`--success`) ring marks, for 1.5s, an issue the last read of the board moved (see Board cards).
+(`--success`) ring marks, for 1.5s, an issue the last read of the board added, moved or handed on
+(see Board cards).
 Neither is solid Graphite, so neither reads as focus.
 
 ### Named Rules
@@ -437,12 +438,12 @@ decision or a result lives.
   to assign to @dana" or "Awaiting approval to unassign"), so "@ben" then "→ @dana" reads as the
   hand-on. It is read from the chat's open `assign_issue` cards with the same key matching, and it
   goes the moment the card is answered.
-- **Changed (board card):** when a read of the board finds an issue's status changed since the
-  last read, the card is marked for 1.5s: a 1px solid Go Green (`--success`) ring inside its edge
+- **Changed (board card):** when a read of the board finds an issue is new, or that its status or
+  assignee changed, since the last read, the card is marked for 1.5s: a 1px solid Go Green (`--success`) ring inside its edge
   (offset -1px) holds, then fades on an exponential ease-out. It takes no background tint, since
   the card's muted text is 4.73:1 on Paper and any tint past about 2% drops it under 4.5:1. Under
   reduced motion the ring is simply there for the same 1.5s. The first read, which replaces the
-  seed, marks nothing, and a read that moves nothing lets a running mark finish.
+  seed, marks nothing, and a read that changes nothing lets a running mark finish.
 - **Chat cards:** a shared shell of 8px corners, a 1px Rule border on Paper, 8 by 12px padding and
   12px type, inset inside the Paper Tint assistant bubble. This covers the issue table, burndown,
   release-notes diff, deployment progress, approval and tool chip.

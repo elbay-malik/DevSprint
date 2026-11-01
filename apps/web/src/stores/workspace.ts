@@ -6,15 +6,25 @@ import { WORKSPACE_ENDPOINT } from '@/lib/api'
 
 export type WorkspaceSource = 'seed' | 'api'
 
-/** How long a card that just changed status stays marked; main.css animates it. */
+/** How long a card that just changed stays marked; main.css animates it. */
 export const CHANGE_HIGHLIGHT_MS = 1500
 
-/** Keys of the issues whose status differs between two reads of the board. */
-export function changedStatusKeys(previous: Workspace, next: Workspace): Set<string> {
-  const before = new Map(previous.issues.map((issue) => [issue.key, issue.status]))
+/**
+ * Keys of the issues that are new, or whose status or assignee differs, between
+ * two reads of the board: the things a write can do to a card that a reader
+ * would want to see land. An issue the next read no longer holds has no card to
+ * mark.
+ */
+export function changedIssueKeys(previous: Workspace, next: Workspace): Set<string> {
+  const before = new Map(previous.issues.map((issue) => [issue.key, issue]))
   return new Set(
     next.issues
-      .filter((issue) => before.has(issue.key) && before.get(issue.key) !== issue.status)
+      .filter((issue) => {
+        const was = before.get(issue.key)
+        return (
+          was === undefined || was.status !== issue.status || was.assigneeId !== issue.assigneeId
+        )
+      })
       .map((issue) => issue.key),
   )
 }
@@ -43,8 +53,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   /** When the Worker last answered a read (epoch ms); undefined until it has. */
   const readAt = ref<number>()
   /**
-   * Issues whose status the last read changed, marked on the board for
-   * CHANGE_HIGHLIGHT_MS so an approved move is seen landing rather than found.
+   * Issues the last read added, moved or handed on, marked on the board for
+   * CHANGE_HIGHLIGHT_MS so an approved change is seen landing rather than found.
    */
   const recentlyChanged = ref<ReadonlySet<string>>(new Set())
   let warned = false
@@ -53,7 +63,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   let clearChanged: ReturnType<typeof setTimeout> | undefined
 
   function markChanged(keys: ReadonlySet<string>): void {
-    // A read that moved nothing is no news, and must not cut short a mark
+    // A read that changed nothing is no news, and must not cut short a mark
     // still on screen from the read before; its own timer lets it go.
     if (keys.size === 0) return
     clearTimeout(clearChanged)
@@ -75,7 +85,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       if (read !== latestRead) return
       // Only a change between two reads of the Worker is news. The first read
       // replaces the seed, and whatever differs there was never shown as live.
-      if (source.value === 'api') markChanged(changedStatusKeys(workspace.value, next))
+      if (source.value === 'api') markChanged(changedIssueKeys(workspace.value, next))
       workspace.value = next
       source.value = 'api'
       offline.value = false
