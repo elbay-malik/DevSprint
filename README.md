@@ -187,9 +187,9 @@ minutes. Use it whenever GitHub Actions cannot run. `--checks` or `--e2e` runs o
 - **It never kills a process it did not start.** If a port the stack needs is taken, it names the
   process holding it and stops.
 - **It drops credentials from the environment each step gets** (`scripts/ci-env.ts`):
-  `CLOUDFLARE_*`, `GROQ_*`, `GOOGLE_*`, `LANGFUSE_*`, `GH_TOKEN` and `GITHUB_TOKEN`. It is not a
-  sandbox. It runs the workflow's steps as you, and a step can still read `~/.wrangler` or an `.env`
-  file from disk.
+  `CLOUDFLARE_*`, `CF_*`, `GROQ_*`, `GOOGLE_*`, `LANGFUSE_*`, `GH_TOKEN` and `GITHUB_TOKEN`. It is
+  not a sandbox. It runs the workflow's steps as you, and a step can still read `~/.wrangler` or an
+  `.env` file from disk.
 - **Logs go to `.ci-local/`.**
 - **Edits under `apps/api` during a run fail the test on screen.** `wrangler dev` restarts the
   Worker and has no flag to stop it, which ends any stream in flight. The web server runs without

@@ -3,8 +3,11 @@
  * ci-local.ts, which runs on import, so the tests can load it.
  */
 
-/** Credentials on a workstation that no step in `checks` or `e2e` needs. */
-const CREDENTIAL = /^(CLOUDFLARE_|GROQ_|GOOGLE_|LANGFUSE_)|^(GH|GITHUB)_TOKEN$/
+/**
+ * Credentials on a workstation that no step in `checks` or `e2e` needs. CF_* are
+ * the old names for CLOUDFLARE_*, which wrangler still reads.
+ */
+const CREDENTIAL = /^(CLOUDFLARE_|CF_|GROQ_|GOOGLE_|LANGFUSE_)|^(GH|GITHUB)_TOKEN$/
 
 /** The given environment minus credentials, with CI=1 as on a runner. */
 export function ciEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
