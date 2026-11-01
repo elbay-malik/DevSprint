@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { nextTick, reactive } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MAX_USER_MESSAGE_CHARS } from '@devsprint/shared'
 import type { DevSprintUIMessage } from '../types'
 
 const sendMessage = vi.fn()
@@ -44,6 +45,14 @@ describe('ChatInput', () => {
   })
   afterEach(() => {
     document.body.innerHTML = ''
+  })
+
+  it('stops at the length the api accepts', () => {
+    // The field is the only place this is friendly. Past it the api answers 400.
+    const wrapper = mount(ChatInput)
+    expect(wrapper.get('[data-testid="chat-input"]').attributes('maxlength')).toBe(
+      String(MAX_USER_MESSAGE_CHARS),
+    )
   })
 
   it('keeps focus in the composer when a turn starts, instead of disabling it', async () => {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
+import { MAX_USER_MESSAGE_CHARS } from '@devsprint/shared'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useDevSprintChat } from '../composables/useDevSprintChat'
@@ -100,6 +101,7 @@ function onSubmit() {
         :aria-disabled="streaming ? 'true' : undefined"
         class="aria-disabled:cursor-not-allowed"
         autocomplete="off"
+        :maxlength="MAX_USER_MESSAGE_CHARS"
         @keydown="onKeydown"
       />
       <!-- Names what it stops: during a deploy the card's own Cancel sits above,
