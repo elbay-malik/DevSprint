@@ -163,7 +163,7 @@ async function startServers(): Promise<boolean> {
   // a debugger (9229, and 9230 for apps/mcp-issues), which other Wrangler
   // projects on the same machine often hold; those get a free port instead.
   const busy: string[] = []
-  for (const port of [8787, 8788, 5173]) {
+  for (const port of [8787, 8788, 5173, 4173]) {
     if (!(await portFree(port))) busy.push(`  :${port} is held by\n    ${holderOf(port)}`)
   }
   if (busy.length > 0) {

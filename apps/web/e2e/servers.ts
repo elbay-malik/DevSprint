@@ -1,5 +1,5 @@
 /**
- * The three servers the browser suite needs, in start order. Shared by
+ * The four servers the browser suite needs, in start order. Shared by
  * playwright.config.ts and scripts/ci-local.ts so the two cannot disagree on
  * how the stack is started.
  *
@@ -24,7 +24,7 @@ export const E2E_SERVERS: E2EServer[] = [
     // local apps/api/.dev.vars, so e2e stays deterministic, offline and free.
     // A reused local server is checked for this too (e2e/support.ts).
     command:
-      'pnpm --filter @devsprint/api exec wrangler dev --var MODEL_PROVIDER:mock --var RESET_COOLDOWN_SECONDS:0 --var CORS_ORIGIN:http://localhost:5173',
+      'pnpm --filter @devsprint/api exec wrangler dev --var MODEL_PROVIDER:mock --var RESET_COOLDOWN_SECONDS:0 --var CORS_ORIGIN:http://localhost:5173,http://localhost:4173',
     url: 'http://127.0.0.1:8787/api/health',
   },
   {
@@ -39,4 +39,20 @@ export const E2E_SERVERS: E2EServer[] = [
     command: 'pnpm --filter @devsprint/web dev',
     url: 'http://localhost:5173',
   },
+  {
+    // The production build on the same runtime it deploys to. Vite dev never
+    // applies public/_headers, so only this one can test the CSP (csp.spec.ts).
+    name: 'web-preview',
+    command:
+      'pnpm --filter @devsprint/web exec node e2e/build-preview.ts && pnpm --filter @devsprint/web exec wrangler dev --port 4173 --assets dist-e2e',
+    url: 'http://127.0.0.1:4173',
+  },
 ]
+
+/**
+ * The policy as the preview serves it. public/_headers names the production api,
+ * and this build calls the local one. Nothing else in the policy changes.
+ */
+export function allowingLocalApi(policy: string): string {
+  return policy.replace(/connect-src [^;]+/, '$& http://localhost:8787')
+}
