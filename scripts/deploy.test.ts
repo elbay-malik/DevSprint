@@ -269,3 +269,70 @@ void test('CI is not gated: it checks out a detached HEAD and has no credentials
   repo.git(repo.main, 'remote', 'set-url', 'origin', join(repo.base, 'gone.git'))
   assertDeployed(repo.deploy(repo.main, [], { GITHUB_ACTIONS: 'true' }))
 })
+
+void test('an existing api with no provider key is refused before anything ships', (t) => {
+  const repo = makeRepo(t)
+  const run = repo.deploy(repo.main, [], { STUB_SECRETS: secretsJson('TOOL_APPROVAL_SECRET') })
+  assert.notEqual(run.status, 0, run.output)
+  assert.match(run.output, /Refusing to deploy: MODEL_PROVIDER=auto needs GROQ_API_KEY or GOOGLE_/)
+  assert.ok(!run.calls.some((call) => call.endsWith(' deploy')), run.calls.join(' | '))
+})
+
+void test('an existing api with one provider key deploys', (t) => {
+  const repo = makeRepo(t)
+  assertDeployed(
+    repo.deploy(repo.main, [], {
+      STUB_SECRETS: secretsJson('TOOL_APPROVAL_SECRET', 'GOOGLE_GENERATIVE_AI_API_KEY'),
+    }),
+  )
+})
+
+void test('a named provider is held to its own key', (t) => {
+  const repo = makeRepo(t)
+  const run = repo.deploy(repo.main, [], {
+    STUB_PROVIDER: 'gemini',
+    STUB_SECRETS: secretsJson('TOOL_APPROVAL_SECRET', 'GROQ_API_KEY'),
+  })
+  assert.notEqual(run.status, 0, run.output)
+  assert.match(run.output, /MODEL_PROVIDER=gemini needs GOOGLE_GENERATIVE_AI_API_KEY/)
+})
+
+void test('MODEL_PROVIDER=mock deploys with no provider key', (t) => {
+  const repo = makeRepo(t)
+  assertDeployed(
+    repo.deploy(repo.main, [], {
+      STUB_PROVIDER: 'mock',
+      STUB_SECRETS: secretsJson('TOOL_APPROVAL_SECRET'),
+    }),
+  )
+})
+
+void test('a new api only warns, because a Worker that does not exist holds no secrets', (t) => {
+  const repo = makeRepo(t)
+  const run = repo.deploy(repo.main, [], { STUB_API_EXISTS: '0', STUB_MCP_EXISTS: '0' })
+  assertDeployed(run)
+  assert.match(run.output, /set it after this deploy/)
+})
+
+void test('--plan reports a missing provider key and still exits clean', (t) => {
+  const repo = makeRepo(t)
+  const run = repo.deploy(repo.main, ['--plan'], {
+    STUB_SECRETS: secretsJson('TOOL_APPROVAL_SECRET'),
+  })
+  assert.equal(run.status, 0, run.output)
+  assert.match(run.output, /a real deploy would stop here: MODEL_PROVIDER=auto needs/)
+  assert.doesNotMatch(run.output, /Refusing/)
+})
+
+void test('the approval secret is still generated only when the api lacks it', (t) => {
+  const repo = makeRepo(t)
+  const has = repo.deploy(repo.main)
+  assert.doesNotMatch(has.output, /TOOL_APPROVAL_SECRET will be generated/)
+  assert.ok(!has.calls.some((call) => call.includes('--secrets-file')), has.calls.join(' | '))
+  const lacks = repo.deploy(repo.main, [], { STUB_SECRETS: secretsJson('GROQ_API_KEY') })
+  assert.match(lacks.output, /TOOL_APPROVAL_SECRET will be generated/)
+  assert.ok(
+    lacks.calls.some((call) => call.includes('--secrets-file')),
+    lacks.calls.join(' | '),
+  )
+})

@@ -21,7 +21,7 @@ export const URLS = {
 }
 
 /** MODEL_PROVIDER as apps/api/wrangler.jsonc deploys it. */
-function expectedModelProvider(): string {
+export function expectedModelProvider(): string {
   const path = join(import.meta.dirname, '../apps/api/wrangler.jsonc')
   const parsed = ts.parseConfigFileTextToJson(path, readFileSync(path, 'utf8'))
   const vars = (parsed.config as { vars?: Record<string, string> } | undefined)?.vars
