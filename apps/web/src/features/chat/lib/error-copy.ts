@@ -95,6 +95,8 @@ export function toolErrorCopy(toolName: string, code: string, input?: unknown): 
       }
       return ['The board couldn’t accept that request.']
     }
+    case 'INTERNAL':
+      return ['The board couldn’t be reached. Try again in a moment.']
     default:
       return ['That didn’t go through.']
   }

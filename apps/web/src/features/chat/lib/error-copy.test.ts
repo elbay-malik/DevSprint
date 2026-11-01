@@ -39,6 +39,7 @@ describe('toolErrorCopy', () => {
       'WORKSPACE_FULL',
       'UNDO_CONFLICT',
       'INVALID_INPUT',
+      'INTERNAL',
     ]
     const fallback = toolErrorCopy('list_issues', 'SOMETHING_NEW')
     expect(fallback).toBe('That didn’t go through.')
