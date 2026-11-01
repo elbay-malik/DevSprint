@@ -5,6 +5,7 @@ import { createMiddleware } from 'hono/factory'
 import { secureHeaders } from 'hono/secure-headers'
 import {
   convertToModelMessages,
+  createUIMessageStreamResponse,
   validateUIMessages,
   type InferUITools,
   type UIDataTypes,
@@ -45,7 +46,9 @@ import {
   resolveClientTokenShare,
   resolveDailyTokenCap,
   resolveResetCooldownMs,
+  SPEND_LIMIT_MESSAGES,
   spendLimitReached,
+  withClosingMessage,
   type RateLimitBinding,
 } from './agent/limits'
 
@@ -475,6 +478,9 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
       })
     : undefined
 
+  // Which limit ended this turn between steps, if one did.
+  let stoppedBy: ReturnType<typeof spendLimitReached>
+
   const agent = createCopilotAgent({
     model: meter ? meter.wrap(model) : model,
     instructions: buildSystemPrompt(await workspace.snapshot()),
@@ -487,9 +493,16 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
           // Concurrent turns all pass the check above before any has recorded
           // spend, so each re-reads it between steps. Each can still overshoot by
           // about a step, and a read can miss a write `waitUntil` has not landed.
-          shouldStop: async () =>
-            spendLimitReached(await workspace.modelUsage(shareKey), dailyCap, clientShare) !==
-            undefined,
+          shouldStop: async () => {
+            const usage = await workspace.modelUsage(shareKey)
+            stoppedBy = spendLimitReached(usage, dailyCap, clientShare)
+            if (stoppedBy === undefined) return false
+            // Not the key: this log line is no place for an address.
+            console.warn(
+              JSON.stringify({ event: 'turn-stopped-by-limit', limit: stoppedBy, day: usage.day }),
+            )
+            return true
+          },
         }
       : {}),
   })
@@ -514,7 +527,7 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
   // in production. The charset is what an event stream always is, said out
   // loud: without it, tools that honour the header rather than the spec (the
   // DevTools protocol among them) read "—" as Latin-1.
-  return result.toUIMessageStreamResponse({
+  return createUIMessageStreamResponse({
     headers: {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Content-Encoding': 'Identity',
@@ -522,30 +535,35 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
       'X-DevSprint-Tools': toolSource,
       ...(turnTracer ? { 'X-DevSprint-Trace': turnTracer.traceId } : {}),
     },
-    // Flushed here rather than from the agent's own `onFinish`, which fires
-    // while the root `ai.streamText` span is still open — exporting then sent
-    // seven spans all pointing at a parent that was never sent with them. This
-    // callback runs once the UI stream is genuinely finished.
-    //
-    // The response *is* the stream, so this cannot be awaited inside the
-    // handler; it rides the same `waitUntil` a cancelled deployment uses to
-    // record itself once the request is over (ADR-0013, ADR-0015).
-    // `originalMessages` is required alongside this callback: without it the
-    // stream cannot reconstruct a response that *continues* an existing
-    // assistant message, which is exactly what an approval resume is — it
-    // throws "No tool invocation found for tool call ID" instead.
-    ...(turnTracer
-      ? {
-          originalMessages: messagesForTurn,
-          onFinish: () => waitUntil(turnTracer.flush()),
-        }
-      : {}),
-    onError: (error) => {
-      console.error(
-        JSON.stringify({ event: 'model-error', model: label, error: describeError(error) }),
-      )
-      return toClientErrorMessage(error)
-    },
+    stream: withClosingMessage(
+      result.toUIMessageStream({
+        // Flushed here rather than from the agent's own `onFinish`, which fires
+        // while the root `ai.streamText` span is still open — exporting then sent
+        // seven spans all pointing at a parent that was never sent with them. This
+        // callback runs once the UI stream is genuinely finished.
+        //
+        // The response *is* the stream, so this cannot be awaited inside the
+        // handler; it rides the same `waitUntil` a cancelled deployment uses to
+        // record itself once the request is over (ADR-0013, ADR-0015).
+        // `originalMessages` is required alongside this callback: without it the
+        // stream cannot reconstruct a response that *continues* an existing
+        // assistant message, which is exactly what an approval resume is — it
+        // throws "No tool invocation found for tool call ID" instead.
+        ...(turnTracer
+          ? {
+              originalMessages: messagesForTurn,
+              onFinish: () => waitUntil(turnTracer.flush()),
+            }
+          : {}),
+        onError: (error) => {
+          console.error(
+            JSON.stringify({ event: 'model-error', model: label, error: describeError(error) }),
+          )
+          return toClientErrorMessage(error)
+        },
+      }),
+      () => (stoppedBy === undefined ? undefined : SPEND_LIMIT_MESSAGES[stoppedBy]),
+    ),
   })
 })
 

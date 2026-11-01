@@ -16,7 +16,7 @@
  * sits beside the cap for the same reason. The rate limit can't do this job: at
  * 60 turns a minute, one client can spend the whole day in about a minute.
  */
-import { createUIMessageStream, createUIMessageStreamResponse } from 'ai'
+import { createUIMessageStream, createUIMessageStreamResponse, type UIMessageChunk } from 'ai'
 import { ipRateLimitKey } from '@devsprint/shared'
 import type { DailyModelUsage } from '@devsprint/shared/tools'
 
@@ -159,25 +159,32 @@ export function limitMessage(message: string, messages: unknown[]): string {
 }
 
 /**
- * A complete assistant turn carrying one message, streamed the same way a real
- * answer is. Returning a 200 with a readable turn is what makes the degraded
- * state designed rather than broken.
- *
- * The text gets a step of its own. The SPA resends once the tools in the last
+ * One message as a step of its own. The SPA resends once the tools in the last
  * step have all been answered, and it only looks after the last step boundary.
  * Written into the step that holds the answered cards, this message would leave
  * that condition true, so one approval press would resend for as long as the
  * limit lasted, and the write would run with no new press once the limit lifted.
  */
+function messageStep(text: string): UIMessageChunk[] {
+  const id = crypto.randomUUID()
+  return [
+    { type: 'start-step' },
+    { type: 'text-start', id },
+    { type: 'text-delta', id, delta: text },
+    { type: 'text-end', id },
+    { type: 'finish-step' },
+  ]
+}
+
+/**
+ * A complete assistant turn carrying one message, streamed the same way a real
+ * answer is. Returning a 200 with a readable turn is what makes the degraded
+ * state designed rather than broken.
+ */
 export function messageOnlyResponse(text: string, headers: Record<string, string>): Response {
   const stream = createUIMessageStream({
     execute: ({ writer }) => {
-      const id = crypto.randomUUID()
-      writer.write({ type: 'start-step' })
-      writer.write({ type: 'text-start', id })
-      writer.write({ type: 'text-delta', id, delta: text })
-      writer.write({ type: 'text-end', id })
-      writer.write({ type: 'finish-step' })
+      for (const chunk of messageStep(text)) writer.write(chunk)
     },
   })
   return createUIMessageStreamResponse({
@@ -188,4 +195,38 @@ export function messageOnlyResponse(text: string, headers: Record<string, string
       ...headers,
     },
   })
+}
+
+/** What a turn says when one of the spend limits has ended it. */
+export const SPEND_LIMIT_MESSAGES = {
+  budget: BUDGET_REACHED_MESSAGE,
+  'client-budget': CLIENT_BUDGET_REACHED_MESSAGE,
+} as const
+
+/**
+ * Adds a closing message to a turn a limit ended between steps, which would
+ * otherwise finish on a tool result with nothing saying why. Asks at the end of
+ * the stream, because that is when the turn knows how it ended.
+ *
+ * It can't set `X-DevSprint-Limit`, since the headers have long gone by then. It
+ * also leaves out the line for a refused approval: an approval this request
+ * carried ran before the first model call, so the card is telling the truth.
+ */
+export function withClosingMessage(
+  stream: ReadableStream<UIMessageChunk>,
+  closingMessage: () => string | undefined,
+): ReadableStream<UIMessageChunk> {
+  return stream.pipeThrough(
+    new TransformStream<UIMessageChunk, UIMessageChunk>({
+      transform(chunk, controller) {
+        if (chunk.type === 'finish') {
+          const text = closingMessage()
+          if (text !== undefined) {
+            for (const step of messageStep(text)) controller.enqueue(step)
+          }
+        }
+        controller.enqueue(chunk)
+      },
+    }),
+  )
 }
