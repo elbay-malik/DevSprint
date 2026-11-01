@@ -288,6 +288,29 @@ describe('diffReleaseNotes', () => {
     expect(data.changedSections).not.toHaveLength(0)
   })
 
+  it('reads a lone line terminator inside a heading as part of its text', () => {
+    for (const terminator of ['\r', '\u2028', '\u2029']) {
+      const data = expectOk(
+        diffReleaseNotes(workspace, { draftMarkdown: `# a${terminator}b\nbody` }),
+      )
+      expect(data.changedSections).toContainEqual({
+        heading: `a${terminator}b`,
+        changeType: 'added',
+      })
+    }
+  })
+
+  it('does not backtrack over a heading line padded with spaces', () => {
+    // Five times the schema's cap, so the quadratic version takes seconds and a
+    // busy CI machine cannot make the linear one look slow.
+    const spaces = ' '.repeat(100_000)
+    for (const tail of ['\rx\ry', '\u2028x\u2028y']) {
+      const started = performance.now()
+      expectOk(diffReleaseNotes(workspace, { draftMarkdown: `# ${spaces}${tail}` }))
+      expect(performance.now() - started).toBeLessThan(1_000)
+    }
+  })
+
   it('does not mistake a comment inside a code fence for a heading', () => {
     const withFence = [
       '## v1.5.0 — Sprint 12: Notifications & billing',
