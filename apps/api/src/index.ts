@@ -8,7 +8,7 @@ import {
   type UIDataTypes,
   type UIMessage,
 } from 'ai'
-import { API_ROUTES } from '@devsprint/shared'
+import { API_ROUTES, trimChatHistory } from '@devsprint/shared'
 import type { AppEnv } from './env'
 import { corsOriginMatcher } from './cors'
 import { workspaceStub, type WorkspaceApi } from './workspace/durable-object'
@@ -321,6 +321,8 @@ app.post(API_ROUTES.chat, async (c) => {
   } catch (error) {
     return invalidInput(c, `Invalid UI messages: ${describeError(error).message}`)
   }
+  // Before settling, so what gets spent is read from the array the model will see.
+  uiMessages = trimChatHistory(uiMessages)
   if (hasTooManyApprovals(uiMessages)) {
     return invalidInput(c, 'Too many approvals in one request.')
   }

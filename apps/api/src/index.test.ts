@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Workspace } from '@devsprint/shared'
+import { MAX_HISTORY_MESSAGES, type Workspace } from '@devsprint/shared'
 import type { WorkspaceApi } from '@devsprint/shared/tools'
 import app from './index'
 import { fakeWorkspaceBinding } from '../test/workspace-binding'
@@ -925,6 +925,50 @@ describe('POST /api/chat', () => {
     const chunks = parseChunks(await res.text())
     expect(chunks.some((chunk) => chunk.type === 'error')).toBe(false)
     expect(textOf(chunks)).toContain('5 open issues')
+  })
+
+  it('sends the model only the recent part of a long transcript', async () => {
+    const prompts: Array<{ messages: Array<{ role: string; content: unknown }> }> = []
+    const chunk = (extra: Record<string, unknown>) =>
+      `data: ${JSON.stringify({ id: '1', object: 'chat.completion.chunk', created: 1, model: 'm', ...extra })}\n\n`
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init: RequestInit) => {
+        prompts.push(JSON.parse(init.body as string) as (typeof prompts)[number])
+        return Promise.resolve(
+          new Response(
+            chunk({ choices: [{ index: 0, delta: { role: 'assistant', content: 'hi' } }] }) +
+              chunk({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) +
+              'data: [DONE]\n\n',
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+        )
+      }),
+    )
+    const messages = Array.from({ length: 300 }, (_, index) => ({
+      id: `m${index}`,
+      role: index % 2 === 0 ? 'user' : 'assistant',
+      parts: [{ type: 'text', text: `message ${index}` }],
+    }))
+    messages.push({ id: 'latest', role: 'user', parts: [{ type: 'text', text: 'the latest' }] })
+
+    const res = await app.request(
+      '/api/chat',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages }),
+      },
+      { ...env, MODEL_PROVIDER: 'groq', GROQ_API_KEY: 'gsk-not-real', DAILY_TOKEN_CAP: '0' },
+    )
+    expect(res.status).toBe(200)
+    await res.text()
+    vi.unstubAllGlobals()
+
+    const sent = prompts[0]?.messages.filter((message) => message.role !== 'system') ?? []
+    expect(sent.length).toBeLessThanOrEqual(MAX_HISTORY_MESSAGES)
+    expect(sent[0]?.role).toBe('user')
+    expect(JSON.stringify(sent.at(-1))).toContain('the latest')
   })
 
   it('rejects a body without messages', async () => {
