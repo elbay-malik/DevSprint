@@ -18,6 +18,29 @@ test('the board hydrates from the api', async ({ page }) => {
   await expect(page.getByTestId('workspace-source')).toHaveText(/live/i)
 })
 
+// The caption compares the Worker's board with the SPA's copy of the seed, so
+// this is the check that those two really do start out equal.
+test('the board says how far it has come since the last reset', async ({ page, request }) => {
+  await page.goto('/')
+  await expect(page.getByTestId('workspace-source')).toHaveText(/live/i)
+  const caption = page.getByTestId('workspace-changes')
+  await expect(caption).toHaveCount(0)
+
+  await send(page, 'Mark DS-7 as done.')
+  await page.getByTestId('approval-card').getByTestId('approval-approve').click()
+  await turnSettled(page)
+  await expect(caption).toContainText('1 change since the last reset')
+
+  // A new visitor arriving on the same board sees it straight away.
+  await page.reload()
+  await expect(caption).toContainText('1 change since the last reset')
+
+  await resetBoard(request)
+  await page.reload()
+  await expect(page.getByTestId('workspace-source')).toHaveText(/live/i)
+  await expect(caption).toHaveCount(0)
+})
+
 test('the agent sources its issue tools over MCP, not the local fallback', async ({ page }) => {
   await page.goto('/')
 
