@@ -328,6 +328,7 @@ type ToolErrorCode =
   | 'WORKSPACE_FULL'
   | 'UNDO_CONFLICT'
   | 'RESET_COOLDOWN'
+  | 'INTERNAL'
 ```
 
 Canonical error codes:
@@ -345,6 +346,7 @@ Canonical error codes:
 | WORKSPACE_FULL         | A write would push the persisted board past its size cap, or `create_issue` past the day's 40 new issues; reset the board              |
 | UNDO_CONFLICT          | Undo route only (HTTP 409): the issue changed since the write, it was already undone, or no record of it remains (a reset clears them) |
 | RESET_COOLDOWN         | Reset route only (HTTP 429): the board was reset less than 30 seconds ago, by anyone                                                   |
+| INTERNAL               | Issues MCP server only: the workspace call failed unexpectedly, so a write may or may not have landed. The detail goes to the log      |
 
 Notes:
 
@@ -352,6 +354,9 @@ Notes:
   `{ ok: true, data: { matches: [] } }`.
 - Tools must not throw for domain failures — they return `ok: false` so the agent can see the code
   and recover (scenario S-E depends on this).
+- A throw is for what was not expected. The issues MCP server answers it with `INTERNAL` and a fixed
+  message, and logs the detail as a `tool-failed` event, so an internal error message never reaches
+  a public caller.
 
 ## 5. User roster and name resolution
 
