@@ -135,3 +135,29 @@ spec cited. What changed is when it re-reads:
   recognisable as current.
 - **Reset board asks "Reset for everyone?" first,** inline, because of the cost named under
   Consequences above: either visitor's Reset discards the other's work.
+
+## Status note — 2026-11-01
+
+What reaches the ledger is narrower now, and a third exception joins the two named above.
+
+- **An approval is spent only by a turn that will run.** `settleApprovals` used to run before the
+  budget check and the model lookup, so a press those refused was gone and read as a replay when
+  the budget came back. It now runs after both. A limit message says the approval was not applied,
+  since the card still reads "Approved by you".
+- **Only the current turn is scanned:** every message after the last user message, on the same
+  array that is converted. Not just the last message, because a trailing message holding only a
+  step-start converts to nothing, which leaves the approval before it to execute unspent. Answered
+  approvals from before the last user message are dropped from the request, because nothing can
+  run from there and the conversion would leave a tool call with no result in the prompt.
+- **Only signed `tool-*` parts for a write tool are spent, up to 60 per request.** More than that
+  is a 400 before the ledger is touched. An answered `dynamic-tool` part is dropped rather than
+  ignored: the signature covers the tool name and not the part type, so a captured approval
+  rewritten as one would execute without being spent.
+
+**The third exception: junk ids can evict real ones.** The ledger is written before any signature
+is checked, because the SDK verifies inside the agent loop and does not export its check. Sixty
+made-up ids a request at the 60-a-minute rate limit flushes all 1,500 entries in about 25 seconds
+from one IP, after which a captured approval replays once more. Accepted, because it grants nothing
+beyond what reset already allows every 30 seconds (ADR-0024), and a client only holds approvals it
+pressed itself. Checking the signature first would close it, at the cost of reimplementing the
+SDK's private signing format. That has not been done.
