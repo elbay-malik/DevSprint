@@ -158,7 +158,7 @@ daily cap that the mock never counts against.
 | `pnpm lint`         | ESLint (single root flat config)                                      |
 | `pnpm format:check` | Prettier check                                                        |
 | `pnpm typecheck`    | recursive per-package typecheck                                       |
-| `pnpm test`         | recursive Vitest                                                      |
+| `pnpm test`         | recursive Vitest, then `node --test` for `scripts/`                   |
 | `pnpm eval`         | trajectory evals for the 6 demo scenarios                             |
 | `pnpm build`        | recursive builds (web: vite; api: wrangler dry-run)                   |
 | `pnpm ci:local`     | CI's `checks` and `e2e` jobs, on this machine                         |
@@ -186,6 +186,10 @@ minutes. Use it whenever GitHub Actions cannot run. `--checks` or `--e2e` runs o
   wrangler can leave its dev registry cleanly.
 - **It never kills a process it did not start.** If a port the stack needs is taken, it names the
   process holding it and stops.
+- **It drops credentials from the environment each step gets** (`scripts/ci-env.ts`):
+  `CLOUDFLARE_*`, `GROQ_*`, `GOOGLE_*`, `LANGFUSE_*`, `GH_TOKEN` and `GITHUB_TOKEN`. It is not a
+  sandbox. It runs the workflow's steps as you, and a step can still read `~/.wrangler` or an `.env`
+  file from disk.
 - **Logs go to `.ci-local/`.**
 - **Edits under `apps/api` during a run fail the test on screen.** `wrangler dev` restarts the
   Worker and has no flag to stop it, which ends any stream in flight. The web server runs without
@@ -199,7 +203,8 @@ its first connection, so another process on a port it polls can stall it until i
 ### Deploying
 
 `pnpm deploy:all` deploys all three Workers in the one order that works and ends with smoke checks.
-Pushes to `main` run it in CI once both test jobs pass. Details are in
+Pushes to `main` run it in CI once both test jobs pass. From a laptop it refuses unless the checkout
+is a clean `main` level with `origin/main`. Details are in
 [apps/api/README.md](apps/api/README.md#deploying) and
 [ADR-0019](docs/adr/0019-deploy-topology-and-spa-only-previews.md).
 
@@ -211,7 +216,7 @@ Pushes to `main` run it in CI once both test jobs pass. Details are in
 | `apps/api`                | `@devsprint/api`        | Hono Worker: chat route, agent loop, workspace Durable Object                            |
 | `apps/mcp-issues`         | `@devsprint/mcp-issues` | Public issues MCP server, Streamable HTTP and stateless                                  |
 | `packages/shared`         | `@devsprint/shared`     | Domain types, tool schemas, seed fixtures                                                |
-| `scripts/`                | (root)                  | `deploy.ts`, `smoke.ts`, `ci-local.ts`                                                   |
+| `scripts/`                | (root)                  | `deploy.ts`, `deploy-gates.ts`, `smoke.ts`, `ci-local.ts`, and their tests               |
 | `docs/`                   | (none)                  | Product brief, domain model, scenarios, wireframes, demo-video storyboard, roadmap, ADRs |
 | `PRODUCT.md`, `DESIGN.md` | (root)                  | The product record and the design system (tokens mirrored in `.impeccable/design.json`)  |
 

@@ -172,3 +172,38 @@ no longer the hash-named URL Cloudflare gives every uploaded version. Those URLs
 can't reach the api from a browser. The `pr-<n>` links posted on PRs work as before. These origins
 are also the only browser origins that may POST (ADR-0025), and smoke checks both refusals and the
 headers from `apps/web/public/_headers`.
+
+## Status note — 2026-11-02 (gates and CI hardening)
+
+Changes to the deploy script:
+
+- **A laptop deploy is gated on git.** It refuses unless the checkout is on `main`, has no changes
+  to tracked files, and sits at `origin/main` after a fresh fetch, and this runs before the build
+  in step 1. A feature branch or worktree is refused even at the same commit. Untracked files are
+  allowed, and a failed fetch refuses. `--skip-git-gate` overrides it. `GITHUB_ACTIONS` skips it,
+  because CI checks out a detached HEAD and keeps no credentials to fetch with. `--plan` is not
+  gated.
+- **The provider key is checked up front.** With an existing api, a `MODEL_PROVIDER` whose key is
+  missing now refuses before anything ships. It used to be caught only by the smoke check, after all
+  three Workers were live. ADR-0021's fallback to the mock is unchanged, and a new api only warns.
+- **"On the first deploy alone" now means a new api.** The shared-board write and reset used to run
+  when the MCP Worker was new, which would have reset a live board had only that Worker been
+  recreated. They now run only when `devsprint-api`, which holds the Durable Object, is new.
+- **A failed deploy prints `wrangler rollback` commands** for the Workers it shipped, api before MCP
+  Worker. It rolls nothing back itself, because one Worker going back alone can leave the
+  mismatched pair the deploy-order note describes.
+
+Changes to `.github/workflows/ci.yml`:
+
+- **Actions are pinned to commits.** Dependabot bumps them, along with npm, weekly and grouped, with
+  a three-day cooldown past pnpm's release-age check.
+- **The workflow token is read-only by default,** and checkouts do not persist it.
+- **The Cloudflare token reaches only the step that uses it,** not `pnpm install`. The jobs name
+  `production` and `preview` environments so each can hold its own token. That part is the owner's
+  to finish in the repository's settings, and until then both jobs use the repo secrets. Step
+  scoping is defence in depth only: `deploy:all` still builds with the token, and a same-repo PR can
+  edit `ci.yml`, so only a branch policy on the `production` environment protects the deploy token.
+- **`pnpm audit` has its own job,** which nothing depends on and which cannot fail the run. Dependabot
+  PRs get no preview, because they get no secrets.
+
+CI still has not deployed, so none of the workflow changes have run on GitHub yet.
