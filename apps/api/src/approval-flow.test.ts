@@ -342,6 +342,61 @@ describe('a spent approval in a shape the SPA never sends', () => {
     expect(ranCall(chunks, captured.toolCallId)).toBe(false)
     expect(ds7Status()).toBe('in_review')
   })
+
+  it('cannot run a spent approval through a finished part that shares its id', async () => {
+    // No flag needed. The finished part still answers the approval, and the
+    // answered part after it points that answer at a call with no result. The
+    // ledger denies the answered part only.
+    const captured = await spendApprovalForDs7()
+
+    const { chunks } = await replay([
+      {
+        ...captured,
+        toolCallId: 'finished',
+        state: 'output-available',
+        output: { ok: true },
+      },
+      captured,
+    ])
+
+    expect(ranCall(chunks, captured.toolCallId)).toBe(false)
+    expect(ds7Status()).toBe('in_review')
+  })
+
+  it('cannot run a spent approval from a read tool part that shares its call id', async () => {
+    // The ledger skips the read part and the unsigned part. The read part still
+    // answers the approval, and the unsigned part supplies the write it verifies against.
+    const captured = await spendApprovalForDs7()
+
+    const { chunks } = await replay([
+      { ...captured, type: 'tool-list_issues', input: {} },
+      { ...captured, approval: { id: 'shadow', approved: false } },
+    ])
+
+    expect(ranCall(chunks, captured.toolCallId)).toBe(false)
+    expect(ds7Status()).toBe('in_review')
+  })
+
+  it('still resumes a turn whose earlier step already ran', async () => {
+    const first = await post([userMessage(CLOSE_OUT)])
+    const assistant = answeredAssistantMessage(first.chunks, () => ({ approved: true }))
+    const [step, done, ...rest] = assistant.parts
+    const finished = {
+      ...done,
+      state: 'output-available',
+      output: { ok: true },
+    }
+
+    const { chunks } = await post([
+      userMessage(CLOSE_OUT),
+      { ...assistant, parts: [step, finished, { type: 'step-start' }, ...rest] },
+    ])
+
+    expect(chunks.filter((chunk) => chunk.type === 'tool-output-available')).toHaveLength(
+      rest.length,
+    )
+    expect(chunks.some((chunk) => chunk.type === 'error')).toBe(false)
+  })
 })
 
 describe('approvals in a long conversation', () => {

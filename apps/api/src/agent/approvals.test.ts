@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { UIMessage } from 'ai'
+import { convertToModelMessages, type UIMessage } from 'ai'
 import {
   APPROVAL_SECRET_VAR,
   dropUnusableApprovals,
@@ -52,6 +52,11 @@ function executed(approvalId: string): UIMessage {
   } as unknown as UIMessage
 }
 
+/** A ledger that records what it was asked to spend and has spent nothing. */
+function spy() {
+  return { spendApprovals: vi.fn().mockResolvedValue([]) }
+}
+
 describe('resolveApprovalSecret', () => {
   beforeEach(() => {
     resetApprovalSigningState()
@@ -100,11 +105,6 @@ describe('settleApprovals', () => {
   function approvalOf(message: UIMessage, index = 0): { approved?: boolean; reason?: string } {
     const part = message.parts[index] as { approval: { approved?: boolean; reason?: string } }
     return part.approval
-  }
-
-  /** A ledger that records what it was asked to spend and has spent nothing. */
-  function spy() {
-    return { spendApprovals: vi.fn().mockResolvedValue([]) }
   }
 
   it('lets an approval through the first time', async () => {
@@ -294,9 +294,98 @@ describe('dropUnusableApprovals', () => {
     expect(dropUnusableApprovals([user, message])[1]).toBe(message)
   })
 
-  it('keeps calls that already ran, which are real history', () => {
+  it('keeps calls that already ran as history, without their answer', () => {
     const message = executed('a1')
-    expect(dropUnusableApprovals([user, message, later])[1]).toBe(message)
+
+    const [, kept] = dropUnusableApprovals([user, message, later])
+
+    expect(kept?.parts).toEqual([
+      {
+        ...message.parts[0],
+        approval: { id: 'a1', signature: 'sig' },
+      },
+    ])
+    expect((message.parts[0] as { approval: { approved?: boolean } }).approval.approved).toBe(true)
+  })
+
+  it('keeps the reason on a denial that already ran, which the prompt reads', () => {
+    const denied = {
+      id: 'a1',
+      role: 'assistant',
+      parts: [
+        answered('a1', {
+          state: 'output-denied',
+          approval: { id: 'a1', approved: false, reason: 'not yet', signature: 'sig' },
+        }),
+      ],
+    } as unknown as UIMessage
+
+    const part = dropUnusableApprovals([user, denied])[1]?.parts[0] as {
+      state: string
+      approval: Record<string, unknown>
+    }
+
+    expect(part.state).toBe('output-denied')
+    expect(part.approval).toEqual({ id: 'a1', reason: 'not yet', signature: 'sig' })
+  })
+
+  it('leaves the prompt the same for calls that already ran', async () => {
+    const denied = {
+      id: 'a2',
+      role: 'assistant',
+      parts: [
+        answered('a2', {
+          state: 'output-denied',
+          approval: { id: 'a2', approved: false, reason: 'not yet', signature: 'sig' },
+        }),
+      ],
+    } as unknown as UIMessage
+    const transcript = [user, executed('a1'), denied, later]
+    // The SDK removes these two kinds itself on the way to the provider.
+    const prompt = async (messages: UIMessage[]) =>
+      (await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true })).map(
+        (message) =>
+          typeof message.content === 'string'
+            ? message
+            : {
+                ...message,
+                content: message.content.filter(
+                  (part) =>
+                    part.type !== 'tool-approval-request' && part.type !== 'tool-approval-response',
+                ),
+              },
+      )
+
+    expect(await prompt(dropUnusableApprovals(transcript))).toEqual(await prompt(transcript))
+    expect(JSON.stringify(await prompt(dropUnusableApprovals(transcript)))).toContain('not yet')
+  })
+
+  it('leaves no answer on anything settleApprovals will not spend', async () => {
+    const parts = [
+      answered('spent'),
+      answered('read-tool', { type: 'tool-list_issues' }),
+      answered('dynamic', { type: 'dynamic-tool', toolName: 'update_issue_status' }),
+      answered('unsigned', { approval: { id: 'unsigned', approved: false } }),
+      answered('x'.repeat(65)),
+      answered('finished', { state: 'output-available', output: {} }),
+      answered('failed', { state: 'output-error', errorText: 'no' }),
+      answered('denied', {
+        state: 'output-denied',
+        approval: { id: 'denied', approved: false, signature: 'sig' },
+      }),
+    ]
+    const message = { id: 'a1', role: 'assistant', parts } as unknown as UIMessage
+    const ledger = spy()
+
+    const sanitized = dropUnusableApprovals([user, message])
+    await settleApprovals(sanitized, ledger)
+
+    const answeredIds = sanitized[1]?.parts.flatMap((part) => {
+      const { approval } = part as { approval?: { id: string; approved?: boolean } }
+      return approval?.approved === undefined ? [] : [approval.id]
+    })
+    expect(answeredIds).toEqual(['spent'])
+    expect(ledger.spendApprovals).toHaveBeenCalledWith(['spent'])
   })
 
   it('removes an answered dynamic tool part, which the ledger would not see', () => {
