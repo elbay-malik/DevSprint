@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { jobSteps } from './ci-workflow.ts'
+import { jobBlock, jobSteps } from './ci-workflow.ts'
 
 const ROOT = join(import.meta.dirname, '..')
 const workflow = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8')
@@ -34,4 +34,33 @@ void test('a job with a multi-line run step is refused, not half read', () => {
 
 void test('a job that is not there is an error', () => {
   assert.throws(() => jobSteps(workflow, 'nope'), /no 'nope' job/)
+})
+
+void test('every action is pinned to a commit, with its version beside it', () => {
+  const uses = [...workflow.matchAll(/^\s+(?:- )?uses: (.+)$/gm)].map((match) => match[1] ?? '')
+  assert.ok(uses.length > 0)
+  for (const line of uses) assert.match(line, /^[\w./-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+$/)
+})
+
+void test('the workflow token is read-only by default', () => {
+  const head = workflow.slice(0, workflow.indexOf('\njobs:'))
+  assert.match(head, /^permissions:\n {2}contents: read$/m)
+})
+
+void test('only the preview job widens the token, to comment on its PR', () => {
+  assert.match(
+    jobBlock(workflow, 'preview'),
+    /permissions:\n\s+contents: read\n\s+pull-requests: write/,
+  )
+  for (const job of ['checks', 'e2e', 'deploy']) {
+    assert.doesNotMatch(jobBlock(workflow, job), /permissions:/)
+  }
+})
+
+void test('no checkout leaves the token in .git/config', () => {
+  const checkouts = workflow
+    .split(/^(?=\s+- )/m)
+    .filter((step) => step.includes('actions/checkout@'))
+  assert.equal(checkouts.length, 4)
+  for (const step of checkouts) assert.match(step, /with:\n\s+persist-credentials: false\n/)
 })
