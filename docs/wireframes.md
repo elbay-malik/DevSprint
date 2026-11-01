@@ -121,7 +121,9 @@ assistant turn (top to bottom)
 - **Headline**: human-readable args summary (here `DS-7: In review → Done`; statuses use the
   labels in `status-labels.ts`, never the raw enum). No label sits above it.
 - **Body**: the issue title, then the tool name as a quiet mono meta line, with the raw JSON
-  arguments behind a collapsible disclosure.
+  arguments behind a collapsible disclosure. What the write would store is shown above the
+  disclosure: a new issue's assignee, priority, points, labels and description, the release notes
+  it would save, or a status change's comment, as plain text in a box that scrolls.
 - **Footer**: Deny (with an optional free-text reason input) and Approve.
 - **Resolved state** replaces the footer once the user acts; the card stays in the transcript as
   an audit record:
