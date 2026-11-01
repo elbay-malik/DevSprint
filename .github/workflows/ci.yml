@@ -94,9 +94,6 @@ jobs:
     concurrency:
       group: deploy-production
       cancel-in-progress: false
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -107,7 +104,12 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The token reaches only the step that uses it, not the install's lifecycle
+      # scripts above. deploy:all still builds with it (ADR-0019).
       - run: pnpm deploy:all
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
   # A PR gets its SPA as a preview version of the web Worker, against the
   # production api. Forks and Dependabot have no secrets, so they get no preview.
@@ -116,12 +118,11 @@ jobs:
     needs: [checks]
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: preview
     permissions:
       contents: read
       pull-requests: write
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       ALIAS: pr-${{ github.event.pull_request.number }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -134,7 +135,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @devsprint/web build
-      - run: >
+      - env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: >
           pnpm --filter @devsprint/web exec wrangler versions upload
           --preview-alias "$ALIAS"
           --message "PR #${{ github.event.pull_request.number }} @ ${{ github.event.pull_request.head.sha }}"
