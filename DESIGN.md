@@ -502,7 +502,16 @@ hairline underneath and no fill. There are no routes to navigate besides a 404.
 The record of a decision. It opens on a 14px medium headline (the one 14px line inside chat cards),
 with no label above it: "Approval required" would be untrue on a decided card. Under it sit the
 issue title and a quiet 12px Graphite mono line naming the tool, and the raw arguments are one
-`<details>` away. While pending, it holds a reason input, an outline Deny and a primary Approve,
+`<details>` away. What a write would store is on the card itself, not behind that disclosure, since
+this card is the control against a prompt injection (ADR-0016): a new issue's assignee, priority,
+points and labels in one 12px Graphite line under its title ("@dana · high · 3 pts · billing,
+export"), and, above the disclosure, a new issue's description, the release notes it would save or a
+status change's comment. That text sits in a 1px Rule box in 12px Graphite, up to 192px tall, with a
+tab stop because it scrolls. It is shown as plain text, never as markdown, and all of it can be
+scrolled to, since a clamp would let injected text sit below the cut. A deployment that would skip
+its tests says so in the headline ("Deploy v1.5.0 to production, tests skipped"), so the names
+built on the headline and the decided record say it too. That is not a warning: a person may have
+asked for it, so Approve keeps the Ink. While pending, it holds a reason input, an outline Deny and a primary Approve,
 which is outline too on every open card but the first in its message. When a status change or
 reassignment targets a key the board does not hold, or a reassignment names an id nobody on the team
 has, a 12px Stop Red line says so under the headline ("DS-42 isn’t on the board.", "No one on the
