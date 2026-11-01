@@ -1,18 +1,33 @@
 import { describe, expect, it, vi } from 'vitest'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { createWorkspaceSeed } from '@devsprint/shared'
 import { MAX_BODY_BYTES } from './batch'
-import worker from './index'
+import worker, { Internal } from './index'
 
 /** The two bindings the public handler reads, with only the write these tests reach. */
 function fakeEnv({ underLimit = true } = {}) {
   const issue = createWorkspaceSeed().issues[0]!
   const createIssue = vi.fn(() => Promise.resolve({ ok: true as const, data: { issue } }))
   const limit = vi.fn(() => Promise.resolve({ success: underLimit }))
+  const openWorkspace = vi.fn(() => ({ createIssue }))
   const env = {
-    WORKSPACE: { idFromName: () => 'workspace', get: () => ({ createIssue }) },
+    WORKSPACE: { idFromName: () => 'workspace', get: openWorkspace },
     MCP_RATE_LIMIT: { limit },
   } as unknown as Env
-  return { env, createIssue, limit }
+  return { env, createIssue, limit, openWorkspace }
+}
+
+/** What a host sends to open the optional server-to-client stream. */
+function openStream(method = 'GET') {
+  return new Request('https://mcp.test/mcp', {
+    method,
+    headers: { Accept: 'text/event-stream', 'CF-Connecting-IP': '203.0.113.9' },
+  })
+}
+
+function internal(env: Env) {
+  return new Internal({} as ExecutionContext, env)
 }
 
 function post(body: string) {
@@ -83,6 +98,25 @@ describe('the public fetch handler', () => {
     expect(createIssue).not.toHaveBeenCalled()
   })
 
+  it.each(['GET', 'DELETE'])('refuses a %s for one token, with no workspace', async (method) => {
+    const { env, limit, openWorkspace } = fakeEnv()
+
+    const response = await worker.fetch(openStream(method), env)
+
+    expect(response.status).toBe(405)
+    expect(response.headers.get('Allow')).toBe('POST')
+    expect(limit).toHaveBeenCalledOnce()
+    expect(openWorkspace).not.toHaveBeenCalled()
+  })
+
+  it('still answers a GET on /health', async () => {
+    const { env } = fakeEnv()
+
+    const response = await worker.fetch(new Request('https://mcp.test/health'), env)
+
+    await expect(response.json()).resolves.toEqual({ ok: true })
+  })
+
   it('spends no token on anything but /mcp', async () => {
     const { env, limit } = fakeEnv()
 
@@ -94,5 +128,48 @@ describe('the public fetch handler', () => {
 
     expect(response.status).toBe(200)
     expect(limit).not.toHaveBeenCalled()
+  })
+})
+
+describe('the Internal entrypoint', () => {
+  it.each(['GET', 'DELETE'])('refuses a %s too, with no workspace', async (method) => {
+    const { env, limit, openWorkspace } = fakeEnv()
+
+    const response = await internal(env).fetch(openStream(method))
+
+    expect(response.status).toBe(405)
+    expect(response.headers.get('Allow')).toBe('POST')
+    expect(limit).not.toHaveBeenCalled()
+    expect(openWorkspace).not.toHaveBeenCalled()
+  })
+
+  it('serves a real MCP client, which takes the 405 on its GET as normal', async () => {
+    const { env, createIssue } = fakeEnv()
+    const entrypoint = internal(env)
+    const answers: { method: string; status: number }[] = []
+    const transport = new StreamableHTTPClientTransport(new URL('https://mcp.test/mcp'), {
+      fetch: async (input, init) => {
+        const response = await entrypoint.fetch(new Request(input, init))
+        answers.push({ method: init?.method ?? 'GET', status: response.status })
+        return response
+      },
+    })
+    const client = new Client({ name: 'test-host', version: '1.0.0' })
+    const onerror = vi.fn()
+    client.onerror = onerror
+
+    await client.connect(transport)
+    const { tools } = await client.listTools()
+    const result = await client.callTool({
+      name: 'create_issue',
+      arguments: { title: 'a title', type: 'bug' },
+    })
+    await client.close()
+
+    expect(tools).toHaveLength(5)
+    expect(result.isError).toBeUndefined()
+    expect(createIssue).toHaveBeenCalledOnce()
+    expect(answers).toContainEqual({ method: 'GET', status: 405 })
+    expect(onerror).not.toHaveBeenCalled()
   })
 })
