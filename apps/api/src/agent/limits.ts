@@ -80,17 +80,53 @@ export const RATE_LIMITED_MESSAGE =
   'Too many requests in a short time, so this one was skipped. Ask again in a few seconds.'
 
 /**
+ * Added when the refused request was an approval resume. The card above still
+ * reads "Approved by you", and nothing on it can say otherwise, because the
+ * write never ran and has no result. This line is the only thing telling the
+ * reader so.
+ */
+export const APPROVAL_NOT_APPLIED_MESSAGE =
+  'Anything you just approved has not been applied. Ask for it again if you still want it.'
+
+/**
+ * Whether this request resumes a turn from its approval cards. The SPA only ever
+ * sends a transcript ending on the assistant for that, and a question ends on
+ * the person's message. Reads the unvalidated body because the rate limit runs
+ * before validation.
+ */
+export function isApprovalResume(messages: unknown[]): boolean {
+  const last: unknown = messages.at(-1)
+  return typeof last === 'object' && last !== null && 'role' in last && last.role === 'assistant'
+}
+
+/**
+ * The limit message for this request, saying what became of the approval when
+ * the request carried one.
+ */
+export function limitMessage(message: string, messages: unknown[]): string {
+  return isApprovalResume(messages) ? `${message} ${APPROVAL_NOT_APPLIED_MESSAGE}` : message
+}
+
+/**
  * A complete assistant turn carrying one message, streamed the same way a real
  * answer is. Returning a 200 with a readable turn is what makes the degraded
  * state designed rather than broken.
+ *
+ * The text gets a step of its own. The SPA resends once the tools in the last
+ * step have all been answered, and it only looks after the last step boundary.
+ * Written into the step that holds the answered cards, this message would leave
+ * that condition true, so one approval press would resend for as long as the
+ * limit lasted, and the write would run with no new press once the limit lifted.
  */
 export function messageOnlyResponse(text: string, headers: Record<string, string>): Response {
   const stream = createUIMessageStream({
     execute: ({ writer }) => {
       const id = crypto.randomUUID()
+      writer.write({ type: 'start-step' })
       writer.write({ type: 'text-start', id })
       writer.write({ type: 'text-delta', id, delta: text })
       writer.write({ type: 'text-end', id })
+      writer.write({ type: 'finish-step' })
     },
   })
   return createUIMessageStreamResponse({
