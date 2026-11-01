@@ -6,6 +6,13 @@
  *
  *   pnpm deploy:all --plan     print what it would do, deploy nothing
  *
+ * From a laptop it refuses unless this checkout is on main, has no changes to
+ * tracked files, and sits exactly at origin/main, so what ships is what was
+ * merged. Untracked files are allowed. --plan is not gated, and neither is CI,
+ * which checks out a detached HEAD of the commit it is deploying.
+ *
+ *   pnpm deploy:all --skip-git-gate     deploy this checkout anyway (a hotfix, or offline)
+ *
  * The two Workers depend on each other: apps/api service-binds
  * devsprint-mcp-issues (its `Internal` entrypoint, ADR-0020), and
  * apps/mcp-issues binds the WorkspaceDO class that devsprint-api defines. The
@@ -32,8 +39,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import ts from 'typescript'
+import { deployRefusal } from './deploy-gates.ts'
 
 const ROOT = join(import.meta.dirname, '..')
+const SKIP_GIT_GATE = '--skip-git-gate'
 
 type App = 'api' | 'mcp-issues' | 'web'
 
@@ -53,6 +62,35 @@ function wrangler(app: App, args: string[], options: { capture?: boolean } = {})
 function must(step: string, result: { status: number; out: string }) {
   if (result.status !== 0) throw new Error(`${step} failed (exit ${result.status})\n${result.out}`)
   return result
+}
+
+function refuse(reason: string): never {
+  console.error(`Refusing to deploy: ${reason}`)
+  process.exit(1)
+}
+
+/** One line from git, or a refusal: a gate that cannot read the state must not open. */
+function git(args: string[]): string {
+  const result = run('git', args, { capture: true })
+  if (result.status !== 0) {
+    refuse(
+      `git ${args[0]} failed (exit ${result.status}), so the checkout cannot be compared with origin/main. ` +
+        `${SKIP_GIT_GATE} deploys anyway.\n${result.out}`,
+    )
+  }
+  return result.out.trim()
+}
+
+/** Ships only what was merged. Compares with a fresh fetch, not the last one this clone did. */
+function gitGate() {
+  git(['fetch', '--quiet', 'origin', '+refs/heads/main:refs/remotes/origin/main'])
+  const reason = deployRefusal({
+    dirty: git(['status', '--porcelain', '--untracked-files=no']) !== '',
+    branch: git(['branch', '--show-current']),
+    head: git(['rev-parse', 'HEAD']),
+    originMain: git(['rev-parse', 'refs/remotes/origin/main']),
+  })
+  if (reason) refuse(`${reason}. Deploy from a clean main, or pass ${SKIP_GIT_GATE}.`)
 }
 
 /** Whether a Worker exists on the account. Anything but "does not exist" is a real error. */
@@ -106,6 +144,14 @@ function deployApi(options: { bootstrap: boolean; secretsFile: string | undefine
 
 async function main() {
   const planOnly = process.argv.includes('--plan')
+
+  if (!planOnly && !process.env.GITHUB_ACTIONS) {
+    if (process.argv.includes(SKIP_GIT_GATE)) {
+      console.warn(`${SKIP_GIT_GATE}: deploying this checkout as it is, whatever its git state.`)
+    } else {
+      gitGate()
+    }
+  }
 
   // Built first so a type or build error stops the run before anything ships.
   if (!planOnly) must('building the SPA', run('pnpm', ['--filter', '@devsprint/web', 'build']))
