@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ToolErrorCode } from '@devsprint/shared'
-import { errorCopyText, toolErrorCopy as copyParts } from './error-copy'
+import { chatErrorDescription, errorCopyText, toolErrorCopy as copyParts } from './error-copy'
 
 /** The copy as the reader sees it, identifiers and all. */
 const toolErrorCopy = (...args: Parameters<typeof copyParts>) => errorCopyText(copyParts(...args))
@@ -149,6 +149,49 @@ describe('toolErrorCopy', () => {
       expect(toolErrorCopy(tool, 'INTERNAL')).toBe(
         'The board couldn’t be reached, so this may not have saved. Check the board before trying again.',
       )
+    }
+  })
+})
+
+describe('chatErrorDescription', () => {
+  const refusal = (code: string, message = 'detail not for the reader') =>
+    new Error(JSON.stringify({ error: { code, message } }))
+  const CONNECTION = 'Check your connection, then send your message again.'
+  const GENERIC = 'Something went wrong on our side. Send your message again.'
+
+  it('never shows a refused request as raw JSON', () => {
+    const invalid = chatErrorDescription(refusal('INVALID_INPUT'))
+    expect(invalid).toBe('The copilot couldn’t read that message. Shorten it, then send it again.')
+    expect(chatErrorDescription(refusal('MODEL_NOT_CONFIGURED'))).toBe(
+      'The copilot’s model isn’t available right now. The board still works.',
+    )
+  })
+
+  it('gives an unknown code, or JSON with no code, the generic line', () => {
+    expect(chatErrorDescription(refusal('SOMETHING_NEW'))).toBe(GENERIC)
+    expect(chatErrorDescription(new Error('{"message":"no code here"}'))).toBe(GENERIC)
+    expect(chatErrorDescription(new Error('{not json'))).toBe(GENERIC)
+  })
+
+  it('gives an html error page the generic line', () => {
+    expect(chatErrorDescription(new Error('<!DOCTYPE html><html>502</html>'))).toBe(GENERIC)
+  })
+
+  it('sends a failed fetch and the framework 500 to the connection line', () => {
+    expect(chatErrorDescription(new TypeError('Failed to fetch'))).toBe(CONNECTION)
+    expect(chatErrorDescription(new TypeError('Load failed'))).toBe(CONNECTION)
+    expect(chatErrorDescription(new Error('Internal Server Error'))).toBe(CONNECTION)
+    expect(chatErrorDescription(new Error(''))).toBe(CONNECTION)
+  })
+
+  it('leaves the api’s own stream errors exactly as written', () => {
+    // These carry advice a person can act on (ADR-0005), so replacing them loses it.
+    for (const curated of [
+      'The model quota is exhausted for now. Try again in a minute.',
+      "That approval couldn't be verified, so nothing ran. Ask again for a fresh approval card.",
+      "The copilot hit a model error and couldn't finish. Send your message again.",
+    ]) {
+      expect(chatErrorDescription(new Error(curated))).toBe(curated)
     }
   })
 })

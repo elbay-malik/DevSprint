@@ -112,3 +112,41 @@ export function toolErrorCopy(toolName: string, code: string, input?: unknown): 
       return ['That didn’t go through.']
   }
 }
+
+const CHAT_CONNECTION_COPY = 'Check your connection, then send your message again.'
+const CHAT_GENERIC_COPY = 'Something went wrong on our side. Send your message again.'
+
+/** Fixed copy for the api's refusals, per code. The body's own message is not for this reader. */
+const CHAT_REFUSAL_COPY: Record<string, string> = {
+  // A body too large, a message too long, or a transcript the api would not take.
+  INVALID_INPUT: 'The copilot couldn’t read that message. Shorten it, then send it again.',
+  MODEL_NOT_CONFIGURED: 'The copilot’s model isn’t available right now. The board still works.',
+}
+
+/**
+ * The toast's line for a failed chat request.
+ *
+ * The SDK has two sources for `chat.error`, and they need opposite handling. A
+ * refused request throws the raw response body as the message, so it reads as
+ * JSON or an error page and gets replaced. An error inside the stream carries a
+ * string the api wrote for this person (agent/errors.ts), with advice ADR-0005
+ * asks for, so it has to pass through as it is.
+ */
+export function chatErrorDescription(error: Error): string {
+  // What `fetch` throws when the request never got an answer, in every browser.
+  if (error instanceof TypeError) return CHAT_CONNECTION_COPY
+
+  const message = error.message.trim()
+  if (message === '' || message === 'Internal Server Error') return CHAT_CONNECTION_COPY
+  if (message.startsWith('<')) return CHAT_GENERIC_COPY
+  if (!message.startsWith('{')) return error.message
+
+  try {
+    const body = JSON.parse(message) as { error?: { code?: unknown } }
+    const code = body.error?.code
+    return (typeof code === 'string' ? CHAT_REFUSAL_COPY[code] : undefined) ?? CHAT_GENERIC_COPY
+  } catch {
+    // Starts like JSON but is not, so it is not one of the api's own sentences either.
+    return CHAT_GENERIC_COPY
+  }
+}
