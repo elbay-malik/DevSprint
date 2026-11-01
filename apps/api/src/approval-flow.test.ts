@@ -184,6 +184,24 @@ describe('approval gates (scenario S-B)', () => {
     expect(replay.body).not.toContain('"type":"error"')
   })
 
+  it('still resumes with call metadata on the tool parts', async () => {
+    // Gemini reads its thought signature back from here, so nothing may strip it.
+    const first = await post([userMessage(CLOSE_OUT)])
+    const assistant = answeredAssistantMessage(first.chunks, () => ({ approved: true }))
+    const withMetadata = {
+      ...assistant,
+      parts: assistant.parts.map((part) =>
+        'approval' in part
+          ? { ...part, callProviderMetadata: { google: { thoughtSignature: 'abc' } } }
+          : part,
+      ),
+    }
+
+    const second = await post([userMessage(CLOSE_OUT), withMetadata])
+
+    expect(second.chunks.filter((chunk) => chunk.type === 'tool-output-available')).toHaveLength(5)
+  })
+
   it('cannot hide a replay behind a message that converts to nothing', async () => {
     const first = await post([userMessage(CLOSE_OUT)])
     const assistant = answeredAssistantMessage(first.chunks, () => ({ approved: true }))

@@ -237,6 +237,11 @@ Each request is bounded as well: a 256 KB body (413), 4,000 characters in a user
 4,096 output tokens per model call. Older history is dropped rather than refused, keeping the latest
 user message and everything after it, then what fits in 20 messages and 32,000 characters.
 
+A transcript with a system message, or a user message holding anything but text, is a 400. The SPA
+sends neither, and the second would have the Worker fetch a file from a URL the client chose.
+Provider options on a user part are removed before conversion, and the ones on assistant parts stay,
+because they carry Gemini's thought signature through an approval resume.
+
 The scripted mock is exempt, so local dev, CI and e2e spend nothing and are never rationed. Set
 `DAILY_TOKEN_CAP=0` to turn the cap off entirely; a missing or nonsense value falls back to the
 default rather than to a cap of zero.
