@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import app from './index'
 import { resetApprovalSigningState } from './agent/approvals'
-import { APPROVAL_NOT_APPLIED_MESSAGE } from './agent/limits'
+import {
+  lastAssistantMessageIsCompleteWithApprovalResponses,
+  readUIMessageStream,
+  type UIMessage,
+  type UIMessageChunk,
+} from 'ai'
+import { APPROVAL_NOT_APPLIED_MESSAGE, CLIENT_BUDGET_REACHED_MESSAGE } from './agent/limits'
 import { fakeWorkspaceBinding } from '../test/workspace-binding'
 
 const workspace = fakeWorkspaceBinding()
@@ -599,6 +605,80 @@ describe('an approval resume a limit refused', () => {
     expect(later.chunks.filter((chunk) => chunk.type === 'tool-output-denied')).toHaveLength(0)
     expect(later.chunks.filter((chunk) => chunk.type === 'tool-output-available')).toHaveLength(5)
     expect(openIssues()).toEqual([])
+  })
+
+  describe('by the per-client share', () => {
+    const CLIENT = '203.0.113.9'
+    const overShare = { ...budgetLeft, CLIENT_DAILY_TOKEN_SHARE: '100' }
+    const roomLeft = { ...budgetLeft, CLIENT_DAILY_TOKEN_SHARE: '100000' }
+
+    /** `post`, as one client: the share only exists for a request that names one. */
+    async function postAs(messages: unknown[], overrides: Record<string, unknown>) {
+      const res = await app.request(
+        '/api/chat',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': CLIENT },
+          body: JSON.stringify({ messages }),
+        },
+        { ...env, ...overrides },
+      )
+      const limit = res.headers.get('x-devsprint-limit')
+      const chunks = (await res.text())
+        .split('\n')
+        .filter((line) => line.startsWith('data: ') && line !== 'data: [DONE]')
+        .map((line) => JSON.parse(line.slice(6)) as Chunk)
+      return { limit, chunks }
+    }
+
+    beforeEach(() => {
+      workspace.store.recordModelUsage(100, CLIENT)
+    })
+
+    it('leaves the approval unspent, says so, and it runs once there is room', async () => {
+      const first = await post([userMessage(CLOSE_OUT)])
+      const assistant = answeredAssistantMessage(first.chunks, () => ({ approved: true }))
+      const open = openIssues()
+      expect(open).toHaveLength(5)
+
+      const refused = await postAs([userMessage(CLOSE_OUT), assistant], overShare)
+
+      expect(refused.limit).toBe('client-budget')
+      expect(textOf(refused.chunks)).toBe(
+        `${CLIENT_BUDGET_REACHED_MESSAGE} ${APPROVAL_NOT_APPLIED_MESSAGE}`,
+      )
+      expect(openIssues()).toEqual(open)
+
+      stubGroq()
+      const later = await postAs([userMessage(CLOSE_OUT), assistant], roomLeft)
+
+      expect(later.chunks.filter((chunk) => chunk.type === 'tool-output-denied')).toHaveLength(0)
+      expect(later.chunks.filter((chunk) => chunk.type === 'tool-output-available')).toHaveLength(5)
+      expect(openIssues()).toEqual([])
+    })
+
+    it('does not make the SPA resend the answered approval', async () => {
+      // Run on the SDK's own reducer and predicate, on what the route really sent.
+      // True here would resend for as long as the share lasted, then run the write
+      // with no new press at midnight.
+      const first = await post([userMessage(CLOSE_OUT)])
+      const assistant = answeredAssistantMessage(first.chunks, () => ({ approved: true }))
+      const held = assistant as unknown as UIMessage
+      expect(lastAssistantMessageIsCompleteWithApprovalResponses({ messages: [held] })).toBe(true)
+
+      const refused = await postAs([userMessage(CLOSE_OUT), assistant], overShare)
+
+      const stream = new ReadableStream<UIMessageChunk>({
+        start(controller) {
+          for (const chunk of refused.chunks) controller.enqueue(chunk as UIMessageChunk)
+          controller.close()
+        },
+      })
+      let after = held
+      for await (const next of readUIMessageStream({ message: held, stream })) after = next
+      expect(after.parts.at(-1)).toMatchObject({ type: 'text' })
+      expect(lastAssistantMessageIsCompleteWithApprovalResponses({ messages: [after] })).toBe(false)
+    })
   })
 
   it('leaves the approval unspent when the model is not configured', async () => {

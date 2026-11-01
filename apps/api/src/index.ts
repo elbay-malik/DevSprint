@@ -35,13 +35,16 @@ import {
 import { createTurnTracer, resolveTracingConfig } from './agent/tracing'
 import {
   BUDGET_REACHED_MESSAGE,
+  CLIENT_BUDGET_REACHED_MESSAGE,
   limitMessage,
   messageOnlyResponse,
   RATE_LIMITED_MESSAGE,
   rateLimitKey,
   RESET_RETRY_AFTER_SECONDS,
+  resolveClientTokenShare,
   resolveDailyTokenCap,
   resolveResetCooldownMs,
+  spendLimitReached,
   type RateLimitBinding,
 } from './agent/limits'
 
@@ -403,17 +406,39 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
   }
   const { model, label } = resolved
 
-  // The day's budget. Only a real provider spends anything, so the scripted
-  // mock is exempt — otherwise local dev and CI would be rationing a resource
-  // they do not consume.
+  // The day's budget and this client's share of it. Only a real provider spends
+  // anything, so the scripted mock is exempt — otherwise local dev and CI would
+  // be rationing a resource they do not consume.
+  //
+  // A request with no client key has no share to check. It is let through rather
+  // than folded into one shared count, the same policy as the limiter above
+  // (ADR-0020), and the day's cap still applies to it.
   const dailyCap = resolveDailyTokenCap(c.env.DAILY_TOKEN_CAP)
-  if (dailyCap !== undefined && label !== 'mock') {
-    const usage = await workspace.modelUsage()
-    if (usage.tokens >= dailyCap) {
+  const clientShare = resolveClientTokenShare(c.env.CLIENT_DAILY_TOKEN_SHARE)
+  const shareKey = clientShare === undefined ? undefined : clientKey
+  const metered = label !== 'mock' && (dailyCap !== undefined || shareKey !== undefined)
+  if (metered) {
+    const usage = await workspace.modelUsage(shareKey)
+    const reached = spendLimitReached(usage, dailyCap, clientShare)
+    if (reached === 'budget') {
       console.warn(JSON.stringify({ event: 'budget-reached', day: usage.day, spent: usage.tokens }))
       return messageOnlyResponse(limitMessage(BUDGET_REACHED_MESSAGE, messages), {
         'X-DevSprint-Model': label,
         'X-DevSprint-Limit': 'budget',
+      })
+    }
+    if (reached === 'client-budget') {
+      // Not the key: this log line is no place for an address.
+      console.warn(
+        JSON.stringify({
+          event: 'client-budget-reached',
+          day: usage.day,
+          spent: usage.clientTokens,
+        }),
+      )
+      return messageOnlyResponse(limitMessage(CLIENT_BUDGET_REACHED_MESSAGE, messages), {
+        'X-DevSprint-Model': label,
+        'X-DevSprint-Limit': 'client-budget',
       })
     }
   }
@@ -447,13 +472,15 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
     ...(turnTracer ? { tracer: turnTracer.tracer } : {}),
     // Spend is recorded after each step, on `waitUntil`, so a turn stopped
     // halfway still counts the steps it took.
-    ...(dailyCap !== undefined && label !== 'mock'
+    ...(metered
       ? {
-          onUsage: (tokens: number) => waitUntil(workspace.recordModelUsage(tokens)),
+          onUsage: (tokens: number) => waitUntil(workspace.recordModelUsage(tokens, shareKey)),
           // Concurrent turns all pass the check above before any has recorded
           // spend, so each re-reads it between steps. Each can still overshoot by
           // about a step, and a read can miss a write `waitUntil` has not landed.
-          shouldStop: async () => (await workspace.modelUsage()).tokens >= dailyCap,
+          shouldStop: async () =>
+            spendLimitReached(await workspace.modelUsage(shareKey), dailyCap, clientShare) !==
+            undefined,
         }
       : {}),
   })

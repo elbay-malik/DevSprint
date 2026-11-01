@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MAX_HISTORY_MESSAGES, MAX_USER_MESSAGE_CHARS, type Workspace } from '@devsprint/shared'
 import type { WorkspaceApi } from '@devsprint/shared/tools'
 import app from './index'
+import { BUDGET_REACHED_MESSAGE, CLIENT_BUDGET_REACHED_MESSAGE } from './agent/limits'
 import { MAX_CHAT_BODY_BYTES } from './agent/request-bounds'
 import { fakeWorkspaceBinding } from '../test/workspace-binding'
 
@@ -766,6 +767,261 @@ describe('POST /api/chat — spend controls', () => {
 
     expect(provider).toHaveBeenCalledTimes(1)
     expect(fresh.store.modelUsage().tokens).toBe(1500)
+  })
+
+  describe('per-client share', () => {
+    const ME = '203.0.113.9'
+    const SHARE = { ...paid, DAILY_TOKEN_CAP: '100000', CLIENT_DAILY_TOKEN_SHARE: '1000' }
+
+    /** Stands in for Groq, answering in one step that spends 1,500 tokens. */
+    function stubProvider() {
+      const chunk = (extra: Record<string, unknown>) =>
+        `data: ${JSON.stringify({ id: '1', object: 'chat.completion.chunk', created: 1, model: 'm', ...extra })}\n\n`
+      const provider = vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            chunk({ choices: [{ index: 0, delta: { role: 'assistant', content: 'hi' } }] }) +
+              chunk({
+                choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+                x_groq: { usage: { prompt_tokens: 1200, completion_tokens: 300 } },
+              }) +
+              'data: [DONE]\n\n',
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+        ),
+      )
+      vi.stubGlobal('fetch', provider)
+      return provider
+    }
+
+    /** One question, as `ip` or with no client header at all. */
+    async function askAs(ip: string | undefined, overrides: Record<string, unknown>) {
+      const res = await app.request(
+        '/api/chat',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(ip === undefined ? {} : { 'CF-Connecting-IP': ip }),
+          },
+          body: JSON.stringify({
+            messages: [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hello' }] }],
+          }),
+        },
+        { ...env, ...overrides },
+      )
+      return { limit: res.headers.get('x-devsprint-limit'), answer: await res.text() }
+    }
+
+    /** Recording rides `waitUntil`, so it lands after the body has streamed. */
+    async function landed(read: () => number) {
+      for (let attempt = 0; attempt < 50 && read() === 0; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      }
+    }
+
+    it('refuses a client over its share, in its own words, before the model', async () => {
+      const provider = stubProvider()
+      const fresh = fakeWorkspaceBinding()
+      fresh.store.recordModelUsage(1_000, ME)
+
+      const { limit, answer } = await askAs(ME, { ...SHARE, WORKSPACE: fresh.binding })
+
+      expect(limit).toBe('client-budget')
+      expect(textOf(parseChunks(answer))).toBe(CLIENT_BUDGET_REACHED_MESSAGE)
+      expect(provider).not.toHaveBeenCalled()
+    })
+
+    it('still answers another client while the first is over its share', async () => {
+      const provider = stubProvider()
+      const fresh = fakeWorkspaceBinding()
+      fresh.store.recordModelUsage(1_000, ME)
+
+      const { limit } = await askAs('198.51.100.4', { ...SHARE, WORKSPACE: fresh.binding })
+
+      expect(limit).toBeNull()
+      expect(provider).toHaveBeenCalledTimes(1)
+    })
+
+    it('answers a client one token short of its share', async () => {
+      stubProvider()
+      const fresh = fakeWorkspaceBinding()
+      fresh.store.recordModelUsage(999, ME)
+
+      const { limit } = await askAs(ME, { ...SHARE, WORKSPACE: fresh.binding })
+
+      expect(limit).toBeNull()
+    })
+
+    it('treats every address in one /64 as one client, and the next /64 as another', async () => {
+      stubProvider()
+      const fresh = fakeWorkspaceBinding()
+      fresh.store.recordModelUsage(1_000, '2001:db8:1:2::/64')
+      const on = { ...SHARE, WORKSPACE: fresh.binding }
+
+      expect((await askAs('2001:db8:1:2:aaaa::1', on)).limit).toBe('client-budget')
+      expect((await askAs('2001:db8:1:2:bbbb::2', on)).limit).toBe('client-budget')
+      expect((await askAs('2001:db8:1:3::1', on)).limit).toBeNull()
+    })
+
+    it('records each step against the client as well as the day', async () => {
+      stubProvider()
+      const fresh = fakeWorkspaceBinding()
+
+      await askAs('2001:db8:1:2:aaaa::1', { ...SHARE, WORKSPACE: fresh.binding })
+      await landed(() => fresh.store.modelUsage().tokens)
+
+      expect(fresh.store.modelUsage('2001:db8:1:2::/64')).toMatchObject({
+        tokens: 1_500,
+        clientTokens: 1_500,
+      })
+    })
+
+    it('stops a running turn once its spend has used up the share', async () => {
+      // The same reason as the cap: concurrent turns from one client all pass the
+      // door, so each has to look again between steps.
+      const chunk = (extra: Record<string, unknown>) =>
+        `data: ${JSON.stringify({ id: '1', object: 'chat.completion.chunk', created: 1, model: 'm', ...extra })}\n\n`
+      const provider = vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            chunk({
+              choices: [
+                {
+                  index: 0,
+                  delta: {
+                    role: 'assistant',
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: `call-${provider.mock.calls.length}`,
+                        type: 'function',
+                        function: { name: 'get_sprint_status', arguments: '{}' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }) +
+              chunk({
+                choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+                x_groq: { usage: { prompt_tokens: 1200, completion_tokens: 300 } },
+              }) +
+              'data: [DONE]\n\n',
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+        ),
+      )
+      vi.stubGlobal('fetch', provider)
+      const fresh = fakeWorkspaceBinding()
+
+      await askAs(ME, { ...SHARE, WORKSPACE: fresh.binding })
+
+      expect(provider).toHaveBeenCalledTimes(1)
+      expect(fresh.store.modelUsage(ME).clientTokens).toBe(1_500)
+    })
+
+    it('says the demo is out, not the client, once the whole day is gone', async () => {
+      const fresh = fakeWorkspaceBinding()
+      fresh.store.recordModelUsage(100_000, ME)
+
+      const { limit, answer } = await askAs(ME, { ...SHARE, WORKSPACE: fresh.binding })
+
+      expect(limit).toBe('budget')
+      expect(textOf(parseChunks(answer))).toBe(BUDGET_REACHED_MESSAGE)
+    })
+
+    it('exempts the scripted mock, because it spends nothing', async () => {
+      const fresh = fakeWorkspaceBinding()
+      fresh.store.recordModelUsage(1_000_000, ME)
+
+      const { limit, answer } = await askAs(ME, {
+        CLIENT_DAILY_TOKEN_SHARE: '1',
+        WORKSPACE: fresh.binding,
+      })
+
+      expect(limit).toBeNull()
+      expect(textOf(parseChunks(answer))).toContain('points remaining')
+    })
+
+    it('fails open with no client key, and the cap still holds (ADR-0020)', async () => {
+      const provider = stubProvider()
+      const fresh = fakeWorkspaceBinding()
+      fresh.store.recordModelUsage(5_000)
+
+      const open = await askAs(undefined, { ...SHARE, WORKSPACE: fresh.binding })
+      expect(open.limit).toBeNull()
+      expect(provider).toHaveBeenCalledTimes(1)
+      await landed(() => fresh.store.modelUsage().tokens - 5_000)
+      expect(fresh.store.modelUsage().tokens).toBe(6_500)
+
+      const capped = await askAs(undefined, {
+        ...SHARE,
+        DAILY_TOKEN_CAP: '6000',
+        WORKSPACE: fresh.binding,
+      })
+      expect(capped.limit).toBe('budget')
+    })
+
+    it('holds with the cap turned off, and still counts toward the client', async () => {
+      stubProvider()
+      const fresh = fakeWorkspaceBinding()
+      const noCap = { ...SHARE, DAILY_TOKEN_CAP: '0', WORKSPACE: fresh.binding }
+
+      expect((await askAs(ME, noCap)).limit).toBeNull()
+      await landed(() => fresh.store.modelUsage(ME).clientTokens ?? 0)
+
+      expect((await askAs(ME, noCap)).limit).toBe('client-budget')
+    })
+
+    it('stops counting per client when the share is turned off', async () => {
+      stubProvider()
+      const fresh = fakeWorkspaceBinding()
+      fresh.store.recordModelUsage(50_000, ME)
+      const before = fresh.store.modelUsage().tokens
+      const off = { ...SHARE, CLIENT_DAILY_TOKEN_SHARE: '0', WORKSPACE: fresh.binding }
+
+      expect((await askAs(ME, off)).limit).toBeNull()
+      await landed(() => fresh.store.modelUsage().tokens - before)
+
+      expect(fresh.store.modelUsage().tokens).toBe(before + 1_500)
+      expect(fresh.store.modelUsage(ME).clientTokens).toBe(50_000)
+    })
+
+    it('applies the 25,000 default when the var is unset', async () => {
+      stubProvider()
+      const fresh = fakeWorkspaceBinding()
+      fresh.store.recordModelUsage(25_000, ME)
+      const defaults = { ...paid, DAILY_TOKEN_CAP: '100000', WORKSPACE: fresh.binding }
+
+      expect((await askAs(ME, defaults)).limit).toBe('client-budget')
+    })
+
+    it('does not let Reset buy back a share', async () => {
+      const provider = stubProvider()
+      const fresh = fakeWorkspaceBinding()
+      fresh.store.recordModelUsage(1_000, ME)
+      const on = { ...SHARE, WORKSPACE: fresh.binding }
+
+      const reset = await app.request('/api/workspace/reset', { method: 'POST' }, { ...env, ...on })
+      expect(reset.status).toBe(200)
+
+      expect((await askAs(ME, on)).limit).toBe('client-budget')
+      expect(provider).not.toHaveBeenCalled()
+    })
+
+    it('keeps the address out of the refusal log line', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+      const fresh = fakeWorkspaceBinding()
+      fresh.store.recordModelUsage(1_000, ME)
+
+      await askAs(ME, { ...SHARE, WORKSPACE: fresh.binding })
+
+      const logged = warn.mock.calls.flat().join('\n')
+      warn.mockRestore()
+      expect(logged).toContain('client-budget-reached')
+      expect(logged).not.toContain(ME)
+    })
   })
 
   it('does not let Reset buy back budget', async () => {
