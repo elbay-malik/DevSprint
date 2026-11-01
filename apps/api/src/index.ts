@@ -378,8 +378,8 @@ app.post(API_ROUTES.chat, async (c) => {
     tools,
     approvalSecret: resolveApprovalSecret(c.env.TOOL_APPROVAL_SECRET),
     ...(turnTracer ? { tracer: turnTracer.tracer } : {}),
-    // Spend is recorded after the fact, on `waitUntil`: the answer has already
-    // streamed by then, and a turn still costs whatever it cost.
+    // Spend is recorded after each step, on `waitUntil`, so a turn stopped
+    // halfway still counts the steps it took.
     ...(dailyCap !== undefined && label !== 'mock'
       ? { onUsage: (tokens: number) => waitUntil(workspace.recordModelUsage(tokens)) }
       : {}),

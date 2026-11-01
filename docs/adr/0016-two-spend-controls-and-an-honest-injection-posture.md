@@ -122,3 +122,10 @@ unit tests run unbound.
 A gap this ADR did not cover: the public MCP server had no per-IP rate limit. The board's 512 KB
 cap bounded storage, but one client could still fill it in seconds. ADR-0020 closes that with a
 limit on the public endpoint and an unthrottled internal entrypoint for the agent.
+
+## Status note — 2026-11-01
+
+"Usage is recorded _after_ a turn finishes" is out of date. It is recorded after each step, because
+the SDK does not call `onFinish` on an aborted turn: a client could stop every turn just before it
+ended and spend without being charged. What can still go uncounted is the one step in flight when
+the abort lands.
