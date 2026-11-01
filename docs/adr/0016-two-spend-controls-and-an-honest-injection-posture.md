@@ -200,3 +200,35 @@ What it does not do:
   whole day between them, and a host holding a /48 has many /64s.
 - **Several visitors behind one NAT share one share,** so an office can run out early. The message
   says "this connection" for that reason.
+- **It does not set a header when a turn ends between steps.** The headers have gone by then, so
+  `X-DevSprint-Limit` only marks a turn refused at the door. The turn still says why it ended.
+
+Two corrections to the 2026-11-01 note, because a share any one client can reach makes both matter.
+
+"The one step in flight" understated what could go uncounted. The SDK only reports usage for a step
+that finishes, and that step can be the whole turn. A client that read the first chunk and dropped
+the connection, every turn, was never charged at all: 20 such turns on a stubbed provider left the
+object at 0, and neither limit fired. The limits now see it, because a model call is charged as it
+starts, from the size of what is being sent, and again for each 2,000 characters it writes. The step
+then settles on the provider's figure, up or down. A call the provider turns down is refunded, so a
+429 costs nothing. A step that gets cut off keeps the estimate, and a step that reports no figure does
+too.
+
+That is not the reservation rejected above. The objection there was a permanent guess, and a step
+that finishes still ends on the real number. Only a step with no real number keeps a rough one, which
+is more accurate than the zero it replaces. A step now writes to the object about twice rather than
+once, and more for a long answer. Usage can go down as well as up, through `refundModelUsage` alone,
+and `recordModelUsage` still refuses a negative figure.
+
+The estimate is only an estimate. It counts characters at four to a token, and whether a provider
+bills a cancelled call in full, in part or at all has not been measured, so a client that always
+leaves can be charged somewhat more or less than it cost. On the local stack a bare "hello" came to
+about 2,600 tokens, since the prompt and the tool definitions go in, so a visitor who presses Stop
+pays about what a turn costs. The check is still ahead of the charge, so concurrent turns can all pass
+it and overshoot by about a step each.
+
+"A turn the check ends can finish on a tool result with no written answer" is no longer true. It said
+so for a once-a-day event on the cap, and the share makes it reachable by any client during its own
+session. A turn a limit ends between steps now closes with that limit's message, in a step of its own
+for the reason a refused turn has one. It leaves out the line about an approval not being applied,
+because an approval the request carried has already run by then.

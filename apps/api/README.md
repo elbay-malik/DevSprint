@@ -243,9 +243,15 @@ stores a hash of the key and the day, in a map of at most 2,000 clients that the
 deletes. A request with no `cf-connecting-ip` has no share to check, and the cap still applies to it.
 Several visitors behind one NAT share one share.
 
-Usage is recorded per step, so a turn someone stopped still counts the steps it took, and a turn
-re-reads both limits between steps and ends once one has been reached. This is check-then-record, so
-concurrent turns can overshoot the cap or a share by about a step each.
+Usage is recorded per step, so a turn someone stopped still counts the steps it took. A model call
+is also charged as it starts and as it writes, from an estimate, because the SDK reports nothing for
+a step that never finishes and a client could otherwise leave mid-call every turn without being
+charged (`src/agent/spend-meter.ts`). A step that finishes settles on the provider's figure, and a
+call the provider turns down is refunded.
+
+A turn re-reads both limits between steps and ends once one has been reached, closing with that
+limit's message. It has no `X-DevSprint-Limit` header, which only marks a turn refused at the door.
+This is check-then-record, so concurrent turns can overshoot the cap or a share by about a step each.
 
 Each request is bounded as well: a 256 KB body (413), 4,000 characters in a user message (400), and
 4,096 output tokens per model call. Older history is dropped rather than refused, keeping the latest

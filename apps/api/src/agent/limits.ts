@@ -67,7 +67,8 @@ export function resolveClientTokenShare(configured: string | undefined): number 
  * This is check-then-record, for the cap and the share alike. A turn is checked,
  * then spends, then records, so concurrent turns can each pass the check and
  * overshoot by about a step per turn. Reserving tokens up front was rejected
- * (ADR-0016) because it means guessing them.
+ * (ADR-0016) because it means guessing them. The estimate in spend-meter.ts is
+ * not that: it only stays for a step that never reports a real figure.
  */
 export function spendLimitReached(
   usage: DailyModelUsage,
