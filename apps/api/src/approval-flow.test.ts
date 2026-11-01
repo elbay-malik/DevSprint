@@ -279,7 +279,7 @@ describe('approvals in a long conversation', () => {
     const history = Array.from({ length: 300 }, (_, index) => ({
       id: `h${index}`,
       role: index % 2 === 0 ? 'user' : 'assistant',
-      parts: [{ type: 'text', text: 'earlier conversation '.repeat(50) }],
+      parts: [{ type: 'text', text: 'earlier conversation '.repeat(10) }],
     }))
 
     const second = await post([...history, userMessage(CLOSE_OUT), assistant])

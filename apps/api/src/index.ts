@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import { createMiddleware } from 'hono/factory'
 import {
@@ -25,6 +26,7 @@ import {
   resolveApprovalSecret,
   settleApprovals,
 } from './agent/approvals'
+import { chatRequestRefusal, MAX_CHAT_BODY_BYTES } from './agent/request-bounds'
 import { createTurnTracer, resolveTracingConfig } from './agent/tracing'
 import {
   BUDGET_REACHED_MESSAGE,
@@ -263,7 +265,17 @@ function invalidInput(c: Context<{ Bindings: AppEnv }>, message: string) {
   return c.json({ error: { code: 'INVALID_INPUT', message } }, 400)
 }
 
-app.post(API_ROUTES.chat, async (c) => {
+/**
+ * Reads a body with no Content-Length as far as the limit and no further, so a
+ * chunked request cannot slip past the way it would past a header check.
+ */
+const chatBodyLimit = bodyLimit({
+  maxSize: MAX_CHAT_BODY_BYTES,
+  onError: (c) =>
+    c.json({ error: { code: 'INVALID_INPUT', message: 'The request is too large.' } }, 413),
+})
+
+app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
   let body: unknown
   try {
     body = await c.req.json()
@@ -275,6 +287,8 @@ app.post(API_ROUTES.chat, async (c) => {
   if (!Array.isArray(messages)) {
     return invalidInput(c, '`messages` must be an array of UI messages.')
   }
+  const refusal = chatRequestRefusal(messages)
+  if (refusal !== undefined) return invalidInput(c, refusal)
 
   const workspace = workspaceOf(c.env)
   /**

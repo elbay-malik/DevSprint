@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { MAX_HISTORY_MESSAGES, type Workspace } from '@devsprint/shared'
+import { MAX_HISTORY_MESSAGES, MAX_USER_MESSAGE_CHARS, type Workspace } from '@devsprint/shared'
 import type { WorkspaceApi } from '@devsprint/shared/tools'
 import app from './index'
+import { MAX_CHAT_BODY_BYTES } from './agent/request-bounds'
 import { fakeWorkspaceBinding } from '../test/workspace-binding'
 
 const workspace = fakeWorkspaceBinding()
@@ -969,6 +970,69 @@ describe('POST /api/chat', () => {
     expect(sent.length).toBeLessThanOrEqual(MAX_HISTORY_MESSAGES)
     expect(sent[0]?.role).toBe('user')
     expect(JSON.stringify(sent.at(-1))).toContain('the latest')
+  })
+
+  it('refuses a body over the limit', async () => {
+    const res = await app.request(
+      '/api/chat',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [], padding: 'x'.repeat(MAX_CHAT_BODY_BYTES) }),
+      },
+      env,
+    )
+    expect(res.status).toBe(413)
+    await expect(res.json()).resolves.toMatchObject({ error: { code: 'INVALID_INPUT' } })
+  })
+
+  it('refuses a chunked body over the limit, which has no Content-Length to check', async () => {
+    const chunk = new TextEncoder().encode('x'.repeat(64 * 1024))
+    const sent = { count: 0 }
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        sent.count += 1
+        controller.enqueue(chunk)
+      },
+    })
+    const request = new Request('http://localhost/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      duplex: 'half',
+    } as RequestInit)
+    expect(request.headers.get('content-length')).toBeNull()
+
+    const res = await app.fetch(request, env)
+
+    expect(res.status).toBe(413)
+    // It stopped reading at the limit, not at the end of a body that never ends.
+    expect(sent.count).toBeLessThan(10)
+  })
+
+  it('refuses a message longer than the composer allows, before it costs anything', async () => {
+    const limit = vi.fn().mockResolvedValue({ success: true })
+    const res = await app.request(
+      '/api/chat',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.9' },
+        body: JSON.stringify({
+          messages: [
+            {
+              id: 'm1',
+              role: 'user',
+              parts: [{ type: 'text', text: 'x'.repeat(MAX_USER_MESSAGE_CHARS + 1) }],
+            },
+          ],
+        }),
+      },
+      { ...env, CHAT_RATE_LIMIT: { limit } },
+    )
+
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toMatchObject({ error: { code: 'INVALID_INPUT' } })
+    expect(limit).not.toHaveBeenCalled()
   })
 
   it('rejects a body without messages', async () => {
