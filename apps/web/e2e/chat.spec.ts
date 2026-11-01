@@ -367,6 +367,8 @@ test('deny DS-11, then Approve remaining 4 answers each card on its own record',
   // the header itself approves nothing.
   const header = page.getByTestId('approval-group-header')
   await expect(header).toBeFocused()
+  await expect(header).toHaveCSS('outline-style', 'solid')
+  await expect(header).toHaveCSS('outline-width', '2px')
   await page.keyboard.press('Enter')
   await expect(all).toHaveText('Approve all 5')
   await page.keyboard.press('Tab')
