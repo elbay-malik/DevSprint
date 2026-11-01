@@ -125,7 +125,9 @@ assistant turn (top to bottom)
 - **Body**: the issue title, then the tool name as a quiet mono meta line, with the raw JSON
   arguments behind a collapsible disclosure. What the write would store is shown above the
   disclosure: a new issue's assignee, priority, points, labels and description, the release notes
-  it would save, or a status change's comment, as plain text in a box that scrolls.
+  it would save, or the comment on a move to blocked, as plain text in a box that scrolls. Blank
+  lines at the top and long runs of them are dropped from the box, not from the raw arguments, and
+  a line under it says when the text runs past it.
 - **Footer**: Deny (with an optional free-text reason input) and Approve.
 - **Resolved state** replaces the footer once the user acts; the card stays in the transcript as
   an audit record:
@@ -187,8 +189,8 @@ their assignee too, so the hand-on reads there as well:
 +- - - - - - - - - - - - - - - -+
 ```
 
-**Group header and Approve all.** Two or more approval cards in one message get a header line
-above the first. When two or more of the open cards on the last message are board writes that
+**Group header and Approve all.** Two or more approval cards in one message's current round get a
+header line above the round's first. Cards that already ran stay above it. When two or more of the open cards on the last message are board writes that
 can land, it also carries "Approve all N", the message's one Ink, and every card below decides in
 outline. Cards it leaves are named under it:
 
