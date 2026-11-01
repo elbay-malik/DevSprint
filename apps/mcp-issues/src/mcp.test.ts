@@ -41,6 +41,18 @@ async function resultOf(response: Response) {
   ).result
 }
 
+/**
+ * The public entrypoint's order: `refuseBatch` reads the body, so the transport
+ * can only get it through `parsedBody`. Sharing one request is the point.
+ */
+async function handleAfterRefuseBatch(body: string, api: WorkspaceApi) {
+  const request = post(body)
+  const read = await refuseBatch(request)
+  if (!('parsedBody' in read)) throw new Error('the body was refused')
+  expect(request.bodyUsed).toBe(true)
+  return await handleMcpRequest(request, api, read.parsedBody)
+}
+
 describe('handleMcpRequest', () => {
   it('refuses a tool call with too many elements before it reaches the workspace', async () => {
     const { api, createIssue } = fakeWorkspace()
@@ -58,11 +70,8 @@ describe('handleMcpRequest', () => {
   it('applies the element limit to a body the public entrypoint already parsed', async () => {
     const { api, createIssue } = fakeWorkspace()
     const labels = Array.from({ length: MAX_TOOL_INPUT_ELEMENTS + 50 }, (_, i) => `l${i}`)
-    const body = createIssueCall({ labels })
 
-    const result = await resultOf(
-      await handleMcpRequest(post(body), api, JSON.parse(body) as unknown),
-    )
+    const result = await resultOf(await handleAfterRefuseBatch(createIssueCall({ labels }), api))
 
     expect(result.isError).toBe(true)
     expect(result.content[0]!.text).toContain('more than the maximum')
@@ -102,10 +111,8 @@ describe('handleMcpRequest', () => {
       priority: 'medium',
     }).replaceAll('é', '\\u00e9')
 
-    const read = await refuseBatch(post(body))
-    if (!('parsedBody' in read)) throw new Error('the body was refused')
+    const result = await resultOf(await handleAfterRefuseBatch(body, api))
 
-    const result = await resultOf(await handleMcpRequest(post(body), api, read.parsedBody))
     expect(result.isError).toBeUndefined()
     expect(createIssue).toHaveBeenCalledOnce()
   })
