@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { READ_TOOL_NAMES, TOOL_DESCRIPTIONS, WRITE_TOOL_NAMES } from '@devsprint/shared/tools'
 import { createLocalWorkspaceApi, createWorkspaceStore } from '../workspace/store'
+import { compactIssueListForModel } from './model-output'
 import { createReadTools, createTools, createWriteTools } from './tools'
 
 const store = createWorkspaceStore()
@@ -39,6 +40,12 @@ describe('createReadTools', () => {
       ok: false,
       error: { code: 'SPRINT_NOT_FOUND' },
     })
+  })
+
+  it('bounds what the model reads of the two list tools, and of no other', () => {
+    expect(tools.list_issues.toModelOutput).toBe(compactIssueListForModel)
+    expect(tools.search_issues.toModelOutput).toBe(compactIssueListForModel)
+    expect(tools.get_sprint_status).not.toHaveProperty('toModelOutput')
   })
 
   it('reads the store on every call rather than a captured snapshot', async () => {

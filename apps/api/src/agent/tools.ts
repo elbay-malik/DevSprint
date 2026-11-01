@@ -22,6 +22,7 @@ import {
 } from '@devsprint/shared/tools'
 import type { WorkspaceApi } from '@devsprint/shared/tools'
 import { runDeployment } from './deployment'
+import { compactIssueListForModel } from './model-output'
 
 export function createReadTools(workspace: WorkspaceApi) {
   return {
@@ -29,11 +30,13 @@ export function createReadTools(workspace: WorkspaceApi) {
       description: TOOL_DESCRIPTIONS.list_issues,
       inputSchema: READ_TOOL_INPUT_SCHEMAS.list_issues,
       execute: (input) => workspace.listIssues(input),
+      toModelOutput: compactIssueListForModel,
     }),
     search_issues: tool({
       description: TOOL_DESCRIPTIONS.search_issues,
       inputSchema: READ_TOOL_INPUT_SCHEMAS.search_issues,
       execute: (input) => workspace.searchIssues(input),
+      toModelOutput: compactIssueListForModel,
     }),
     get_sprint_status: tool({
       description: TOOL_DESCRIPTIONS.get_sprint_status,

@@ -93,6 +93,10 @@ z.object({
 
 **Errors:** `SPRINT_NOT_FOUND`, `USER_NOT_FOUND`
 
+The model's copy of this result and of `search_issues` is bounded at 12,000 characters of JSON. Past
+that, titles and labels are shortened and `data` gains `truncated: true`. The card and an MCP host
+read the output above unchanged (`apps/api/src/agent/model-output.ts`).
+
 ### 2. `search_issues`
 
 > Use when the user refers to an issue by words, topic, or a partial/uncertain key and you need to
