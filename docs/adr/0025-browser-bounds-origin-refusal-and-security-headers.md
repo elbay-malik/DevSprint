@@ -87,8 +87,8 @@ outside CORS, so a refusal or a 404 has them too. No CSP, because it serves no d
 
 - **Requiring `Origin`:** breaks curl, the smoke script and Playwright's `request.post`, and turns a
   public board (ADR-0014) into one with a token anyone can type.
-- **Refusing on `Content-Type` instead:** reset has no body at all, and it would not stop a page
-  that passes the preflight's rules another way. `Origin` is the header a page can't set.
+- **Refusing on `Content-Type` instead:** reset has no body, so it has no type to check, and it
+  would not say who sent the request. `Origin` is the header a page can't set.
 - **A nonce for the inline script:** an assets-only Worker has no per-response step to mint one
   (ADR-0009).
 - **Testing the CSP on Vite dev with `page.route` adding the header:** dev is not what ships, and
