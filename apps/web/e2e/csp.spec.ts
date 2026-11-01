@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
-import { allowingLocalApi } from './servers'
+import { allowingLocalApi, PREVIEW_ORIGIN } from './servers'
 import { resetBoard, send } from './support'
 
 /**
@@ -15,7 +15,7 @@ import { resetBoard, send } from './support'
  * `page.route` won't do: Chromium treats a document Playwright fulfils as
  * outside the loopback address space, and then refuses its calls to the api.
  */
-const PREVIEW = 'http://localhost:4173'
+const PREVIEW = PREVIEW_ORIGIN
 
 const POLICY = /^\s*Content-Security-Policy: (.+)$/m.exec(
   readFileSync(new URL('../public/_headers', import.meta.url), 'utf8'),
