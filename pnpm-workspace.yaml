@@ -49,7 +49,7 @@ catalog:
   # Backend / Workers
   hono: 4.12.28
   wrangler: 4.148.0
-  zod: 4.4.3
+  zod: 4.6.7
   # AI SDK v6 line — npm `latest` is v7; these are the official ai-v6 dist-tag
   # versions (all on @ai-sdk/provider 3.0.15). DO NOT bump to 7.x.
   ai: 6.0.277
@@ -58,13 +58,13 @@ catalog:
   '@ai-sdk/google': 3.0.121
   # MCP (Phase 6). Both are mid-split, exactly like the `ai` line: @ai-sdk/mcp
   # `latest` is 2.x, and the MCP SDK is splitting into
-  # @modelcontextprotocol/{server,client}@2. DO NOT bump either.
+  # @modelcontextprotocol/{server,client}@2. Stay on these lines: @ai-sdk/mcp
+  # 1.x, and SDK 1.x rather than the split packages.
   '@ai-sdk/mcp': 1.0.78
-  '@modelcontextprotocol/sdk': 1.30.0
+  '@modelcontextprotocol/sdk': 1.32.2
 
 minimumReleaseAgeExclude:
   - '@ai-sdk/mcp@1.0.78'
-  - '@modelcontextprotocol/sdk@1.30.0'
   - '@ai-sdk/gateway@3.0.189'
   - '@ai-sdk/google@3.0.121'
   - '@ai-sdk/groq@3.0.64'
