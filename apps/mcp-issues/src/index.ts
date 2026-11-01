@@ -1,9 +1,7 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { WorkerEntrypoint } from 'cloudflare:workers'
 import { refuseBatch } from './batch'
 import { refuseIfThrottled } from './limit'
-import { registerIssueTools } from './tools'
+import { handleMcpRequest } from './mcp'
 import { workspaceOf } from './workspace'
 
 /**
@@ -31,17 +29,7 @@ async function serve(request: Request, env: Env, parsedBody?: unknown): Promise<
     return new Response('Not found', { status: 404 })
   }
 
-  const server = new McpServer({ name: 'devsprint-issues', version: '1.0.0' })
-  registerIssueTools(server, workspaceOf(env.WORKSPACE))
-
-  // No session id generator: stateless, so any request can be served by any
-  // isolate without shared session state.
-  const transport = new WebStandardStreamableHTTPServerTransport()
-  await server.connect(transport)
-  return await transport.handleRequest(
-    request,
-    parsedBody === undefined ? undefined : { parsedBody },
-  )
+  return await handleMcpRequest(request, workspaceOf(env.WORKSPACE), parsedBody)
 }
 
 /** The public endpoint: external MCP hosts, throttled per client IP (ADR-0020). */
