@@ -138,6 +138,19 @@ describe('write-tool input bounds', () => {
     ).toBe(false)
   })
 
+  it('reports an oversized labels array once, not once per element', () => {
+    // zod 4.4.3 walked every element first, and two million non-strings cost
+    // about 2 GB of issues before the array's own limit was reported.
+    const result = WRITE_TOOL_INPUT_SCHEMAS.create_issue.safeParse({
+      title: 'ok',
+      type: 'bug',
+      labels: Array.from({ length: 1_000 }, () => 0),
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.error?.issues.map((issue) => issue.code)).toEqual(['too_big'])
+  })
+
   it('still accepts a realistic write', () => {
     const result = WRITE_TOOL_INPUT_SCHEMAS.create_issue.safeParse({
       title: 'Billing export times out for large workspaces',
