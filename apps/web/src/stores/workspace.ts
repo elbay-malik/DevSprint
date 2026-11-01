@@ -45,6 +45,7 @@ export function changedIssueKeys(previous: Workspace, next: Workspace): Set<stri
  * card for an issue made over MCP into "DS-14 isn't on the board".
  */
 export const useWorkspaceStore = defineStore('workspace', () => {
+  const seed = createWorkspaceSeed()
   const workspace = ref<Workspace>(createWorkspaceSeed())
   const source = ref<WorkspaceSource>('seed')
   const hydrating = ref(false)
@@ -119,6 +120,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     computeSprintStats(sprintIssues.value, activeSprint.value, workspace.value.now),
   )
   const users = computed(() => workspace.value.users)
+  /**
+   * How far the board has come from the seed, counted by the same rule as the
+   * changed-card mark. Client-side, since the Durable Object keeps no board-level
+   * change time, and `Issue.updatedAt` is the board's frozen clock.
+   */
+  const changesSinceReset = computed(() => changedIssueKeys(seed, workspace.value).size)
 
   return {
     workspace,
@@ -133,5 +140,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     backlogIssues,
     stats,
     users,
+    changesSinceReset,
   }
 })
