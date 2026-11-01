@@ -57,15 +57,17 @@ Annotations:
   Down walks forward, as in a shell. While approval cards are open the composer takes a draft but
   Send waits until they are answered. The empty transcript (before the first message, so not in
   the sketch above) offers the five chat scenarios (S-A through S-E) as quiet pill suggestions,
-  each labelled by its outcome and sending the verbatim scenario prompt, then two Graphite lines:
-  the board is shared and resets at 00:00 UTC, and the MCP endpoint with a Copy button, since S-F
-  runs in an external MCP host:
+  each labelled by its outcome and sending the verbatim scenario prompt, then Graphite lines: the
+  board is shared and resets at 00:00 UTC, messages go to third-party AI providers, and the MCP
+  endpoint with a Copy button, since S-F runs in an external MCP host:
 
   ```
   Ask how the sprint is going, or tell the copilot what to change.
   (Is the sprint on track?) (Draft release notes) (Close out the sprint)
   (Deploy to staging) (Mark DS-42 as done)
   Every visitor shares this board. It resets at 00:00 UTC.
+  Messages go to third-party AI providers (Groq, Google Gemini) and may be logged.
+  Don’t enter personal information.
   Any MCP client can work on it too: [Copy]
   https://devsprint-mcp-issues.eleo-666.workers.dev/mcp
   ```

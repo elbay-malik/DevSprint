@@ -107,8 +107,9 @@ storyboard; recording pending), then the ADRs and tests on GitHub.
 
 - **Name:** DevSprint Copilot.
 - **Voice:** confident and product-like. Product copy is crisp and benefit-led, and reads like a
-  shipped tool. Limits and caveats belong in the docs and ADRs, not in the product UI. It is never
-  dishonest: nothing claims a capability that doesn't exist.
+  shipped tool. Limits and caveats belong in the docs and ADRs, not in the product UI, except
+  where a visitor's messages go, which they need to know before typing. It is never dishonest:
+  nothing claims a capability that doesn't exist.
 - **The demo's fictional world:** the "Nimbus" team and the sprint-12 seed in
   `docs/domain-model.md`.
 

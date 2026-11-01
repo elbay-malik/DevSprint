@@ -940,6 +940,13 @@ describe('ChatMessageList approval groups', () => {
       )
     })
 
+    it('says where messages go before the first one is sent', () => {
+      const wrapper = mount(ChatMessageList)
+      expect(wrapper.get('[data-testid="chat-privacy"]').text().replace(/\s+/g, ' ')).toBe(
+        'Messages go to third-party AI providers (Groq, Google Gemini) and may be logged. Don’t enter personal information.',
+      )
+    })
+
     it('names the MCP endpoint and copies it, saying so', async () => {
       const writeText = vi.fn().mockResolvedValue(undefined)
       vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
