@@ -267,6 +267,30 @@ describe('approval gates (scenario S-B)', () => {
   })
 })
 
+describe('approvals in a long conversation', () => {
+  beforeEach(() => {
+    workspace.store.reset()
+    resetApprovalSigningState()
+  })
+
+  it('resumes all five cards even when the history before them is trimmed away', async () => {
+    const first = await post([userMessage(CLOSE_OUT)])
+    const assistant = answeredAssistantMessage(first.chunks, () => ({ approved: true }))
+    const history = Array.from({ length: 300 }, (_, index) => ({
+      id: `h${index}`,
+      role: index % 2 === 0 ? 'user' : 'assistant',
+      parts: [{ type: 'text', text: 'earlier conversation '.repeat(50) }],
+    }))
+
+    const second = await post([...history, userMessage(CLOSE_OUT), assistant])
+
+    expect(second.status).toBe(200)
+    expect(second.chunks.filter((chunk) => chunk.type === 'tool-output-available')).toHaveLength(5)
+    const done = workspace.store.get().issues.filter((issue) => issue.status === 'done')
+    expect(done.map((issue) => issue.key)).toEqual(expect.arrayContaining(['DS-7', 'DS-11']))
+  })
+})
+
 describe('assigning an issue — the same gate, the same ledger', () => {
   beforeEach(() => {
     workspace.store.reset()

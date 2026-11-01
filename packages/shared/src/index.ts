@@ -24,6 +24,7 @@ export const API_ROUTES = {
 
 export type ChatRole = 'user' | 'assistant' | 'system'
 
+export * from './chat-history'
 export * from './rate-limit-key'
 export * from './workspace/types'
 export * from './workspace/fixtures'
