@@ -92,6 +92,8 @@ export interface WorkspaceApi {
    */
   modelUsage(clientKey?: string): Promise<DailyModelUsage>
   recordModelUsage(tokens: number, clientKey?: string): Promise<DailyModelUsage>
+  /** Takes back an estimate that charged too much, stopping at zero. */
+  refundModelUsage(tokens: number, clientKey?: string): Promise<DailyModelUsage>
 
   listIssues(input: ListIssuesInput): Promise<ToolResult<ListIssuesData>>
   searchIssues(input: SearchIssuesInput): Promise<ToolResult<SearchIssuesData>>

@@ -14,7 +14,7 @@ import {
   setDeploymentStage,
   startDeployment,
 } from './mutations'
-import { addClientTokens, type ClientUsage } from './client-usage'
+import { addClientTokens, refundClientTokens, type ClientUsage } from './client-usage'
 import {
   assignIssueTracked,
   createIssueTracked,
@@ -41,6 +41,7 @@ export interface WorkspaceStore {
   /** Model tokens spent today, mirroring the DO's daily budget (ADR-0016). */
   modelUsage(clientKey?: string): DailyModelUsage
   recordModelUsage(tokens: number, clientKey?: string): DailyModelUsage
+  refundModelUsage(tokens: number, clientKey?: string): DailyModelUsage
 }
 
 /**
@@ -98,6 +99,15 @@ export function createWorkspaceStore(): WorkspaceStore {
       usage = { day: current.day, tokens: current.tokens + spent }
       if (clientKey === undefined) return usage
       const held = addClientTokens(currentClients(current.day).tokens, clientKey, spent)
+      clients = { day: current.day, tokens: held }
+      return { ...usage, clientTokens: held[clientKey] ?? 0 }
+    },
+    refundModelUsage: (tokens, clientKey) => {
+      const current = currentUsage()
+      const refund = Number.isFinite(tokens) && tokens > 0 ? Math.floor(tokens) : 0
+      usage = { day: current.day, tokens: Math.max(0, current.tokens - refund) }
+      if (clientKey === undefined) return usage
+      const held = refundClientTokens(currentClients(current.day).tokens, clientKey, refund)
       clients = { day: current.day, tokens: held }
       return { ...usage, clientTokens: held[clientKey] ?? 0 }
     },
@@ -180,6 +190,8 @@ export function createLocalWorkspaceApi(store: WorkspaceStore): WorkspaceApi {
     modelUsage: (clientKey) => Promise.resolve(store.modelUsage(clientKey)),
     recordModelUsage: (tokens, clientKey) =>
       Promise.resolve(store.recordModelUsage(tokens, clientKey)),
+    refundModelUsage: (tokens, clientKey) =>
+      Promise.resolve(store.refundModelUsage(tokens, clientKey)),
     // One at a time rather than filter-then-bulk-add, so an in-call duplicate
     // is caught too — mirrors the DO's real implementation. No eviction cap
     // here: that guards a Durable Object storage limit this in-memory Set does

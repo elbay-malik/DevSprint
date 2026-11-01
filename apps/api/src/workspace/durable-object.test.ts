@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WorkspaceDO } from './durable-object'
 import type { BoardChange } from './changes'
-import { addClientTokens, CLIENT_USAGE_MAX, type ClientUsage } from './client-usage'
+import {
+  addClientTokens,
+  CLIENT_USAGE_MAX,
+  refundClientTokens,
+  type ClientUsage,
+} from './client-usage'
 import { fakeDurableObjectState } from '../../test/durable-object-state'
 
 /**
@@ -576,6 +581,84 @@ describe('WorkspaceDO — per-client share of the budget', () => {
     expect(Object.keys(held(fake)?.tokens ?? {})).toHaveLength(CLIENT_USAGE_MAX)
     expect((await stub.modelUsage('heavy')).clientTokens).toBe(25_000)
     expect((await stub.modelUsage(`client-${CLIENT_USAGE_MAX}`)).clientTokens).toBe(1)
+  })
+})
+
+describe('refundModelUsage', () => {
+  const held = (fake: ReturnType<typeof fakeDurableObjectState>) =>
+    fake.raw.get('daily-client-usage') as ClientUsage | undefined
+
+  it('hashes before it reads, as recording does', async () => {
+    const { fake, stub } = await freshDO()
+    const digest = vi.spyOn(crypto.subtle, 'digest')
+    const read = vi.spyOn(fake.ctx.storage, 'get')
+
+    await stub.refundModelUsage(100, '203.0.113.7')
+
+    expect(digest.mock.invocationCallOrder[0]).toBeLessThan(read.mock.invocationCallOrder[0]!)
+    digest.mockRestore()
+  })
+
+  it('takes tokens back from the day and the client, stopping at zero', async () => {
+    const { stub } = await freshDO()
+    await stub.recordModelUsage(1_000, '203.0.113.7')
+    await stub.recordModelUsage(500, '198.51.100.4')
+
+    const after = await stub.refundModelUsage(400, '203.0.113.7')
+    expect(after).toMatchObject({ tokens: 1_100, clientTokens: 600 })
+
+    const emptied = await stub.refundModelUsage(9_000, '203.0.113.7')
+    expect(emptied).toMatchObject({ tokens: 0, clientTokens: 0 })
+    expect((await stub.modelUsage('198.51.100.4')).clientTokens).toBe(500)
+  })
+
+  it('takes tokens back from the day alone when there is no client', async () => {
+    const { stub } = await freshDO()
+    await stub.recordModelUsage(1_000, '203.0.113.7')
+
+    expect((await stub.refundModelUsage(300)).tokens).toBe(700)
+    expect((await stub.modelUsage('203.0.113.7')).clientTokens).toBe(1_000)
+  })
+
+  it('cannot add budget or spend through nonsense', async () => {
+    const { stub } = await freshDO()
+    await stub.recordModelUsage(1_000, '203.0.113.7')
+
+    await stub.refundModelUsage(-500, '203.0.113.7')
+    await stub.refundModelUsage(Number.NaN, '203.0.113.7')
+
+    expect(await stub.modelUsage('203.0.113.7')).toMatchObject({
+      tokens: 1_000,
+      clientTokens: 1_000,
+    })
+  })
+
+  it('never stores the raw key', async () => {
+    const { fake, stub } = await freshDO()
+    await stub.recordModelUsage(1_000, '203.0.113.7')
+
+    await stub.refundModelUsage(100, '203.0.113.7')
+
+    expect(JSON.stringify(held(fake))).not.toContain('203.0.113.7')
+    expect(Object.values(held(fake)?.tokens ?? {})).toEqual([900])
+  })
+
+  it('does not give a client it no longer holds a slot', async () => {
+    const { fake, stub } = await freshDO()
+
+    await stub.refundModelUsage(100, '203.0.113.7')
+
+    expect(held(fake)?.tokens).toEqual({})
+  })
+})
+
+describe('refundClientTokens', () => {
+  it('leaves a client it does not hold out of the map', () => {
+    expect(refundClientTokens({ a: 10 }, 'b', 5)).toEqual({ a: 10 })
+  })
+
+  it('stops at zero', () => {
+    expect(refundClientTokens({ a: 10 }, 'a', 25)).toEqual({ a: 0 })
   })
 })
 

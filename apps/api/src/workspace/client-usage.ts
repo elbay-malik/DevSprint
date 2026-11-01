@@ -44,6 +44,20 @@ export function addClientTokens(
 }
 
 /**
+ * Gives tokens back to a client, stopping at zero. A client the map no longer
+ * holds stays out of it: a refund is no reason to take a slot.
+ */
+export function refundClientTokens(
+  tokens: Readonly<Record<string, number>>,
+  key: string,
+  refund: number,
+): Record<string, number> {
+  const held = tokens[key]
+  if (held === undefined) return { ...tokens }
+  return { ...tokens, [key]: Math.max(0, held - refund) }
+}
+
+/**
  * What the object stores in place of a client key, so no IP address or /64 sits
  * in its storage. The day goes in the hash too, so one day's entries can't be
  * matched to the next's.
