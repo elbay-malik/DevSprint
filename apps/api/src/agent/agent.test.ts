@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { simulateReadableStream } from 'ai'
 import { createLocalWorkspaceApi, createWorkspaceStore } from '../workspace/store'
-import { createCopilotAgent, MAX_STEPS } from './agent'
+import { createCopilotAgent, MAX_OUTPUT_TOKENS, MAX_STEPS } from './agent'
 import { createTools } from './tools'
 import type {
   LanguageModelV3,
@@ -225,6 +225,60 @@ describe('createCopilotAgent', () => {
     }
 
     expect(spent).toEqual([100])
+  })
+
+  it('bounds what each model call may write', async () => {
+    const { model, seen } = loopingModel()
+    const agent = createCopilotAgent({
+      model,
+      instructions: 'test',
+      tools,
+      approvalSecret: 'test-secret',
+    })
+
+    const result = await agent.stream({ messages: [{ role: 'user', content: 'go' }] })
+    await result.consumeStream()
+
+    expect(seen.length).toBeGreaterThan(0)
+    expect(seen.every((call) => call.maxOutputTokens === MAX_OUTPUT_TOKENS)).toBe(true)
+  })
+
+  it('ends the loop once told to, ahead of the step budget', async () => {
+    const { model, seen } = loopingModel()
+    const asked: number[] = []
+    const agent = createCopilotAgent({
+      model,
+      instructions: 'test',
+      tools,
+      approvalSecret: 'test-secret',
+      shouldStop: async () => {
+        asked.push(seen.length)
+        return Promise.resolve(seen.length >= 2)
+      },
+    })
+
+    const result = await agent.stream({ messages: [{ role: 'user', content: 'go' }] })
+    await result.consumeStream()
+
+    expect(seen).toHaveLength(2)
+    expect(asked).toEqual([1, 2])
+  })
+
+  it('finishes the turn rather than hanging if the check cannot answer', async () => {
+    // It reads the Durable Object, which can fail. The stream has to end anyway.
+    const { model, seen } = loopingModel()
+    const agent = createCopilotAgent({
+      model,
+      instructions: 'test',
+      tools,
+      approvalSecret: 'test-secret',
+      shouldStop: () => Promise.reject(new Error('no answer')),
+    })
+
+    const result = await agent.stream({ messages: [{ role: 'user', content: 'go' }] })
+    await result.consumeStream({ onError: () => undefined })
+
+    expect(seen).toHaveLength(1)
   })
 
   it('exposes every read tool to the model', async () => {

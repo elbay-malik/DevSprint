@@ -397,7 +397,13 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
     // Spend is recorded after each step, on `waitUntil`, so a turn stopped
     // halfway still counts the steps it took.
     ...(dailyCap !== undefined && label !== 'mock'
-      ? { onUsage: (tokens: number) => waitUntil(workspace.recordModelUsage(tokens)) }
+      ? {
+          onUsage: (tokens: number) => waitUntil(workspace.recordModelUsage(tokens)),
+          // Concurrent turns all pass the check above before any has recorded
+          // spend, so each re-reads it between steps. Each can still overshoot by
+          // about a step, and a read can miss a write `waitUntil` has not landed.
+          shouldStop: async () => (await workspace.modelUsage()).tokens >= dailyCap,
+        }
       : {}),
   })
 

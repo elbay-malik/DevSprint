@@ -129,3 +129,22 @@ limit on the public endpoint and an unthrottled internal entrypoint for the agen
 the SDK does not call `onFinish` on an aborted turn: a client could stop every turn just before it
 ended and spend without being charged. What can still go uncounted is the one step in flight when
 the abort lands.
+
+The overshoot this ADR accepted is now tighter. A turn re-reads the day's usage after each tool step
+and ends if the cap has been reached, so concurrent turns overshoot by about one step each rather
+than one turn each. It is still not exact: the read can miss a write `waitUntil` has not landed.
+Reserving tokens up front stays rejected for the reason above. A turn the check ends can finish on
+a tool result with no written answer.
+
+The request itself is bounded too, because the budget only counts what a turn has already spent:
+
+- The body is capped at 256 KB (413), counting a chunked body as it is read. A 64 KB cap was
+  considered and rejected: a transcript with tool results and a release-notes approval can pass
+  that, and because the SPA resends the transcript, every later turn would be refused.
+- A user message over 4,000 characters is a 400, and the composer stops at the same length.
+- Older history is dropped rather than refused. The latest user message and everything after it
+  always stay. Before that, a turn keeps what fits in 20 messages and 32,000 serialized characters,
+  starting on a user message. The SPA sends the same range, and the server trims again because the
+  transcript is client-held.
+- Each model call may write at most 4,096 tokens. A release note at the 20,000-character limit does
+  not fit, so its tool call would fail. Real drafts are far smaller.
