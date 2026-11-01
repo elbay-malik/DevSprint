@@ -430,7 +430,7 @@ describe('ChatMessageList status and focus', () => {
     expect(document.activeElement).not.toBe(button.element)
 
     // The next Tab from the header goes to the button, in document order.
-    const tabbable = wrapper.element.querySelectorAll<HTMLElement>(
+    const tabbable = document.querySelectorAll<HTMLElement>(
       'button, input, summary, [tabindex="0"]',
     )
     const stops = [...tabbable].filter(
