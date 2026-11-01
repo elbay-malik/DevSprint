@@ -8,7 +8,7 @@
  */
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createGroq } from '@ai-sdk/groq'
-import { APICallError, type LanguageModel } from 'ai'
+import { APICallError } from 'ai'
 import type { AppEnv } from '../env'
 
 /**
@@ -21,6 +21,7 @@ export type ModelEnv = Pick<
 >
 import { withFallback } from './fallback-model'
 import { createMockModel } from './mock-model'
+import type { LanguageModelV3 } from './provider-types'
 
 export const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-120b'
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash'
@@ -29,7 +30,7 @@ const MODEL_PROVIDERS = ['auto', 'groq', 'gemini', 'mock'] as const
 export type ModelProvider = (typeof MODEL_PROVIDERS)[number]
 
 export interface ResolvedModel {
-  model: LanguageModel
+  model: LanguageModelV3
   /** Human-readable route, e.g. `groq:llama-3.3-70b-versatile+fallback:gemini:gemini-2.5-flash`. */
   label: string
 }

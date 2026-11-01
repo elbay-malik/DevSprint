@@ -921,6 +921,116 @@ describe('POST /api/chat — spend controls', () => {
       expect(fresh.store.modelUsage(ME).clientTokens).toBe(1_500)
     })
 
+    describe('a client that leaves during a model call', () => {
+      /** Stands in for Groq: one chunk of an answer, then it holds the stream open. */
+      function stubOpenProvider() {
+        const provider = vi.fn(() =>
+          Promise.resolve(
+            new Response(
+              new ReadableStream({
+                start(controller) {
+                  const chunk = {
+                    id: '1',
+                    object: 'chat.completion.chunk',
+                    created: 1,
+                    model: 'm',
+                    choices: [{ index: 0, delta: { role: 'assistant', content: 'partial' } }],
+                  }
+                  controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`))
+                },
+              }),
+              { headers: { 'content-type': 'text/event-stream' } },
+            ),
+          ),
+        )
+        vi.stubGlobal('fetch', provider)
+        return provider
+      }
+
+      /** Reads until the answer has started, then drops the connection. */
+      async function askAndLeave(overrides: Record<string, unknown>, ip: string | null = ME) {
+        const leaving = new AbortController()
+        const res = await app.request(
+          '/api/chat',
+          {
+            method: 'POST',
+            signal: leaving.signal,
+            headers: {
+              'Content-Type': 'application/json',
+              ...(ip === null ? {} : { 'CF-Connecting-IP': ip }),
+            },
+            body: JSON.stringify({
+              messages: [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hello' }] }],
+            }),
+          },
+          { ...env, ...overrides },
+        )
+        const reader = res.body!.getReader()
+        const decoder = new TextDecoder()
+        let seen = ''
+        while (!seen.includes('partial')) {
+          const { value, done } = await reader.read()
+          if (done) break
+          seen += decoder.decode(value)
+        }
+        leaving.abort()
+        await reader.cancel().catch(() => undefined)
+        return res.headers.get('x-devsprint-limit')
+      }
+
+      it('still charges a first step that never finished', async () => {
+        stubOpenProvider()
+        const fresh = fakeWorkspaceBinding()
+
+        await askAndLeave({ ...SHARE, WORKSPACE: fresh.binding })
+
+        const usage = fresh.store.modelUsage(ME)
+        expect(usage.clientTokens).toBeGreaterThan(0)
+        expect(usage.tokens).toBe(usage.clientTokens)
+      })
+
+      it('ends in a refusal if it does that every turn', async () => {
+        const provider = stubOpenProvider()
+        const fresh = fakeWorkspaceBinding()
+        const on = { ...SHARE, CLIENT_DAILY_TOKEN_SHARE: '10000', WORKSPACE: fresh.binding }
+
+        const limits: Array<string | null> = []
+        for (let turn = 0; turn < 20 && limits.at(-1) !== 'client-budget'; turn += 1) {
+          limits.push(await askAndLeave(on))
+        }
+
+        expect(limits.at(-1)).toBe('client-budget')
+        expect(provider.mock.calls.length).toBeLessThan(20)
+      })
+
+      it('holds the day to the cap as well, with no client key at all', async () => {
+        stubOpenProvider()
+        const fresh = fakeWorkspaceBinding()
+
+        await askAndLeave({ ...SHARE, WORKSPACE: fresh.binding }, null)
+
+        expect(fresh.store.modelUsage().tokens).toBeGreaterThan(0)
+      })
+    })
+
+    it('charges nothing for a call the provider turned down', async () => {
+      const provider = vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ error: { message: 'bad request' } }), {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          }),
+        ),
+      )
+      vi.stubGlobal('fetch', provider)
+      const fresh = fakeWorkspaceBinding()
+
+      await askAs(ME, { ...SHARE, WORKSPACE: fresh.binding })
+
+      expect(provider).toHaveBeenCalled()
+      expect(fresh.store.modelUsage(ME)).toMatchObject({ tokens: 0, clientTokens: 0 })
+    })
+
     it('says the demo is out, not the client, once the whole day is gone', async () => {
       const fresh = fakeWorkspaceBinding()
       fresh.store.recordModelUsage(100_000, ME)
