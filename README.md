@@ -147,8 +147,8 @@ Google no longer offers `gemini-2.5-flash` to new users. It is used when Groq fa
 retryable error, a 429 or a 5xx. `MODEL_PROVIDER` takes `auto`, `groq`, `gemini` or `mock`.
 `wrangler.jsonc` sets `auto`, which falls back to the mock when no keys are set, so a
 fresh clone still runs without any. Each response reports the resolved route in the `X-DevSprint-Model` header.
-Two spend controls bound a live model: 60 chat requests a minute per IP, and a 100,000-token
-daily cap that the mock never counts against.
+Three spend controls bound a live model: 60 chat requests a minute per IP, a 25,000-token daily
+share per client, and a 100,000-token daily cap. The mock never counts against the share or the cap.
 
 ### Scripts
 
