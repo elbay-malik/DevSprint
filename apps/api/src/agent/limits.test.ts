@@ -8,11 +8,15 @@ import { describe, expect, it } from 'vitest'
 import {
   APPROVAL_NOT_APPLIED_MESSAGE,
   BUDGET_REACHED_MESSAGE,
+  CLIENT_BUDGET_REACHED_MESSAGE,
+  DEFAULT_CLIENT_TOKEN_SHARE,
   DEFAULT_DAILY_TOKEN_CAP,
   limitMessage,
   rateLimitKey,
+  resolveClientTokenShare,
   resolveDailyTokenCap,
   messageOnlyResponse,
+  spendLimitReached,
 } from './limits'
 
 /** What the SPA holds after a response is folded into the message it continues. */
@@ -49,6 +53,54 @@ describe('resolveDailyTokenCap', () => {
     expect(resolveDailyTokenCap('0')).toBeUndefined()
     expect(resolveDailyTokenCap('-5')).toBeUndefined()
     expect(resolveDailyTokenCap('lots')).toBeUndefined()
+  })
+})
+
+describe('resolveClientTokenShare', () => {
+  it('defaults to a quarter of the default cap', () => {
+    expect(resolveClientTokenShare(undefined)).toBe(DEFAULT_CLIENT_TOKEN_SHARE)
+    expect(DEFAULT_CLIENT_TOKEN_SHARE).toBe(25_000)
+    expect(DEFAULT_DAILY_TOKEN_CAP).toBe(DEFAULT_CLIENT_TOKEN_SHARE * 4)
+  })
+
+  it('takes an explicit share', () => {
+    expect(resolveClientTokenShare('5000')).toBe(5_000)
+  })
+
+  it('treats zero and nonsense as "no share", the way the cap does', () => {
+    expect(resolveClientTokenShare('0')).toBeUndefined()
+    expect(resolveClientTokenShare('-5')).toBeUndefined()
+    expect(resolveClientTokenShare('lots')).toBeUndefined()
+  })
+})
+
+describe('spendLimitReached', () => {
+  const day = '2026-11-02'
+
+  it('is nothing while both have room, up to one token short', () => {
+    expect(spendLimitReached({ day, tokens: 99, clientTokens: 49 }, 100, 50)).toBeUndefined()
+  })
+
+  it('names the share once the client reaches it', () => {
+    expect(spendLimitReached({ day, tokens: 60, clientTokens: 50 }, 100, 50)).toBe('client-budget')
+  })
+
+  it('names the cap once the day reaches it, even for a client over its share', () => {
+    expect(spendLimitReached({ day, tokens: 100, clientTokens: 90 }, 100, 50)).toBe('budget')
+  })
+
+  it('holds each limit when the other is off', () => {
+    expect(spendLimitReached({ day, tokens: 900, clientTokens: 50 }, undefined, 50)).toBe(
+      'client-budget',
+    )
+    expect(spendLimitReached({ day, tokens: 100, clientTokens: 90 }, 100, undefined)).toBe('budget')
+    expect(spendLimitReached({ day, tokens: 900, clientTokens: 90 }, 1000, undefined)).toBe(
+      undefined,
+    )
+  })
+
+  it('has no share to apply when the read named no client', () => {
+    expect(spendLimitReached({ day, tokens: 60 }, 100, 50)).toBeUndefined()
   })
 })
 
@@ -118,6 +170,16 @@ describe('messageOnlyResponse', () => {
 
     expect(after.parts.at(-1)).toMatchObject({ type: 'text', text: 'budget gone' })
     expect(lastAssistantMessageIsCompleteWithApprovalResponses({ messages: [after] })).toBe(false)
+  })
+})
+
+describe('CLIENT_BUDGET_REACHED_MESSAGE', () => {
+  it('reads differently from the message for the whole demo', () => {
+    // One says come back at midnight because the demo is out, the other because
+    // this connection is. A reader or a debugger has to be able to tell which.
+    expect(CLIENT_BUDGET_REACHED_MESSAGE).not.toBe(BUDGET_REACHED_MESSAGE)
+    expect(CLIENT_BUDGET_REACHED_MESSAGE).toContain('This connection')
+    expect(CLIENT_BUDGET_REACHED_MESSAGE).not.toContain('The copilot has used')
   })
 })
 
