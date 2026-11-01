@@ -515,7 +515,9 @@ words and the time of the decision on a 24-hour clock in the reader's locale: "�
 14:02 — applied." or "– Denied by you at 14:03: “Still blocked”.". A typed error is explained by the
 ErrorCard right below, code and all, so the line stays short and on one line: "✕ Approved by you at
 14:02 — not applied.". The status line, which does not read the ErrorCard, adds the code: "… — not
-applied (ISSUE_NOT_FOUND)." A status change keeps its "from" after the decision ("DS-9: In progress
+applied (ISSUE_NOT_FOUND)." An `INTERNAL` error is not a refusal, since the write may have landed
+with only its reply lost, so the line reads "✕ Approved by you at 14:02 — outcome unknown." and the
+ErrorCard sends the person to the board before trying again. A status change keeps its "from" after the decision ("DS-9: In progress
 → Done"): the board's status is captured with the time when the person answers, since the board
 moves on once the write lands. A reassignment reads the same way, with people named by @handle and
 nobody as "Unassigned" ("DS-12: Unassigned → @dana"), and keeps its "from" assignee by the same

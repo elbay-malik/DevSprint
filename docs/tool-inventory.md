@@ -63,7 +63,8 @@ characters other than tab, newline and carriage return, or unpaired surrogates
 
 The five issue tools can also return `INTERNAL` over MCP, when the workspace call fails in a way
 nothing expected. The detail goes to the server's log rather than to the caller
-([domain-model.md](./domain-model.md) §4).
+([domain-model.md](./domain-model.md) §4). A write may have landed with only its reply lost, so the
+message and the chat both say to read the board before trying again.
 
 ### 1. `list_issues`
 

@@ -144,7 +144,8 @@ the time, when the person answers. The time is the reader's locale on a 24-hour 
 follows the deployment card (● applied, ◐ still running, – denied or cancelled, ✕ failed). A
 write that returned a typed error reads `✕ Approved by you at 14:02 — not applied.` in Stop Red,
 and the ErrorCard right below explains it and carries the code (the status line, which does not
-read that card, says `… — not applied (<CODE>).`). A call that threw, with no ErrorCard, reads
+read that card, says `… — not applied (<CODE>).`). An `INTERNAL` error may have landed, so it reads
+`✕ Approved by you at 14:02 — outcome unknown.` instead. A call that threw, with no ErrorCard, reads
 `✕ Approved by you at 14:02, but it failed: <reason>`. A deployment reads
 `Approved by you at 14:02 — deployment <status>.` (for example `deployment succeeded`).
 
