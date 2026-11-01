@@ -9,8 +9,10 @@
  *
  * Same policy as the api's chat limit (ADR-0016): keyed on CF-Connecting-IP,
  * and skipped rather than shared when that is absent, because a shared bucket
- * would let one abusive client lock everyone else out.
+ * would let one abusive client lock everyone else out. An IPv6 client is keyed
+ * on its /64 (`ipRateLimitKey`).
  */
+import { ipRateLimitKey } from '@devsprint/shared'
 
 /** Cloudflare's rate-limit binding, as much of it as this Worker uses. */
 export interface RateLimitBinding {
@@ -31,7 +33,7 @@ export async function refuseIfThrottled(
   if (!limiter) return undefined
   const ip = request.headers.get('cf-connecting-ip')?.trim()
   if (!ip) return undefined
-  const { success } = await limiter.limit({ key: ip })
+  const { success } = await limiter.limit({ key: ipRateLimitKey(ip) })
   if (success) return undefined
   return Response.json(
     {

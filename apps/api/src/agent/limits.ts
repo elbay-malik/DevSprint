@@ -13,6 +13,7 @@
  * global and serialises.
  */
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai'
+import { ipRateLimitKey } from '@devsprint/shared'
 
 /** Cloudflare's rate-limit binding, as much of it as this Worker uses. */
 export interface RateLimitBinding {
@@ -57,10 +58,12 @@ export const RESET_RETRY_AFTER_SECONDS = 30
  * absent we skip rather than fall back to a shared key — a shared bucket would
  * let one abusive client lock out everyone else, which is worse than not
  * limiting at all.
+ *
+ * An IPv6 client is keyed on its /64, not the address (`ipRateLimitKey`).
  */
 export function rateLimitKey(request: Request): string | undefined {
   const ip = request.headers.get('cf-connecting-ip')?.trim()
-  return ip && ip.length > 0 ? ip : undefined
+  return ip ? ipRateLimitKey(ip) : undefined
 }
 
 /**
