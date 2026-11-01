@@ -109,6 +109,29 @@ describe('WorkspacePane', () => {
     expect(card.attributes()).toHaveProperty('data-board-change')
   })
 
+  it('marks a reassigned card and a new one, as it does a moved one', async () => {
+    // What an undone reassignment or an MCP host's new issue looks like here.
+    const changed = createWorkspaceSeed()
+    const held = changed.issues.find((issue) => issue.key === 'DS-7')!
+    held.assigneeId = held.assigneeId === 'u-dana' ? 'u-ben' : 'u-dana'
+    changed.issues.push({ ...changed.issues[0]!, id: 'issue-new', key: 'DS-99', sprintId: null })
+    fetchMock
+      .mockImplementationOnce(() => Promise.resolve(respond(createWorkspaceSeed())))
+      .mockImplementationOnce(() => Promise.resolve(respond(changed)))
+    const wrapper = mount(WorkspacePane)
+    await flushPromises()
+    expect(wrapper.find('[data-board-change]').exists()).toBe(false)
+
+    vi.advanceTimersByTime(RETURN_READ_MIN_MS)
+    focusWindow()
+    await flushPromises()
+
+    const card = (key: string) => wrapper.get(`[data-issue-key="${key}"]`)
+    expect(card('DS-7').attributes()).toHaveProperty('data-board-change')
+    expect(card('DS-99').attributes()).toHaveProperty('data-board-change')
+    expect(card('DS-9').attributes()).not.toHaveProperty('data-board-change')
+  })
+
   it('does not re-read while a chat turn is streaming', async () => {
     mount(WorkspacePane)
     await flushPromises()

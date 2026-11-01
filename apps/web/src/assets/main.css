@@ -133,11 +133,11 @@
   }
 }
 
-/* A card the last read of the board moved (CHANGE_HIGHLIGHT_MS in the workspace
-   store, which removes the attribute after the same 1.5s). A 1px Go Green ring
-   inside the card's own edge, since "applied" is a result (the Signal-Only
-   Rule): it holds, then fades on an exponential ease-out, so the move is seen
-   landing. Inside, so stacked cards never merge and nothing crosses the column
+/* A card the last read of the board added, moved or handed on
+   (CHANGE_HIGHLIGHT_MS in the workspace store, which removes the attribute after
+   the same 1.5s). A 1px Go Green ring inside the card's own edge, since "applied"
+   is a result (the Signal-Only Rule): it holds, then fades on an exponential
+   ease-out, so the change is seen landing. Inside, so stacked cards never merge and nothing crosses the column
    edge; green, so it never reads as the Graphite focus ring. Under reduced
    motion the ring is simply there for the same 1.5s. No background tint: the
    card's muted key and assignee are 4.73:1 on Paper, and any tint past about 2%

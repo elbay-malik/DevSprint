@@ -1,7 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createWorkspaceSeed } from '@devsprint/shared'
-import { CHANGE_HIGHLIGHT_MS, changedStatusKeys, useWorkspaceStore } from './workspace'
+import { CHANGE_HIGHLIGHT_MS, changedIssueKeys, useWorkspaceStore } from './workspace'
 
 describe('useWorkspaceStore', () => {
   beforeEach(() => {
@@ -257,16 +257,35 @@ describe('useWorkspaceStore', () => {
   })
 })
 
-describe('changedStatusKeys', () => {
-  it('names only issues present in both reads whose status differs', () => {
+describe('changedIssueKeys', () => {
+  it('names the issues that moved, were handed on or are new, and no others', () => {
     const before = createWorkspaceSeed()
     const after = createWorkspaceSeed()
     for (const issue of after.issues) {
       if (issue.key === 'DS-9') issue.status = 'in_review'
       if (issue.key === 'DS-10') issue.title = 'Renamed, not moved'
+      if (issue.key === 'DS-12') issue.assigneeId = 'u-dana'
     }
+    // An MCP host made it, so nothing else on the page says it arrived.
     after.issues.push({ ...after.issues[0]!, id: 'issue-new', key: 'DS-99', status: 'done' })
 
-    expect([...changedStatusKeys(before, after)]).toEqual(['DS-9'])
+    expect([...changedIssueKeys(before, after)].sort()).toEqual(['DS-12', 'DS-9', 'DS-99'])
+  })
+
+  it('marks a reassignment that takes the issue off whoever held it', () => {
+    const before = createWorkspaceSeed()
+    const after = createWorkspaceSeed()
+    const held = after.issues.find((issue) => issue.assigneeId !== null)!
+    held.assigneeId = null
+
+    expect([...changedIssueKeys(before, after)]).toEqual([held.key])
+  })
+
+  it('has nothing to mark for an issue the next read no longer holds', () => {
+    const before = createWorkspaceSeed()
+    const after = createWorkspaceSeed()
+    after.issues = after.issues.filter((issue) => issue.key !== 'DS-9')
+
+    expect(changedIssueKeys(before, after).size).toBe(0)
   })
 })
