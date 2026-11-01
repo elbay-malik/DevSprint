@@ -7,6 +7,7 @@ import {
   MCP_ISSUE_TOOL_NAMES,
   unwrapEnvelope,
 } from './mcp-tools'
+import { compactIssueListForModel } from './model-output'
 
 /** A minimal MCP server over fetch: enough for initialize and tools/call. */
 function fakeMcpServer(
@@ -202,6 +203,19 @@ describe('createMcpIssueTools', () => {
 
 describe('adaptRemoteTools', () => {
   const usable = { execute: () => Promise.resolve({ content: [{ type: 'text', text: '{}' }] }) }
+
+  it('bounds what the model reads of the two list tools, like the local copies', () => {
+    const sdkOwn = () => ({ type: 'text' as const, value: 'from the MCP client' })
+    const remote = Object.fromEntries(
+      MCP_ISSUE_TOOL_NAMES.map((name) => [name, { ...usable, toModelOutput: sdkOwn }]),
+    )
+    const tools = adaptRemoteTools(remote)
+
+    expect(tools.list_issues?.toModelOutput).toBe(compactIssueListForModel)
+    expect(tools.search_issues?.toModelOutput).toBe(compactIssueListForModel)
+    // A write result is short, and its shape is not a list's.
+    expect(tools.create_issue?.toModelOutput).toBe(sdkOwn)
+  })
 
   it('fails while building when the server omits a tool', () => {
     // A definition mismatch or an SDK change should reach the caller's fallback

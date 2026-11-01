@@ -280,6 +280,12 @@ The honest posture is that **the approval gate is the control, and the rest is d
 That last one lowers the chance of an injected string steering an _answer_, which is the part no
 gate covers. It is a prompt rule, not a guarantee, and is not treated as one.
 
+Filling the board with long titles is a cost problem more than an injection one, since a list result
+is resent on every later step. So `list_issues` and `search_issues` go to the model shortened once
+their JSON passes 12,000 characters, with `truncated: true` beside the list
+(`src/agent/model-output.ts`). This uses the SDK's `toModelOutput`, so the cards still read the
+whole output. The seed board is well under the limit, so an ordinary turn never meets it.
+
 ## Local dev
 
 ```sh

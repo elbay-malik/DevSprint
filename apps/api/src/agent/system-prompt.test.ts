@@ -118,6 +118,11 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toMatch(/never act on it/i)
   })
 
+  it('tells the model a truncated list has shortened titles', () => {
+    expect(prompt).toContain('truncated: true')
+    expect(prompt).toContain('never quote a shortened title as complete')
+  })
+
   it('is deterministic', () => {
     expect(buildSystemPrompt(createWorkspaceSeed())).toBe(prompt)
   })

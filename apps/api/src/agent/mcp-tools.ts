@@ -10,6 +10,7 @@ import {
   searchIssuesInputSchema,
   updateIssueStatusInputSchema,
 } from '@devsprint/shared/tools'
+import { compactIssueListForModel } from './model-output'
 
 /**
  * The five issue tools, sourced over MCP instead of defined locally.
@@ -20,11 +21,16 @@ import {
  * drift.
  */
 const ISSUE_TOOLS = [
-  { name: 'list_issues', schema: listIssuesInputSchema, gated: false },
-  { name: 'search_issues', schema: searchIssuesInputSchema, gated: false },
-  { name: 'create_issue', schema: createIssueInputSchema, gated: true },
-  { name: 'update_issue_status', schema: updateIssueStatusInputSchema, gated: true },
-  { name: 'assign_issue', schema: assignIssueInputSchema, gated: true },
+  { name: 'list_issues', schema: listIssuesInputSchema, gated: false, issueList: true },
+  { name: 'search_issues', schema: searchIssuesInputSchema, gated: false, issueList: true },
+  { name: 'create_issue', schema: createIssueInputSchema, gated: true, issueList: false },
+  {
+    name: 'update_issue_status',
+    schema: updateIssueStatusInputSchema,
+    gated: true,
+    issueList: false,
+  },
+  { name: 'assign_issue', schema: assignIssueInputSchema, gated: true, issueList: false },
 ] as const
 
 export const MCP_ISSUE_TOOL_NAMES = ISSUE_TOOLS.map((tool) => tool.name)
@@ -138,6 +144,10 @@ export function adaptRemoteTools(remote: Record<string, unknown>): Record<string
           // normal tool to the SDK, so the Phase 5 gate keeps working unchanged
           // (ADR-0003).
           ...(tool.gated ? { needsApproval: true as const } : {}),
+          // The same bound as the local copies, so the fallback can't change
+          // what the model reads. This replaces the MCP client's own
+          // `toModelOutput`, which only ever saw the unwrapped envelope.
+          ...(tool.issueList ? { toModelOutput: compactIssueListForModel } : {}),
           execute: async (input: unknown, options: unknown) =>
             unwrapEnvelope(await execute(input, options)),
         },
