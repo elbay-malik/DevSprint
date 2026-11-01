@@ -52,8 +52,12 @@ void test('only the preview job widens the token, to comment on its PR', () => {
     jobBlock(workflow, 'preview'),
     /permissions:\n\s+contents: read\n\s+pull-requests: write/,
   )
-  for (const job of ['checks', 'e2e', 'deploy']) {
-    assert.doesNotMatch(jobBlock(workflow, job), /permissions:/)
+  const jobs = [...workflow.slice(workflow.indexOf('\njobs:')).matchAll(/^ {2}([\w-]+):$/gm)].map(
+    (match) => match[1] ?? '',
+  )
+  assert.ok(jobs.includes('audit') && jobs.includes('preview'), jobs.join(', '))
+  for (const job of jobs.filter((name) => name !== 'preview')) {
+    assert.doesNotMatch(jobBlock(workflow, job), /permissions:/, job)
   }
 })
 
