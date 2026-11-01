@@ -1,5 +1,5 @@
 import { WorkerEntrypoint } from 'cloudflare:workers'
-import { refuseBatch } from './batch'
+import { refuseBatch, refuseNonPost } from './batch'
 import { refuseIfThrottled } from './limit'
 import { handleMcpRequest } from './mcp'
 import { workspaceOf } from './workspace'
@@ -28,6 +28,8 @@ async function serve(request: Request, env: Env, parsedBody?: unknown): Promise<
   if (url.pathname !== '/mcp') {
     return new Response('Not found', { status: 404 })
   }
+  const refused = refuseNonPost(request)
+  if (refused) return refused
 
   return await handleMcpRequest(request, workspaceOf(env.WORKSPACE), parsedBody)
 }
