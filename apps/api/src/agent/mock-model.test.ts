@@ -508,6 +508,56 @@ describe('assigning an issue — read first, then the gated write', () => {
     ).toBe('DS-11 already has that assignee.')
   })
 
+  describe('a write that failed unexpectedly', () => {
+    const answerTo = (code: string) =>
+      scriptChunks({
+        prompt: [
+          { role: 'user', content: [{ type: 'text', text: 'Assign DS-12 to Dana' }] },
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: 'c1',
+                toolName: 'assign_issue',
+                input: { issueKey: 'DS-12', assigneeId: 'u-dana' },
+              },
+            ],
+          },
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'c1',
+                toolName: 'assign_issue',
+                output: { type: 'json', value: { ok: false, error: { code, message: 'no' } } },
+              },
+            ],
+          },
+        ],
+        tools: [...ASSIGN_TOOLS].map((name) => ({
+          type: 'function',
+          name,
+          inputSchema: { type: 'object' },
+        })),
+      } as never)
+        .flatMap((chunk) => (chunk.type === 'text-delta' ? [chunk.delta] : []))
+        .join('')
+
+    it('says the outcome is unknown rather than that nothing changed', () => {
+      expect(answerTo('INTERNAL')).toBe(
+        'The board couldn’t be reached, so this may not have saved. Check the board before trying again.',
+      )
+    })
+
+    it('still says nothing changed after a refusal', () => {
+      expect(answerTo('WORKSPACE_FULL')).toBe(
+        'The board is full; a reset clears it. Nothing changed.',
+      )
+    })
+  })
+
   it('leaves the status-change route as it was', () => {
     expect(planUserText('Mark DS-12 as done', ASSIGN_TOOLS)).toEqual([
       {
