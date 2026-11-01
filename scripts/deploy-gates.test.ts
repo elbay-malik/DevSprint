@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { deployRefusal, missingProviderSecret, type GitState } from './deploy-gates.ts'
+import {
+  deployRefusal,
+  missingProviderSecret,
+  rollbackHints,
+  type GitState,
+} from './deploy-gates.ts'
 import { expectedModelProvider } from './smoke.ts'
 
 const CLEAN: GitState = { dirty: false, branch: 'main', head: 'abc', originMain: 'abc' }
@@ -55,4 +60,21 @@ void test('a provider the api would reject is not let through', () => {
 
 void test('the provider checked is the one the committed config deploys', () => {
   assert.equal(expectedModelProvider(), 'auto')
+})
+
+void test('rollback hints name only what shipped, last shipped first', () => {
+  const commands = (shipped: Parameters<typeof rollbackHints>[0]) =>
+    rollbackHints(shipped).filter((line) => line.includes('wrangler rollback'))
+  assert.deepEqual(commands(['mcp-issues', 'api', 'web']), [
+    '  pnpm --filter @devsprint/web exec wrangler rollback',
+    '  pnpm --filter @devsprint/api exec wrangler rollback',
+    '  pnpm --filter @devsprint/mcp-issues exec wrangler rollback',
+  ])
+  assert.deepEqual(commands(['mcp-issues']), [
+    '  pnpm --filter @devsprint/mcp-issues exec wrangler rollback',
+  ])
+})
+
+void test('no rollback hints when nothing shipped', () => {
+  assert.deepEqual(rollbackHints([]), [])
 })

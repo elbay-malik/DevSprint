@@ -50,3 +50,24 @@ export function missingProviderSecret(
       return `a MODEL_PROVIDER the api knows, not '${provider}'`
   }
 }
+
+export type App = 'api' | 'mcp-issues' | 'web'
+
+/**
+ * What to run by hand after a failed deploy, for the Workers this run shipped.
+ * Only printed: the Workers call each other, so rolling one back on its own can
+ * leave a mismatched pair (ADR-0019), and which ones go back together is a call
+ * for whoever reads the failure. Last shipped comes first, so the api goes back
+ * before the MCP entrypoint it may bind.
+ */
+export function rollbackHints(shipped: readonly App[]): string[] {
+  const apps = (['web', 'api', 'mcp-issues'] as const).filter((app) => shipped.includes(app))
+  if (apps.length === 0) return []
+  return [
+    '',
+    'Nothing was rolled back. These Workers now run this deploy; to go back, in this order:',
+    ...apps.map((app) => `  pnpm --filter @devsprint/${app} exec wrangler rollback`),
+    'A Worker this deploy created has no earlier version to go back to.',
+    '',
+  ]
+}

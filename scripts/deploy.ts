@@ -33,6 +33,9 @@
  * class that the MCP Worker binds: that one needs the api deployed first, by
  * hand, with `pnpm --filter @devsprint/api exec wrangler deploy`.
  *
+ * If a step or the smoke checks fail after something shipped, it prints the
+ * `wrangler rollback` commands and rolls nothing back itself.
+ *
  * Auth is whatever wrangler already has: `wrangler login` locally,
  * CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in CI.
  */
@@ -42,13 +45,11 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import ts from 'typescript'
-import { deployRefusal, missingProviderSecret } from './deploy-gates.ts'
+import { deployRefusal, missingProviderSecret, rollbackHints, type App } from './deploy-gates.ts'
 import { expectedModelProvider, smoke } from './smoke.ts'
 
 const ROOT = join(import.meta.dirname, '..')
 const SKIP_GIT_GATE = '--skip-git-gate'
-
-type App = 'api' | 'mcp-issues' | 'web'
 
 function run(command: string, args: string[], options: { capture?: boolean } = {}) {
   const result = spawnSync(command, args, {
@@ -178,38 +179,43 @@ async function main() {
 
   const steps: Array<{
     label: string
-    /** Deploys the api, so it can carry the secrets file. */
-    api?: true
+    app: App
     run: (secretsFile: string | undefined) => void
   }> = firstDeploy
     ? [
         {
           label: 'api, without its service binding (first deploy only)',
-          api: true,
+          app: 'api',
           run: (secretsFile) => deployApi({ bootstrap: true, secretsFile }),
         },
         {
           label: 'mcp-issues',
+          app: 'mcp-issues',
           run: () => must('deploying mcp-issues', wrangler('mcp-issues', ['deploy'])),
         },
         {
           label: 'api, with its binding',
-          api: true,
+          app: 'api',
           run: () => deployApi({ bootstrap: false, secretsFile: undefined }),
         },
       ]
     : [
         {
           label: 'mcp-issues',
+          app: 'mcp-issues',
           run: () => must('deploying mcp-issues', wrangler('mcp-issues', ['deploy'])),
         },
         {
           label: 'api',
-          api: true,
+          app: 'api',
           run: (secretsFile) => deployApi({ bootstrap: false, secretsFile }),
         },
       ]
-  steps.push({ label: 'web', run: () => must('deploying the SPA', wrangler('web', ['deploy'])) })
+  steps.push({
+    label: 'web',
+    app: 'web',
+    run: () => must('deploying the SPA', wrangler('web', ['deploy'])),
+  })
 
   console.log(`${firstDeploy ? 'First deploy' : 'Deploy'} plan:`)
   steps.forEach((step, index) => console.log(`  ${index + 1}. ${step.label}`))
@@ -240,19 +246,26 @@ async function main() {
     )
   }
 
+  const shipped: App[] = []
   try {
-    // The secret travels with the first api deploy in the plan; it is additive.
-    let pending = secretsFile
-    for (const step of steps) {
-      const usesSecret = step.api === true && pending !== undefined
-      step.run(usesSecret ? pending : undefined)
-      if (usesSecret) pending = undefined
+    try {
+      // The secret travels with the first api deploy in the plan; it is additive.
+      let pending = secretsFile
+      for (const step of steps) {
+        const usesSecret = step.app === 'api' && pending !== undefined
+        step.run(usesSecret ? pending : undefined)
+        if (usesSecret) pending = undefined
+        shipped.push(step.app)
+      }
+    } finally {
+      if (secretsDir) rmSync(secretsDir, { recursive: true, force: true })
     }
-  } finally {
-    if (secretsDir) rmSync(secretsDir, { recursive: true, force: true })
-  }
 
-  await smoke({ proveSharedBoard })
+    await smoke({ proveSharedBoard })
+  } catch (error) {
+    console.error(rollbackHints(shipped).join('\n'))
+    throw error
+  }
 }
 
 await main()
