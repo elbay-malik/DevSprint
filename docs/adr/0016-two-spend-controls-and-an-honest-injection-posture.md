@@ -148,3 +148,12 @@ The request itself is bounded too, because the budget only counts what a turn ha
   transcript is client-held.
 - Each model call may write at most 4,096 tokens. A release note at the 20,000-character limit does
   not fit, so its tool call would fail. Real drafts are far smaller.
+
+**On injection, the client can no longer speak as the system.** A `system` message in the transcript
+is a 400, with `allowSystemInMessages: false` on the agent behind it, because the SDK only warns by
+default. A user message holding anything but text is a 400 too, which also stops the Worker fetching
+a file from a URL the client chose. Provider options are removed from user parts, and left on
+assistant parts because Gemini reads its thought signature back from there. Forged tool results stay
+possible: the transcript is client-held, they mislead only that client's own turn, and they cannot
+execute a write. A text-only message can still ask for an essay, so using the demo as a free model
+is made smaller rather than impossible.

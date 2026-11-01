@@ -69,6 +69,9 @@ export function createCopilotAgent({
     instructions,
     tools,
     experimental_toolApprovalSecret: approvalSecret,
+    // Refused up front in request-bounds.ts. The SDK only warns by default, so
+    // this is what would stop one that got past that.
+    allowSystemInMessages: false,
     ...(onUsage
       ? {
           onStepFinish: ({ usage }) =>
