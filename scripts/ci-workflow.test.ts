@@ -61,7 +61,7 @@ void test('no checkout leaves the token in .git/config', () => {
   const checkouts = workflow
     .split(/^(?=\s+- )/m)
     .filter((step) => step.includes('actions/checkout@'))
-  assert.equal(checkouts.length, 4)
+  assert.equal(checkouts.length, 5)
   for (const step of checkouts) assert.match(step, /with:\n\s+persist-credentials: false\n/)
 })
 
@@ -92,4 +92,10 @@ void test('dependabot leaves the lines the catalog holds back alone', () => {
 
 void test('a Dependabot PR gets no preview, because it has no secrets', () => {
   assert.match(jobBlock(workflow, 'preview'), /^ {4}if: .*github\.actor != 'dependabot\[bot\]'$/m)
+})
+
+void test('the audit runs in a job that cannot fail the run or hold back a deploy', () => {
+  assert.deepEqual(jobSteps(workflow, 'audit'), ['pnpm audit --prod --audit-level high'])
+  assert.match(jobBlock(workflow, 'audit'), /^ {4}continue-on-error: true$/m)
+  assert.match(jobBlock(workflow, 'deploy'), /^ {4}needs: \[checks, e2e\]$/m)
 })
