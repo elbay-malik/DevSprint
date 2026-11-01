@@ -78,7 +78,7 @@ refusing outright would strand the conversation the first time a resume failed. 
 tracks what has been spent lives in the workspace Durable Object rather than in the Worker's own
 memory, so the guarantee holds across isolates and restarts, not just within the one that happened
 to handle a given request ([ADR-0014](../../docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
-An approval is spent only by a turn that will act on it, so a press the rate limit, the budget or a
+An approval is spent only by a turn that will act on it, so a press the rate limit, a budget or a
 missing model config refused stays good, and the limit message says it was not applied. The SDK
 reads an answer from any tool part in any state, so before conversion every answer the ledger would
 not spend is removed, leaving it nothing else to act on.
@@ -210,13 +210,14 @@ token usage). That is the observability floor, and it still runs underneath the 
 
 ## Spend controls
 
-Two of them, and deliberately not the same mechanism
+Three of them, and deliberately not all the same mechanism
 ([ADR-0016](../../docs/adr/0016-two-spend-controls-and-an-honest-injection-posture.md)):
 
-| Control           | Question it answers            | Where it lives                  | Tunable                              |
-| ----------------- | ------------------------------ | ------------------------------- | ------------------------------------ |
-| Per-IP rate limit | Is one client hammering us?    | Cloudflare's rate-limit binding | `ratelimits` in `wrangler.jsonc`     |
-| Daily token cap   | Has the demo spent its budget? | The workspace Durable Object    | `DAILY_TOKEN_CAP` (default `100000`) |
+| Control           | Question it answers            | Where it lives                  | Tunable                                      |
+| ----------------- | ------------------------------ | ------------------------------- | -------------------------------------------- |
+| Per-IP rate limit | Is one client hammering us?    | Cloudflare's rate-limit binding | `ratelimits` in `wrangler.jsonc`             |
+| Daily token cap   | Has the demo spent its budget? | The workspace Durable Object    | `DAILY_TOKEN_CAP` (default `100000`)         |
+| Per-client share  | Has this client had its part?  | The workspace Durable Object    | `CLIENT_DAILY_TOKEN_SHARE` (default `25000`) |
 
 The rate limit is bound at 60 requests/60s on `/api/chat`, keyed on `cf-connecting-ip` — far above
 a human session, far below a crawler. An IPv6 client is keyed on its /64, because a single host can
@@ -234,9 +235,17 @@ one lives in the Durable Object, which is global and serialises. Two consequence
 - **It rolls over on the real UTC date**, by comparing the stored day to today rather than by being
   cleared on a schedule — so a Worker asleep across midnight wakes with a fresh budget.
 
+The share is there because the rate limit can't stop one client spending the day: at 60 turns a
+minute and about 2,000 tokens a turn, that takes about a minute. It is 25,000 tokens per client per
+UTC day, about 12 turns, and it follows the cap's rules: Reset does not clear it, and a new day
+starts it again. The client is the rate-limit key, so an IPv6 client is its /64, and the object only
+stores a hash of the key and the day, in a map of at most 2,000 clients that the midnight alarm
+deletes. A request with no `cf-connecting-ip` has no share to check, and the cap still applies to it.
+Several visitors behind one NAT share one share.
+
 Usage is recorded per step, so a turn someone stopped still counts the steps it took, and a turn
-re-reads the cap between steps and ends once it has been reached. Concurrent turns can overshoot by
-about a step each.
+re-reads both limits between steps and ends once one has been reached. This is check-then-record, so
+concurrent turns can overshoot the cap or a share by about a step each.
 
 Each request is bounded as well: a 256 KB body (413), 4,000 characters in a user message (400), and
 4,096 output tokens per model call. Older history is dropped rather than refused, keeping the latest
@@ -250,13 +259,14 @@ Provider options on a user part are removed before conversion, and the ones on a
 because they carry Gemini's thought signature through an approval resume.
 
 The scripted mock is exempt, so local dev, CI and e2e spend nothing and are never rationed. Set
-`DAILY_TOKEN_CAP=0` to turn the cap off entirely; a missing or nonsense value falls back to the
-default rather than to a cap of zero.
+`DAILY_TOKEN_CAP=0` to turn the cap off entirely, or `CLIENT_DAILY_TOKEN_SHARE=0` for the share; one
+does not depend on the other. A missing value means the default, and a nonsense one means off, never
+a limit of zero.
 
-Neither control returns an HTTP error. Both stream back a single readable assistant turn, which is
-the "graceful demo budget reached state" ADR-0005 asked for — the transcript stays usable and the
-SPA needs no special case. `X-DevSprint-Limit: rate | budget` says which one fired, for anyone
-debugging.
+No control returns an HTTP error. Each streams back a single readable assistant turn, which is the
+"graceful demo budget reached state" ADR-0005 asked for — the transcript stays usable and the SPA
+needs no special case. `X-DevSprint-Limit: rate | budget | client-budget` says which one fired, for
+anyone debugging.
 
 ## Prompt injection
 

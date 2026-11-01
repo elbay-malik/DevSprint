@@ -104,9 +104,9 @@ tests are checked as well as run:
 
 - **Per-visitor workspaces.** Multi-tenancy is a non-goal, so everyone shares one board, reset
   daily ([ADR-0014](docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
-- **Unlimited use of the live model.** It runs on free tiers. A per-IP rate limit and a daily
-  token cap keep one visitor from spending it for everyone, and once the cap is reached the demo
-  says so instead of failing.
+- **Unlimited use of the live model.** It runs on free tiers. A per-IP rate limit, a daily token
+  share per client and a daily token cap keep one visitor from spending it for everyone, and once
+  a limit is reached the demo says so instead of failing.
 - **Full markdown in chat.** Answers render bold, lists, tables and code, but never links, and
   never through `v-html`. A model repeating planted board text can't produce markup or a clickable
   URL ([ADR-0022](docs/adr/0022-a-safe-markdown-subset-in-chat.md)).
