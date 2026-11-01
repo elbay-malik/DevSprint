@@ -93,3 +93,11 @@ visitors' writes. One client can still reset the board every 30 seconds, and a w
 that reset is gone. What the cooldown stops is a loop that keeps the board at its seed. Since
 ADR-0025 a browser page on another origin can't send that reset from its visitors' browsers, but
 curl still can, because the board stays public (ADR-0014).
+
+## Status note — 2026-11-02
+
+The rejected per-client create quota gave as one reason that the workspace API has no client key. It
+has one now, on the spend path only: `modelUsage` and `recordModelUsage` take a key the object stores
+hashed (ADR-0016's status note of this date). That reversal is for model spend, where one client could
+take the whole day from everyone. Board writes still carry no key and the create quota stays unbuilt,
+because the board resets daily and 40 new issues a day already bounds a flood.
