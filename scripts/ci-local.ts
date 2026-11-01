@@ -20,6 +20,7 @@ import { get } from 'node:http'
 import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { E2E_SERVERS, PREVIEW_PORT } from '../apps/web/e2e/servers.ts'
+import { jobSteps } from './ci-workflow.ts'
 
 const ROOT = join(import.meta.dirname, '..')
 const WEB = join(ROOT, 'apps/web')
@@ -27,16 +28,8 @@ const LOGS = join(ROOT, '.ci-local')
 const ENV = { ...process.env, CI: '1' }
 
 /** The single-line `- run:` steps of one job in ci.yml, in order. */
-function jobSteps(job: string): string[] {
-  const workflow = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8')
-  const block = new RegExp(`^  ${job}:\\n([\\s\\S]*?)(?=^  \\S|(?![\\s\\S]))`, 'm').exec(
-    workflow,
-  )?.[1]
-  if (!block) throw new Error(`ci.yml has no '${job}' job`)
-  if (/^\s+run: [|>]/m.test(block)) {
-    throw new Error(`ci.yml's '${job}' job has a multi-line run step; ci-local cannot mirror it`)
-  }
-  return [...block.matchAll(/^\s+- run: (.+)$/gm)].map((match) => (match[1] ?? '').trim())
+function stepsOf(job: string): string[] {
+  return jobSteps(readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8'), job)
 }
 
 let logIndex = 0
@@ -225,7 +218,7 @@ async function toolsComeOverMcp(timeoutMs: number): Promise<boolean> {
 
 function runChecks(): boolean {
   console.log('\n— checks —')
-  for (const command of jobSteps('checks')) {
+  for (const command of stepsOf('checks')) {
     if (!step(command)) return false
   }
   return true
@@ -234,7 +227,7 @@ function runChecks(): boolean {
 async function runE2E(skipInstall: boolean): Promise<boolean> {
   console.log('\n— e2e —')
   try {
-    for (const command of jobSteps('e2e')) {
+    for (const command of stepsOf('e2e')) {
       if (skipInstall && command === 'pnpm install --frozen-lockfile') continue
       if (command.includes('test:e2e')) {
         if (!(await startServers())) return false
