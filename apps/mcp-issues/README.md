@@ -11,6 +11,10 @@ shows, so a write made in the host appears on the board (scenario S-F).
 | `/health` | GET    | Liveness probe — `{ "ok": true }` |
 | `/mcp`    | POST   | Streamable HTTP MCP endpoint      |
 
+Any other method on `/mcp` gets HTTP 405 with `Allow: POST`, on both entrypoints. The server is
+stateless, so it has no server-to-client stream to open with a GET and no session to end with a
+DELETE. The MCP SDK's client and `@ai-sdk/mcp` both take that 405 as normal, and their tests pin it.
+
 ## Tools
 
 `list_issues`, `search_issues`, `create_issue`, `update_issue_status`, `assign_issue` — the five
