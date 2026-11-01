@@ -389,7 +389,24 @@ describe('ChatMessageList status and focus', () => {
     expect(status(wrapper)).toBe('')
   })
 
-  it('announces open approvals and moves focus to the first card', async () => {
+  it('moves focus to the first card when the group offers no Approve all', async () => {
+    const wrapper = mount(Pane, { attachTo: document.body })
+    chat.status = 'submitted'
+    await nextTick()
+    // Deploys and missing keys are never in the press, so nothing here can use it.
+    chat.messages = [...chat.messages, turnWith([gated('c1', 'DS-7'), gated('c2', 'DS-42')])]
+    chat.status = 'streaming'
+    await nextTick()
+
+    chat.status = 'ready'
+    await nextTick()
+
+    expect(status(wrapper)).toBe('2 changes need your approval.')
+    const first = wrapper.get('[data-call-id="c1"] [data-approval-focus]').element
+    expect(document.activeElement).toBe(first)
+  })
+
+  it('lands on the group header when it offers Approve all, one Tab from the button', async () => {
     const wrapper = mount(Pane, { attachTo: document.body })
     chat.status = 'submitted'
     await nextTick()
@@ -401,8 +418,53 @@ describe('ChatMessageList status and focus', () => {
     await nextTick()
 
     expect(status(wrapper)).toBe('2 changes need your approval.')
-    const first = wrapper.get('[data-call-id="c1"] [data-approval-focus]').element
-    expect(document.activeElement).toBe(first)
+    const header = wrapper.get('[data-testid="approval-group-header"]')
+    expect(document.activeElement).toBe(header.element)
+    expect(header.attributes()).toMatchObject({
+      role: 'group',
+      tabindex: '-1',
+      'aria-label': '2 changes to review · 10 pts',
+    })
+    // Not the button: Enter here must not approve anything.
+    const button = wrapper.get('[data-testid="approval-approve-all"]')
+    expect(document.activeElement).not.toBe(button.element)
+
+    // The next Tab from the header goes to the button, in document order.
+    const tabbable = wrapper.element.querySelectorAll<HTMLElement>(
+      'button, input, summary, [tabindex="0"]',
+    )
+    const stops = [...tabbable].filter(
+      (element) =>
+        header.element.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING,
+    )
+    expect(stops[0]).toBe(button.element)
+  })
+
+  it('brings the header into view when landing on it, and tells the pane first', async () => {
+    const scrolled: { el: Element; block: unknown }[] = []
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element, arg?: unknown) {
+      scrolled.push({ el: this, block: (arg as ScrollIntoViewOptions | undefined)?.block })
+    })
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+    try {
+      const wrapper = mount(Pane, { attachTo: document.body })
+      chat.status = 'submitted'
+      await nextTick()
+      chat.messages = [...chat.messages, turnWith([gated('c1', 'DS-7'), gated('c2', 'DS-9')])]
+      chat.status = 'streaming'
+      await nextTick()
+      chat.status = 'ready'
+      await nextTick()
+
+      expect(focus).toHaveBeenLastCalledWith({ preventScroll: true })
+      expect(wrapper.findComponent(ChatMessageList).emitted('reveal')).toHaveLength(1)
+      expect(scrolled).toEqual([
+        { el: wrapper.get('[data-testid="approval-group-header"]').element, block: 'start' },
+      ])
+    } finally {
+      focus.mockRestore()
+      delete (Element.prototype as Partial<Element>).scrollIntoView
+    }
   })
 
   it('brings the group header into view with the first card, not just its buttons', async () => {
@@ -415,7 +477,7 @@ describe('ChatMessageList status and focus', () => {
       const wrapper = mount(Pane, { attachTo: document.body })
       chat.status = 'submitted'
       await nextTick()
-      chat.messages = [...chat.messages, turnWith([gated('c1', 'DS-7'), gated('c2', 'DS-9')])]
+      chat.messages = [...chat.messages, turnWith([gated('c1', 'DS-7'), gated('c2', 'DS-42')])]
       chat.status = 'streaming'
       await nextTick()
       chat.status = 'ready'

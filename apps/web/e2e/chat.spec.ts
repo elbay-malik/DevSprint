@@ -340,6 +340,14 @@ test('deny DS-11, then Approve remaining 4 answers each card on its own record',
   const all = page.getByTestId('approval-approve-all')
   await expect(all).toHaveText('Approve all 5')
   await expect(all).toHaveClass(/bg-primary/)
+  // The turn ended on the header, so the press is one Tab away, and Enter on
+  // the header itself approves nothing.
+  const header = page.getByTestId('approval-group-header')
+  await expect(header).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(all).toHaveText('Approve all 5')
+  await page.keyboard.press('Tab')
+  await expect(all).toBeFocused()
   for (const approve of await page.getByTestId('approval-approve').all()) {
     await expect(approve).not.toHaveClass(/bg-primary/)
   }

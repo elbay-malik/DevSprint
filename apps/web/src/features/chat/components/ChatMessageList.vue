@@ -294,6 +294,23 @@ function focusDecision(callId: string | undefined, withHeader = false): void {
   target.scrollIntoView?.({ block: 'nearest' })
 }
 
+/**
+ * Where a turn lands when its group offers "Approve all": the header, so the
+ * button is the very next Tab. Not the button itself, where a stray Enter, still
+ * held from sending the message, would approve the batch.
+ */
+function focusGroup(messageId: string): void {
+  const header = root.value?.querySelector<HTMLElement>(
+    `[data-approval-group="${CSS.escape(messageId)}"]`,
+  )
+  if (!header) return
+  header.focus({ preventScroll: true })
+  // Without this the pane's follow-the-bottom pins the view straight back down.
+  emit('reveal')
+  // Optional: jsdom has no scrollIntoView.
+  header.scrollIntoView?.({ block: 'start' })
+}
+
 function focusComposer(): void {
   const pane = root.value?.closest('[data-testid="chat-pane"]')
   pane?.querySelector<HTMLElement>('[data-chat-composer]')?.focus()
@@ -370,7 +387,9 @@ watch(
       return
     }
     announcement.value = said(changesNeedApproval(pending))
-    if (mayMoveFocus()) focusDecision(pendingCallIds()[0], true)
+    if (!mayMoveFocus()) return
+    if (approvalGroups.value.get(last.id)?.approveAll) focusGroup(last.id)
+    else focusDecision(pendingCallIds()[0], true)
   },
   { flush: 'post' },
 )
@@ -542,8 +561,12 @@ watch(lastUndo, (undo) => {
                  4.5:1 at 12px. -->
             <div
               v-if="approvalGroups.get(message.id)?.headerAt === index"
+              role="group"
+              tabindex="-1"
+              :aria-label="approvalGroups.get(message.id)?.header"
+              :data-approval-group="message.id"
               data-testid="approval-group-header"
-              class="flex scroll-mt-3 flex-col gap-1 text-xs"
+              class="focus-visible:outline-ring flex scroll-mt-3 flex-col gap-1 rounded-sm text-xs focus-visible:outline-2 focus-visible:outline-offset-2"
             >
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <p data-testid="approval-group-count" class="font-medium tabular-nums">
