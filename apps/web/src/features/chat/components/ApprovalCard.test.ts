@@ -311,6 +311,69 @@ describe('ApprovalCard', () => {
       expect(body(wrapper).exists()).toBe(false)
     })
 
+    describe('when it runs past its box', () => {
+      const more = (wrapper: ReturnType<typeof mountCard>) =>
+        wrapper.find('[data-testid="approval-body-more"]')
+
+      const resizeCallbacks: ResizeObserverCallback[] = []
+
+      /** Reports a resize to the card, with the box measuring as given. */
+      function observeBody(wrapper: ReturnType<typeof mountCard>) {
+        return async (scrollHeight: number, clientHeight: number) => {
+          const box = body(wrapper).element
+          Object.defineProperty(box, 'scrollHeight', { configurable: true, value: scrollHeight })
+          Object.defineProperty(box, 'clientHeight', { configurable: true, value: clientHeight })
+          for (const callback of resizeCallbacks) callback([], {} as ResizeObserver)
+          await flushPromises()
+        }
+      }
+
+      beforeEach(() => {
+        resizeCallbacks.length = 0
+        vi.stubGlobal(
+          'ResizeObserver',
+          class {
+            constructor(callback: ResizeObserverCallback) {
+              resizeCallbacks.push(callback)
+            }
+            observe() {}
+            unobserve() {}
+            disconnect() {}
+          },
+        )
+      })
+      afterEach(() => {
+        vi.unstubAllGlobals()
+      })
+
+      const longNotes = () =>
+        mountCard(requested({ version: 'v1.5.0', markdown: 'Notes' }, 'create_release_notes'))
+
+      it('says so, and names that on the box for a screen reader', async () => {
+        const wrapper = longNotes()
+        await flushPromises()
+        expect(more(wrapper).exists()).toBe(false)
+        expect(body(wrapper).attributes('aria-describedby')).toBeUndefined()
+
+        await observeBody(wrapper)(600, 190)
+        expect(more(wrapper).text()).toBe('Scroll to read all of it.')
+        expect(body(wrapper).attributes('aria-describedby')).toBe(more(wrapper).attributes('id'))
+      })
+
+      it('says nothing when all of it fits, and follows the box as the pane resizes', async () => {
+        const wrapper = longNotes()
+        await flushPromises()
+        const measure = observeBody(wrapper)
+
+        await measure(120, 120)
+        expect(more(wrapper).exists()).toBe(false)
+        await measure(240, 190)
+        expect(more(wrapper).exists()).toBe(true)
+        await measure(180, 180)
+        expect(more(wrapper).exists()).toBe(false)
+      })
+    })
+
     it('lets a keyboard reach and scroll all of it, with no cut', () => {
       const element = body(
         mountCard(requested({ version: 'v1.5.0', markdown: 'Notes' }, 'create_release_notes')),
