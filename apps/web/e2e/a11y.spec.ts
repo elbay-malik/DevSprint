@@ -75,6 +75,9 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await send(page, 'Looks good, save it.')
       const body = page.getByTestId('approval-card').getByTestId('approval-body')
       await expect(body).toContainText('v1.5.0')
+      // Line by line, as it would be stored, so text set apart on its own lines stays apart.
+      await expect(body).toHaveCSS('white-space', 'pre-wrap')
+      await expect(page.getByTestId('approval-body-more')).toHaveCount(0)
       await expectNoViolations(page)
 
       // The scripted draft fits. A real one scrolls, which is when axe asks for
@@ -85,6 +88,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       expect(await body.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(
         true,
       )
+      await expect(page.getByTestId('approval-body-more')).toBeVisible()
       await expectNoViolations(page)
     })
 

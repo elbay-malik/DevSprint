@@ -382,7 +382,9 @@ describe('ApprovalCard', () => {
       expect(element.attributes('aria-label')).toBe(
         'Full text: Save v1.5.0 release notes as a draft',
       )
-      expect(element.classes()).toEqual(expect.arrayContaining(['max-h-48', 'overflow-auto']))
+      expect(element.classes()).toEqual(
+        expect.arrayContaining(['max-h-48', 'overflow-auto', 'whitespace-pre-wrap']),
+      )
       expect(element.classes().filter((name) => name.startsWith('line-clamp'))).toEqual([])
     })
 
