@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import { createMiddleware } from 'hono/factory'
+import { secureHeaders } from 'hono/secure-headers'
 import {
   convertToModelMessages,
   validateUIMessages,
@@ -97,6 +98,12 @@ async function buildTools(
     return { tools: local, source: 'local' }
   }
 }
+
+// Hono's defaults, outermost so a refusal or a 404 carries them too (ADR-0025).
+// `Cross-Origin-Resource-Policy: same-origin` only applies to no-cors requests,
+// and the SPA's are all CORS-mode fetches, which the browser suite proves on
+// every call it makes from another port. A page's <img> or <script> gets refused.
+app.use('*', secureHeaders())
 
 // env bindings are only available per-request, so the cors middleware is
 // constructed inside the handler instead of at module scope
