@@ -344,9 +344,27 @@ service binding, then the MCP Worker, then the api again. It also generates `TOO
 whenever the api lacks one, through a temp file, never printed. That secret is **not optional**:
 without it every isolate signs approvals with its own random key.
 
+Before it ships anything, the script can refuse:
+
+- **From a laptop, unless the checkout is on `main`, has no changes to tracked files, and sits at
+  `origin/main` after a fresh fetch.** Untracked files are fine. A feature branch or worktree is
+  refused even at the same commit. `--skip-git-gate` deploys anyway, for a hotfix or when offline.
+  CI skips this check, because it checks out a detached HEAD of the commit it is deploying.
+- **When the api exists and lacks the key `MODEL_PROVIDER` needs.** `auto` needs `GROQ_API_KEY` or
+  `GOOGLE_GENERATIVE_AI_API_KEY`, and would otherwise serve the scripted mock. A new api only gets a
+  warning, because a Worker that does not exist cannot hold secrets yet.
+
+`--plan` is never blocked. It reports a missing key as a line in the plan.
+
+The smoke checks' board write and reset run only when the api is new, because that is the only time
+nobody can be using the board. If a step or a smoke check fails after something shipped, the script
+prints the `wrangler rollback` commands for those Workers and rolls nothing back itself: the Workers
+call each other, so which ones go back together is a decision to make with the failure in front of
+you.
+
 Push to `main` runs the same script in CI once the checks and e2e jobs pass. Locally it uses your
-`wrangler login`; CI uses the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repo secrets.
-`pnpm smoke` re-runs the read-only checks at any time.
+`wrangler login`; CI uses the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets, given only
+to the step that runs the script. `pnpm smoke` re-runs the read-only checks at any time.
 
 The deployed values live in `wrangler.jsonc` `vars`. `MODEL_PROVIDER` is `auto`, so the live demo
 runs Groq `openai/gpt-oss-120b` with a Gemini fallback
