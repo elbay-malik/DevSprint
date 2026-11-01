@@ -41,8 +41,10 @@ export const E2E_SERVERS: E2EServer[] = [
     url: 'http://127.0.0.1:8788/health',
   },
   {
+    // Without HMR, so saving or committing a file mid-run cannot reload the page
+    // a test is driving (vite.config.ts).
     name: 'web',
-    command: 'pnpm --filter @devsprint/web dev',
+    command: 'E2E_NO_HMR=1 pnpm --filter @devsprint/web dev',
     url: 'http://localhost:5173',
   },
   {
