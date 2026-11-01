@@ -47,7 +47,12 @@ import {
   type Tracked,
 } from './changes'
 import { nextUtcMidnightAfter } from './reset-schedule'
-import { addClientTokens, hashClientKey, type ClientUsage } from './client-usage'
+import {
+  addClientTokens,
+  hashClientKey,
+  refundClientTokens,
+  type ClientUsage,
+} from './client-usage'
 
 const STORAGE_KEY = 'workspace'
 /** Approval ids already spent (ADR-0010), persisted alongside the board (ADR-0014). */
@@ -398,6 +403,32 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
     const clients = await this.loadClientUsage(current.day)
     const held = addClientTokens(clients.tokens, hash, spent)
     // One write, so the day's total and the client's part can't disagree.
+    await this.ctx.storage.put({
+      [USAGE_KEY]: next,
+      [CLIENT_USAGE_KEY]: { day: current.day, tokens: held } satisfies ClientUsage,
+    })
+    return { ...next, clientTokens: held[hash] ?? 0 }
+  }
+
+  /**
+   * Takes back what an estimate charged too much of (agent/spend-meter.ts). Apart
+   * from this, usage only goes up, and `recordModelUsage` still refuses a negative
+   * figure. The hash comes first here too, for the same reason.
+   */
+  async refundModelUsage(tokens: number, clientKey?: string): Promise<DailyModelUsage> {
+    const hash = clientKey === undefined ? undefined : await hashClientKey(clientKey, this.today())
+    const current = await this.loadUsage()
+    const refund = Number.isFinite(tokens) && tokens > 0 ? Math.floor(tokens) : 0
+    const next: DailyModelUsage = {
+      day: current.day,
+      tokens: Math.max(0, current.tokens - refund),
+    }
+    if (hash === undefined) {
+      await this.ctx.storage.put(USAGE_KEY, next)
+      return next
+    }
+    const clients = await this.loadClientUsage(current.day)
+    const held = refundClientTokens(clients.tokens, hash, refund)
     await this.ctx.storage.put({
       [USAGE_KEY]: next,
       [CLIENT_USAGE_KEY]: { day: current.day, tokens: held } satisfies ClientUsage,
