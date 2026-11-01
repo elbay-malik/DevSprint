@@ -23,6 +23,7 @@ import { resolveApprovalSecret, settleApprovals } from './agent/approvals'
 import { createTurnTracer, resolveTracingConfig } from './agent/tracing'
 import {
   BUDGET_REACHED_MESSAGE,
+  limitMessage,
   messageOnlyResponse,
   RATE_LIMITED_MESSAGE,
   rateLimitKey,
@@ -301,7 +302,9 @@ app.post(API_ROUTES.chat, async (c) => {
       console.warn(JSON.stringify({ event: 'rate-limited' }))
       // A readable turn rather than a bare 429: the transcript stays usable and
       // the SPA needs no special case for it.
-      return messageOnlyResponse(RATE_LIMITED_MESSAGE, { 'X-DevSprint-Limit': 'rate' })
+      return messageOnlyResponse(limitMessage(RATE_LIMITED_MESSAGE, messages), {
+        'X-DevSprint-Limit': 'rate',
+      })
     }
   }
 
@@ -344,7 +347,7 @@ app.post(API_ROUTES.chat, async (c) => {
     const usage = await workspace.modelUsage()
     if (usage.tokens >= dailyCap) {
       console.warn(JSON.stringify({ event: 'budget-reached', day: usage.day, spent: usage.tokens }))
-      return messageOnlyResponse(BUDGET_REACHED_MESSAGE, {
+      return messageOnlyResponse(limitMessage(BUDGET_REACHED_MESSAGE, messages), {
         'X-DevSprint-Model': label,
         'X-DevSprint-Limit': 'budget',
       })

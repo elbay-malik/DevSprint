@@ -1,10 +1,36 @@
+import {
+  lastAssistantMessageIsCompleteWithApprovalResponses,
+  readUIMessageStream,
+  type UIMessage,
+  type UIMessageChunk,
+} from 'ai'
 import { describe, expect, it } from 'vitest'
 import {
+  APPROVAL_NOT_APPLIED_MESSAGE,
+  BUDGET_REACHED_MESSAGE,
   DEFAULT_DAILY_TOKEN_CAP,
+  limitMessage,
   rateLimitKey,
   resolveDailyTokenCap,
   messageOnlyResponse,
 } from './limits'
+
+/** What the SPA holds after a response is folded into the message it continues. */
+async function continued(response: Response, message: UIMessage): Promise<UIMessage> {
+  const chunks = (await response.text())
+    .split('\n')
+    .filter((line) => line.startsWith('data: ') && line !== 'data: [DONE]')
+    .map((line) => JSON.parse(line.slice(6)) as UIMessageChunk)
+  const stream = new ReadableStream<UIMessageChunk>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk)
+      controller.close()
+    },
+  })
+  let latest = message
+  for await (const next of readUIMessageStream({ message, stream })) latest = next
+  return latest
+}
 
 describe('resolveDailyTokenCap', () => {
   it('defaults to the free-tier quota it is protecting', () => {
@@ -64,5 +90,56 @@ describe('messageOnlyResponse', () => {
     const body = await response.text()
     expect(body).toContain('text-delta')
     expect(body).toContain('budget gone')
+  })
+
+  it('does not make the SPA resend an answered approval', async () => {
+    // `sendAutomaticallyWhen` only looks after the last step boundary. Written
+    // into the step holding the answered card, this reply would leave that true,
+    // and the SPA would resend for as long as the limit lasted, then run the
+    // write with no new press once the limit lifted. Run on the SDK's own
+    // reducer and predicate, since that is what the browser does.
+    const answered = {
+      id: 'a1',
+      role: 'assistant',
+      parts: [
+        { type: 'step-start' },
+        {
+          type: 'tool-update_issue_status',
+          toolCallId: 'c1',
+          state: 'approval-responded',
+          input: { issueKey: 'DS-7', status: 'done' },
+          approval: { id: 'ap1', approved: true, signature: 'sig' },
+        },
+      ],
+    } as unknown as UIMessage
+    expect(lastAssistantMessageIsCompleteWithApprovalResponses({ messages: [answered] })).toBe(true)
+
+    const after = await continued(messageOnlyResponse('budget gone', {}), answered)
+
+    expect(after.parts.at(-1)).toMatchObject({ type: 'text', text: 'budget gone' })
+    expect(lastAssistantMessageIsCompleteWithApprovalResponses({ messages: [after] })).toBe(false)
+  })
+})
+
+describe('limitMessage', () => {
+  it('says a refused approval was not applied, since the card still reads approved', () => {
+    const resume = [
+      { role: 'user', parts: [] },
+      { role: 'assistant', parts: [] },
+    ]
+    expect(limitMessage(BUDGET_REACHED_MESSAGE, resume)).toBe(
+      `${BUDGET_REACHED_MESSAGE} ${APPROVAL_NOT_APPLIED_MESSAGE}`,
+    )
+  })
+
+  it('does not talk about approvals on a plain question', () => {
+    expect(limitMessage(BUDGET_REACHED_MESSAGE, [{ role: 'user', parts: [] }])).toBe(
+      BUDGET_REACHED_MESSAGE,
+    )
+  })
+
+  it('copes with a body nothing has validated yet', () => {
+    expect(limitMessage(BUDGET_REACHED_MESSAGE, [])).toBe(BUDGET_REACHED_MESSAGE)
+    expect(limitMessage(BUDGET_REACHED_MESSAGE, ['nonsense', null])).toBe(BUDGET_REACHED_MESSAGE)
   })
 })
