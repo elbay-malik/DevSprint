@@ -510,10 +510,15 @@ issue title and a quiet 12px Graphite mono line naming the tool, and the raw arg
 `<details>` away. What a write would store is on the card itself, not behind that disclosure, since
 this card is the control against a prompt injection (ADR-0016): a new issue's assignee, priority,
 points and labels in one 12px Graphite line under its title ("@dana · high · 3 pts · billing,
-export"), and, above the disclosure, a new issue's description, the release notes it would save or a
-status change's comment. That text sits in a 1px Rule box in 12px Graphite, up to 192px tall, with a
-tab stop because it scrolls. It is shown as plain text, never as markdown, and all of it can be
-scrolled to, since a clamp would let injected text sit below the cut. A deployment that would skip
+export"), and, above the disclosure, a new issue's description, the release notes it would save or
+the comment on a move to blocked, which becomes the blocked reason. A move to any other status drops
+its comment, so the card does not show it. That text sits in a 1px Rule box in 12px Graphite, up to
+192px tall, with a tab stop because it scrolls. It is shown as plain text, never as markdown, and
+all of it can be scrolled to, since a clamp would let injected text sit below the cut. So that
+padding cannot do the same, the box drops blank lines at the top and closes up longer runs of them
+to one, and the raw arguments keep the text as sent. When the text runs past the box, a 12px
+Graphite line under it says "Scroll to read all of it.", since an overlay scrollbar shows nothing at
+rest. A deployment that would skip
 its tests says so in the headline ("Deploy v1.5.0 to production, tests skipped"), so the names
 built on the headline and the decided record say it too. That is not a warning: a person may have
 asked for it, so Approve keeps the Ink. While pending, it holds a reason input, an outline Deny and a primary Approve,
@@ -545,12 +550,14 @@ once none are left. Focus moves only when it was already in the chat pane or had
 page, so someone working on the board is not pulled away. The outcome line is also what the
 transcript's status line announces.
 
-**Group header.** A message with two or more approval cards, at least one still open, gets one
-12px medium line in the bubble's text colour above the first card (Graphite would fall under
-4.5:1 on the bubble's Paper Tint): "5 changes to review · 23 pts", counting the open
+**Group header.** A message with two or more approval cards in its current round, at least one still
+open, gets one 12px medium line in the bubble's text colour above the round's first card (Graphite
+would fall under 4.5:1 on the bubble's Paper Tint): "5 changes to review · 23 pts", counting the open
 cards and the board points of the issues they would move (the points are left off when none are
-known). It is a named group that takes focus by script, with the shared focus outline. It goes once
-every card is decided. Each card keeps its own decision.
+known). A card that already ran belongs to an earlier round, since a continuation appends to the same
+message, and stays above the header, so landing on the header shows the cards it offers. It is a
+named group that takes focus by script, with the shared focus outline. It goes once every card is
+decided. Each card keeps its own decision.
 
 **Approve all.** When two or more of the open cards on the last message are board writes that can
 land (a status change for a key the board holds, a new issue, or a reassignment of an issue the
