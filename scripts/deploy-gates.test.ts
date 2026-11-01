@@ -1,5 +1,17 @@
 import assert from 'node:assert/strict'
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
+import { pathToFileURL } from 'node:url'
 import {
   deployRefusal,
   missingProviderSecret,
@@ -7,6 +19,8 @@ import {
   type GitState,
 } from './deploy-gates.ts'
 import { expectedModelProvider } from './smoke.ts'
+
+const SCRIPTS = import.meta.dirname
 
 const CLEAN: GitState = { dirty: false, branch: 'main', head: 'abc', originMain: 'abc' }
 
@@ -59,7 +73,29 @@ void test('a provider the api would reject is not let through', () => {
 })
 
 void test('the provider checked is the one the committed config deploys', () => {
-  assert.equal(expectedModelProvider(), 'auto')
+  const config = readFileSync(join(SCRIPTS, '../apps/api/wrangler.jsonc'), 'utf8')
+  const committed = /"MODEL_PROVIDER":\s*"(\w+)"/.exec(config)?.[1]
+  assert.ok(committed, 'apps/api/wrangler.jsonc names no MODEL_PROVIDER')
+  assert.equal(expectedModelProvider(), committed)
+})
+
+void test('the provider comes from the config, and defaults to auto without one', async (t) => {
+  // A copy of smoke.ts, because it finds the config relative to its own file.
+  const base = mkdtempSync(join(tmpdir(), 'devsprint-provider-'))
+  t.after(() => rmSync(base, { recursive: true, force: true }))
+  mkdirSync(join(base, 'scripts'))
+  mkdirSync(join(base, 'apps/api'), { recursive: true })
+  cpSync(join(SCRIPTS, 'smoke.ts'), join(base, 'scripts/smoke.ts'))
+  symlinkSync(join(SCRIPTS, '../node_modules'), join(base, 'node_modules'))
+  const copy = (await import(
+    pathToFileURL(join(base, 'scripts/smoke.ts')).href
+  )) as typeof import('./smoke.ts')
+  const config = join(base, 'apps/api/wrangler.jsonc')
+
+  writeFileSync(config, '{\n  // jsonc\n  "vars": { "MODEL_PROVIDER": "gemini" },\n}\n')
+  assert.equal(copy.expectedModelProvider(), 'gemini')
+  writeFileSync(config, '{ "vars": {} }\n')
+  assert.equal(copy.expectedModelProvider(), 'auto')
 })
 
 void test('rollback hints name only what shipped, last shipped first', () => {
