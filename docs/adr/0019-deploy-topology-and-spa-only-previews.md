@@ -164,3 +164,11 @@ passed every smoke check.
 
 The MCP smoke check now expects exactly five tools: `assign_issue` joined the issue server
 (ADR-0023's status note), and `scripts/smoke.ts` lists it by name with the other four.
+
+## Status note — 2026-11-01 (preview origins)
+
+`CORS_ORIGIN` now reads `https://pr-*-devsprint-web...`, so it holds the SPA and its PR aliases and
+no longer the hash-named URL Cloudflare gives every uploaded version. Those URLs still serve, but
+can't reach the api from a browser. The `pr-<n>` links posted on PRs work as before. These origins
+are also the only browser origins that may POST (ADR-0025), and smoke checks both refusals and the
+headers from `apps/web/public/_headers`.

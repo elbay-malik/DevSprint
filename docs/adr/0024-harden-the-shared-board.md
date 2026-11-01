@@ -87,3 +87,9 @@ declares none. The transport has the same limit for the `Internal` entrypoint, w
 itself. Both entrypoints also set the SDK's `maxToolInputElements` to 100, and zod moved to a version
 that reports an oversized array once rather than once per element. The 413 comes after the
 rate-limit token is spent, which keeps ADR-0020's order.
+
+The first Positive line overstates the cooldown when it says no single client can wipe other
+visitors' writes. One client can still reset the board every 30 seconds, and a write landed before
+that reset is gone. What the cooldown stops is a loop that keeps the board at its seed. Since
+ADR-0025 a browser page on another origin can't send that reset from its visitors' browsers, but
+curl still can, because the board stays public (ADR-0014).
