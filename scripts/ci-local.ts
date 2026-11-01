@@ -23,7 +23,7 @@ import { createWriteStream, mkdirSync, readFileSync, writeFileSync } from 'node:
 import { get } from 'node:http'
 import { createServer } from 'node:net'
 import { join } from 'node:path'
-import { E2E_SERVERS, PREVIEW_PORT } from '../apps/web/e2e/servers.ts'
+import { E2E_SERVERS } from '../apps/web/e2e/servers.ts'
 import { ciEnv } from './ci-env.ts'
 import { jobSteps } from './ci-workflow.ts'
 
@@ -161,7 +161,7 @@ async function startServers(): Promise<boolean> {
   // a debugger (9229, and 9230 for apps/mcp-issues), which other Wrangler
   // projects on the same machine often hold; those get a free port instead.
   const busy: string[] = []
-  for (const port of [8787, 8788, 5173, PREVIEW_PORT]) {
+  for (const port of E2E_SERVERS.map((server) => Number(new URL(server.url).port))) {
     if (!(await portFree(port))) busy.push(`  :${port} is held by\n    ${holderOf(port)}`)
   }
   if (busy.length > 0) {
@@ -198,6 +198,8 @@ async function startServers(): Promise<boolean> {
 }
 
 async function toolsComeOverMcp(timeoutMs: number): Promise<boolean> {
+  const api = E2E_SERVERS.find((server) => server.name === 'api')
+  if (!api) throw new Error("E2E_SERVERS has no 'api' server")
   const deadline = Date.now() + timeoutMs
   const body = JSON.stringify({
     messages: [
@@ -206,7 +208,7 @@ async function toolsComeOverMcp(timeoutMs: number): Promise<boolean> {
   })
   while (Date.now() < deadline) {
     try {
-      const res = await fetch('http://127.0.0.1:8787/api/chat', {
+      const res = await fetch(new URL('/api/chat', api.url), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body,
