@@ -15,6 +15,7 @@ import type { AppEnv } from './env'
 import { corsOriginMatcher } from './cors'
 import { workspaceStub, type WorkspaceApi } from './workspace/durable-object'
 import { createCopilotAgent } from './agent/agent'
+import { createSpendMeter } from './agent/spend-meter'
 import { createStepAuditLogger } from './agent/audit'
 import { describeError, toClientErrorMessage } from './agent/errors'
 import { ModelConfigError, resolveModel } from './agent/model'
@@ -464,17 +465,25 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
   const tracingConfig = resolveTracingConfig(c.env)
   const turnTracer = tracingConfig ? createTurnTracer(tracingConfig) : undefined
 
+  // Charged as each call starts and writes, and corrected to the real figure as
+  // its step finishes, so a client that leaves mid-call can't spend for nothing.
+  // Everything goes on `waitUntil`, so it survives that client leaving.
+  const meter = metered
+    ? createSpendMeter({
+        charge: (tokens) => waitUntil(workspace.recordModelUsage(tokens, shareKey)),
+        refund: (tokens) => waitUntil(workspace.refundModelUsage(tokens, shareKey)),
+      })
+    : undefined
+
   const agent = createCopilotAgent({
-    model,
+    model: meter ? meter.wrap(model) : model,
     instructions: buildSystemPrompt(await workspace.snapshot()),
     tools,
     approvalSecret: resolveApprovalSecret(c.env.TOOL_APPROVAL_SECRET),
     ...(turnTracer ? { tracer: turnTracer.tracer } : {}),
-    // Spend is recorded after each step, on `waitUntil`, so a turn stopped
-    // halfway still counts the steps it took.
-    ...(metered
+    ...(meter
       ? {
-          onUsage: (tokens: number) => waitUntil(workspace.recordModelUsage(tokens, shareKey)),
+          onUsage: meter.settle,
           // Concurrent turns all pass the check above before any has recorded
           // spend, so each re-reads it between steps. Each can still overshoot by
           // about a step, and a read can miss a write `waitUntil` has not landed.

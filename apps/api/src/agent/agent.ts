@@ -38,7 +38,8 @@ export interface CopilotAgentOptions {
    * Called with each step's token usage as the step finishes. Used for the
    * daily spend cap (ADR-0016). Per step rather than once at the end, because
    * the SDK skips `onFinish` on an aborted turn, and a turn someone stopped has
-   * still been billed for the steps it took.
+   * still been billed for the steps it took. A step that never finishes is not
+   * reported here at all, which is what spend-meter.ts is for.
    */
   onUsage?: (tokens: number) => void
   /**
