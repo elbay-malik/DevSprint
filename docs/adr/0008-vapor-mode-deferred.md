@@ -51,3 +51,8 @@ The gate was checked rather than skipped, and it is not met. On npm, Vue's `late
 the 3.6 line carrying Vapor is at `3.6.0-rc.12`, a release candidate, not stable. The experiment
 therefore does not run this phase, and nothing in the app depends on it. Re-check when 3.6 reaches
 `latest`, together with Reka UI's compatibility, which this ADR also requires.
+
+## Status note — 2026-11-01
+
+The app now ships Vue 3.5.44 rather than the 3.5.39 in the context above. The decision stands, and
+3.6 remains a release candidate.
