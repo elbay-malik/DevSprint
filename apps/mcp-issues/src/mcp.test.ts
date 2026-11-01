@@ -116,4 +116,22 @@ describe('handleMcpRequest', () => {
     expect(result.isError).toBeUndefined()
     expect(createIssue).toHaveBeenCalledOnce()
   })
+
+  it('sends a caller INTERNAL rather than the message of a workspace that throws', async () => {
+    // Through the real server, because its own catch is what used to send the
+    // message on: this is the caller's view of a Durable Object outage.
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { api, createIssue } = fakeWorkspace()
+    createIssue.mockRejectedValueOnce(new Error('secret internals'))
+
+    const result = await resultOf(await handleMcpRequest(post(createIssueCall({})), api))
+    log.mockRestore()
+
+    expect(result.isError).toBeUndefined()
+    expect(JSON.stringify(result)).not.toContain('secret internals')
+    expect(JSON.parse(result.content[0]!.text)).toMatchObject({
+      ok: false,
+      error: { code: 'INTERNAL' },
+    })
+  })
 })
