@@ -47,6 +47,7 @@ import {
   type Tracked,
 } from './changes'
 import { nextUtcMidnightAfter } from './reset-schedule'
+import { addClientTokens, hashClientKey, type ClientUsage } from './client-usage'
 
 const STORAGE_KEY = 'workspace'
 /** Approval ids already spent (ADR-0010), persisted alongside the board (ADR-0014). */
@@ -88,6 +89,11 @@ const MAX_WORKSPACE_BYTES = 512_000
  * (ADR-0016).
  */
 const USAGE_KEY = 'daily-model-usage'
+/**
+ * Each client's part of that spend, by hashed key. Not touched by `reset()` for
+ * the same reason: a share a visitor can clear by pressing Reset is not a share.
+ */
+const CLIENT_USAGE_KEY = 'daily-client-usage'
 /** When the board was last reset, in real wall-clock ms, for `requestReset`'s cooldown. */
 const LAST_RESET_KEY = 'last-reset-at'
 /**
@@ -154,6 +160,7 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
     // times before giving up on it for good.
     await this.ctx.storage.setAlarm(nextUtcMidnightAfter(Date.now()))
     await this.reset()
+    await this.dropStaleClientUsage()
   }
 
   private async load(): Promise<Workspace> {
@@ -350,17 +357,52 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
     return stored && stored.day === day ? stored : { day, tokens: 0 }
   }
 
-  async modelUsage(): Promise<DailyModelUsage> {
-    return await this.loadUsage()
+  private async loadClientUsage(day: string): Promise<ClientUsage> {
+    const stored = await this.ctx.storage.get<ClientUsage>(CLIENT_USAGE_KEY)
+    return stored && stored.day === day ? stored : { day, tokens: {} }
   }
 
-  async recordModelUsage(tokens: number): Promise<DailyModelUsage> {
+  /**
+   * The rollover above only ignores yesterday's map, and a quiet day would leave
+   * those hashes in storage. The alarm is what removes them. If it never fires,
+   * the next recorded step overwrites them.
+   */
+  private async dropStaleClientUsage(): Promise<void> {
+    const stored = await this.ctx.storage.get<ClientUsage>(CLIENT_USAGE_KEY)
+    if (stored && stored.day !== this.today()) await this.ctx.storage.delete(CLIENT_USAGE_KEY)
+  }
+
+  async modelUsage(clientKey?: string): Promise<DailyModelUsage> {
+    const hash = clientKey === undefined ? undefined : await hashClientKey(clientKey, this.today())
+    const usage = await this.loadUsage()
+    if (hash === undefined) return usage
+    const clients = await this.loadClientUsage(usage.day)
+    return { ...usage, clientTokens: clients.tokens[hash] ?? 0 }
+  }
+
+  /**
+   * The hash comes first. Only storage calls hold other requests back, so a
+   * digest between the reads and the write could let two steps read the same
+   * totals and lose one's tokens.
+   */
+  async recordModelUsage(tokens: number, clientKey?: string): Promise<DailyModelUsage> {
+    const hash = clientKey === undefined ? undefined : await hashClientKey(clientKey, this.today())
     const current = await this.loadUsage()
     // Negative or nonsense usage would quietly buy back budget.
     const spent = Number.isFinite(tokens) && tokens > 0 ? Math.floor(tokens) : 0
     const next: DailyModelUsage = { day: current.day, tokens: current.tokens + spent }
-    await this.ctx.storage.put(USAGE_KEY, next)
-    return next
+    if (hash === undefined) {
+      await this.ctx.storage.put(USAGE_KEY, next)
+      return next
+    }
+    const clients = await this.loadClientUsage(current.day)
+    const held = addClientTokens(clients.tokens, hash, spent)
+    // One write, so the day's total and the client's part can't disagree.
+    await this.ctx.storage.put({
+      [USAGE_KEY]: next,
+      [CLIENT_USAGE_KEY]: { day: current.day, tokens: held } satisfies ClientUsage,
+    })
+    return { ...next, clientTokens: held[hash] ?? 0 }
   }
 
   // --- reads ------------------------------------------------------------------

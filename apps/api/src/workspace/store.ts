@@ -14,6 +14,7 @@ import {
   setDeploymentStage,
   startDeployment,
 } from './mutations'
+import { addClientTokens, type ClientUsage } from './client-usage'
 import {
   assignIssueTracked,
   createIssueTracked,
@@ -38,8 +39,8 @@ export interface WorkspaceStore {
   /** When the board was last reset, real wall-clock ms; 0 before the first. */
   lastResetAt(): number
   /** Model tokens spent today, mirroring the DO's daily budget (ADR-0016). */
-  modelUsage(): DailyModelUsage
-  recordModelUsage(tokens: number): DailyModelUsage
+  modelUsage(clientKey?: string): DailyModelUsage
+  recordModelUsage(tokens: number, clientKey?: string): DailyModelUsage
 }
 
 /**
@@ -53,12 +54,18 @@ export interface WorkspaceStore {
 export function createWorkspaceStore(): WorkspaceStore {
   let workspace = createWorkspaceSeed()
   let usage: DailyModelUsage | undefined
+  // Raw keys, unlike the DO's: nothing here is stored, and a test can name a client.
+  let clients: ClientUsage | undefined
 
   /** Rolls over on the real UTC date, the same way the DO's copy does. */
   const currentUsage = (): DailyModelUsage => {
     const day = new Date(Date.now()).toISOString().slice(0, 10)
     if (!usage || usage.day !== day) usage = { day, tokens: 0 }
     return usage
+  }
+  const currentClients = (day: string): ClientUsage => {
+    if (!clients || clients.day !== day) clients = { day, tokens: {} }
+    return clients
   }
   let ledger = new Set<string>()
   let changes: BoardChange[] = []
@@ -80,12 +87,19 @@ export function createWorkspaceStore(): WorkspaceStore {
     setChanges: (next) => {
       changes = next
     },
-    modelUsage: () => currentUsage(),
-    recordModelUsage: (tokens) => {
+    modelUsage: (clientKey) => {
+      const current = currentUsage()
+      if (clientKey === undefined) return current
+      return { ...current, clientTokens: currentClients(current.day).tokens[clientKey] ?? 0 }
+    },
+    recordModelUsage: (tokens, clientKey) => {
       const current = currentUsage()
       const spent = Number.isFinite(tokens) && tokens > 0 ? Math.floor(tokens) : 0
       usage = { day: current.day, tokens: current.tokens + spent }
-      return usage
+      if (clientKey === undefined) return usage
+      const held = addClientTokens(currentClients(current.day).tokens, clientKey, spent)
+      clients = { day: current.day, tokens: held }
+      return { ...usage, clientTokens: held[clientKey] ?? 0 }
     },
   }
 }
@@ -163,8 +177,9 @@ export function createLocalWorkspaceApi(store: WorkspaceStore): WorkspaceApi {
     },
     // The in-memory twin of the DO's daily budget: same contract, no storage,
     // so a test can drive the cap without a Durable Object.
-    modelUsage: () => Promise.resolve(store.modelUsage()),
-    recordModelUsage: (tokens) => Promise.resolve(store.recordModelUsage(tokens)),
+    modelUsage: (clientKey) => Promise.resolve(store.modelUsage(clientKey)),
+    recordModelUsage: (tokens, clientKey) =>
+      Promise.resolve(store.recordModelUsage(tokens, clientKey)),
     // One at a time rather than filter-then-bulk-add, so an in-call duplicate
     // is caught too — mirrors the DO's real implementation. No eviction cap
     // here: that guards a Durable Object storage limit this in-memory Set does
