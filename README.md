@@ -168,7 +168,7 @@ Browser tests live in `apps/web`:
 pnpm --filter @devsprint/web test:e2e
 ```
 
-Playwright starts all three servers itself and pins the scripted mock model, so the end-to-end
+Playwright starts all four servers itself and pins the scripted mock model, so the end-to-end
 run needs no API key and never spends provider quota. It includes one test per demo scenario
 (`e2e/scenarios.spec.ts`).
 
