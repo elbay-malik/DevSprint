@@ -22,13 +22,13 @@
     "ci:local": "node scripts/ci-local.ts"
   },
   "devDependencies": {
-    "@types/node": "^24.13.2",
+    "@types/node": "catalog:",
     "@vue/eslint-config-prettier": "catalog:",
     "@vue/eslint-config-typescript": "catalog:",
     "eslint": "catalog:",
     "eslint-plugin-vue": "catalog:",
     "husky": "9.1.7",
-    "jiti": "^2.0.0",
+    "jiti": "catalog:",
     "lint-staged": "17.0.8",
     "prettier": "catalog:",
     "typescript": "catalog:"
