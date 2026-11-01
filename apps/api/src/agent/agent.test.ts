@@ -199,7 +199,32 @@ describe('createCopilotAgent', () => {
     const result = await agent.stream({ messages: [{ role: 'user', content: 'go' }] })
     await result.consumeStream()
 
-    expect(spent).toEqual([MAX_STEPS * 100])
+    expect(spent).toEqual(Array.from({ length: MAX_STEPS }, () => 100))
+  })
+
+  it('still counts the steps of a turn that was stopped partway', async () => {
+    // The SDK skips `onFinish` on an abort, so a client could otherwise run up
+    // spend for nothing by stopping every turn just before it ends.
+    const spent: number[] = []
+    const { model } = loopingModel(80, 20)
+    const agent = createCopilotAgent({
+      model,
+      instructions: 'test',
+      tools,
+      approvalSecret: 'test-secret',
+      onUsage: (tokens) => spent.push(tokens),
+    })
+    const controller = new AbortController()
+
+    const result = await agent.stream({
+      messages: [{ role: 'user', content: 'go' }],
+      abortSignal: controller.signal,
+    })
+    for await (const part of result.fullStream) {
+      if (part.type === 'finish-step') controller.abort()
+    }
+
+    expect(spent).toEqual([100])
   })
 
   it('exposes every read tool to the model', async () => {

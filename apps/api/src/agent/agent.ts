@@ -27,9 +27,10 @@ export interface CopilotAgentOptions {
    */
   tracer?: unknown
   /**
-   * Called with the turn's total token usage once it finishes. Used for the
-   * daily spend cap (ADR-0016); a constructor setting because `agent.stream()`
-   * takes no `onFinish` of its own.
+   * Called with each step's token usage as the step finishes. Used for the
+   * daily spend cap (ADR-0016). Per step rather than once at the end, because
+   * the SDK skips `onFinish` on an aborted turn, and a turn someone stopped has
+   * still been billed for the steps it took.
    */
   onUsage?: (tokens: number) => void
 }
@@ -56,8 +57,8 @@ export function createCopilotAgent({
     experimental_toolApprovalSecret: approvalSecret,
     ...(onUsage
       ? {
-          onFinish: ({ totalUsage }) =>
-            onUsage((totalUsage.inputTokens ?? 0) + (totalUsage.outputTokens ?? 0)),
+          onStepFinish: ({ usage }) =>
+            onUsage((usage.inputTokens ?? 0) + (usage.outputTokens ?? 0)),
         }
       : {}),
     // Without a tracer the SDK uses its own no-op, so this is genuinely off
