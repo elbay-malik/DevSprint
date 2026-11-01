@@ -79,7 +79,9 @@ tracks what has been spent lives in the workspace Durable Object rather than in 
 memory, so the guarantee holds across isolates and restarts, not just within the one that happened
 to handle a given request ([ADR-0014](../../docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
 An approval is spent only by a turn that will act on it, so a press the rate limit, the budget or a
-missing model config refused stays good, and the limit message says it was not applied.
+missing model config refused stays good, and the limit message says it was not applied. The SDK
+reads an answer from any tool part in any state, so before conversion every answer the ledger would
+not spend is removed, leaving it nothing else to act on.
 
 Two limits worth knowing. With no secret configured the Worker signs with a random per-isolate
 secret and warns, rather than running unsigned — that keeps keyless dev and CI working, but
@@ -240,8 +242,10 @@ Each request is bounded as well: a 256 KB body (413), 4,000 characters in a user
 4,096 output tokens per model call. Older history is dropped rather than refused, keeping the latest
 user message and everything after it, then what fits in 20 messages and 32,000 characters.
 
-A transcript with a system message, or a user message holding anything but text, is a 400. The SPA
-sends neither, and the second would have the Worker fetch a file from a URL the client chose.
+A transcript with a system message, a user message holding anything but text, or a tool part marked
+`providerExecuted` is a 400. The SPA sends none of them. The second would have the Worker fetch a
+file from a URL the client chose, and the third would put a forged result where the SDK does not
+look for one.
 Provider options on a user part are removed before conversion, and the ones on assistant parts stay,
 because they carry Gemini's thought signature through an approval resume.
 
