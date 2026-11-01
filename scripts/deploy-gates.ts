@@ -24,3 +24,29 @@ export function deployRefusal(state: GitState): string | undefined {
   }
   return reasons.length > 0 ? reasons.join('; ') : undefined
 }
+
+const GROQ = 'GROQ_API_KEY'
+const GEMINI = 'GOOGLE_GENERATIVE_AI_API_KEY'
+
+/**
+ * What the api lacks to run MODEL_PROVIDER, or undefined if it has it. `auto`
+ * with neither key does not fail: apps/api/src/agent/model.ts falls back to the
+ * scripted mock, which is right for a fresh clone and wrong for the live demo.
+ */
+export function missingProviderSecret(
+  provider: string,
+  secrets: ReadonlySet<string>,
+): string | undefined {
+  switch (provider) {
+    case 'mock':
+      return undefined
+    case 'groq':
+      return secrets.has(GROQ) ? undefined : GROQ
+    case 'gemini':
+      return secrets.has(GEMINI) ? undefined : GEMINI
+    case 'auto':
+      return secrets.has(GROQ) || secrets.has(GEMINI) ? undefined : `${GROQ} or ${GEMINI}`
+    default:
+      return `a MODEL_PROVIDER the api knows, not '${provider}'`
+  }
+}

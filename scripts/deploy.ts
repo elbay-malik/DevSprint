@@ -13,6 +13,9 @@
  *
  *   pnpm deploy:all --skip-git-gate     deploy this checkout anyway (a hotfix, or offline)
  *
+ * It also refuses when the api already exists and lacks the provider key that
+ * MODEL_PROVIDER needs, since `auto` would then quietly serve the scripted mock.
+ *
  * The two Workers depend on each other: apps/api service-binds
  * devsprint-mcp-issues (its `Internal` entrypoint, ADR-0020), and
  * apps/mcp-issues binds the WorkspaceDO class that devsprint-api defines. The
@@ -39,7 +42,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import ts from 'typescript'
-import { deployRefusal } from './deploy-gates.ts'
+import { deployRefusal, missingProviderSecret } from './deploy-gates.ts'
+import { expectedModelProvider, smoke } from './smoke.ts'
 
 const ROOT = join(import.meta.dirname, '..')
 const SKIP_GIT_GATE = '--skip-git-gate'
@@ -101,14 +105,14 @@ function workerExists(name: string): boolean {
   throw new Error(`could not tell whether ${name} exists:\n${result.out}`)
 }
 
-function apiHasApprovalSecret(): boolean {
+function apiSecretNames(): Set<string> {
   const result = must(
     'listing api secrets',
     wrangler('api', ['secret', 'list', '--format', 'json'], { capture: true }),
   )
   const json = result.out.slice(result.out.indexOf('['))
   const secrets = JSON.parse(json) as Array<{ name: string }>
-  return secrets.some((secret) => secret.name === 'TOOL_APPROVAL_SECRET')
+  return new Set(secrets.map((secret) => secret.name))
 }
 
 /** apps/api's config minus the service binding, for the first deploy only. */
@@ -161,7 +165,12 @@ async function main() {
   // The approval signing secret (ADR-0010) is generated once, here, and never
   // printed. Without it every isolate signs with its own random key, so an
   // approval issued by one would not verify on another.
-  const needsSecret = !apiExists || !apiHasApprovalSecret()
+  const apiSecrets = apiExists ? apiSecretNames() : new Set<string>()
+  const needsSecret = !apiSecrets.has('TOOL_APPROVAL_SECRET')
+
+  const provider = expectedModelProvider()
+  const missing = missingProviderSecret(provider, apiSecrets)
+  const missingLine = missing && `MODEL_PROVIDER=${provider} needs ${missing} on the api`
 
   const steps: Array<{
     label: string
@@ -202,7 +211,18 @@ async function main() {
   steps.forEach((step, index) => console.log(`  ${index + 1}. ${step.label}`))
   console.log(`  then smoke checks${firstDeploy ? ', including the shared-board write' : ''}`)
   if (needsSecret) console.log('  TOOL_APPROVAL_SECRET will be generated (not shown)')
-  if (planOnly) return
+  if (planOnly) {
+    if (missingLine) console.log(`  a real deploy would stop here: ${missingLine}`)
+    return
+  }
+  if (missingLine) {
+    // A Worker that does not exist cannot hold secrets yet, so a first deploy
+    // goes on: set the keys afterwards, or its smoke check will fail.
+    if (apiExists) {
+      refuse(`${missingLine}. Set it with \`wrangler secret put\`, or commit MODEL_PROVIDER=mock.`)
+    }
+    console.warn(`${missingLine}; a new Worker has no secrets yet, so set it after this deploy.`)
+  }
 
   let secretsDir: string | undefined
   let secretsFile: string | undefined
@@ -228,7 +248,6 @@ async function main() {
     if (secretsDir) rmSync(secretsDir, { recursive: true, force: true })
   }
 
-  const { smoke } = await import('./smoke.ts')
   await smoke({ proveSharedBoard: firstDeploy })
 }
 
