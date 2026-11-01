@@ -385,7 +385,10 @@ export function getBurndown(
 
 // --- 6. diff_release_notes ----------------------------------------------------
 
-const HEADING_LINE = /^#{1,6}\s+(.*)$/
+// The `s` flag is what keeps this linear. Without it `.` stops at a lone \r or
+// U+2028, `$` fails there, and `\s+` backtracks over the whole run of spaces:
+// quadratic on a line that a 20,000-character draft can fill.
+const HEADING_LINE = /^#{1,6}\s+(.*)$/s
 const FENCE_LINE = /^\s{0,3}(```|~~~)/
 
 /**
