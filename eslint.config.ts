@@ -7,6 +7,7 @@ export default defineConfigWithVueTs(
   { name: 'app/files-to-lint', files: ['**/*.{ts,mts,vue}'] },
   globalIgnores([
     '**/dist/**',
+    '**/dist-e2e/**',
     '**/coverage/**',
     '**/node_modules/**',
     '**/.wrangler/**',

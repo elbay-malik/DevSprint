@@ -418,6 +418,61 @@ describe('GET /api/workspace', () => {
   })
 })
 
+describe('security headers', () => {
+  function expectSecurityHeaders(res: Response) {
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(res.headers.get('x-frame-options')).toBe('SAMEORIGIN')
+    expect(res.headers.get('cross-origin-resource-policy')).toBe('same-origin')
+  }
+
+  it('are on a JSON response and on a 404', async () => {
+    expectSecurityHeaders(await app.request('/api/health', {}, env))
+    const missing = await app.request('/api/nothing-here', {}, env)
+    expect(missing.status).toBe(404)
+    expectSecurityHeaders(missing)
+  })
+
+  it('are on the chat stream, alongside its own headers and CORS', async () => {
+    const res = await app.request(
+      '/api/chat',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' },
+        body: JSON.stringify({
+          messages: [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }],
+        }),
+      },
+      env,
+    )
+    expect(res.headers.get('content-type')).toContain('text/event-stream')
+    expectSecurityHeaders(res)
+    expect(res.headers.get('x-devsprint-model')).toBe('mock')
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:5173')
+    await res.text()
+  })
+
+  it('are on a refusal, and on a preflight', async () => {
+    const refused = await app.request(
+      '/api/workspace/reset',
+      { method: 'POST', headers: { Origin: 'https://evil.example' } },
+      env,
+    )
+    expect(refused.status).toBe(403)
+    expectSecurityHeaders(refused)
+
+    const preflight = await app.request(
+      '/api/chat',
+      {
+        method: 'OPTIONS',
+        headers: { Origin: 'http://localhost:5173', 'Access-Control-Request-Method': 'POST' },
+      },
+      env,
+    )
+    expect(preflight.status).toBe(204)
+    expectSecurityHeaders(preflight)
+  })
+})
+
 describe('a POST from another origin', () => {
   const ROUTES = [
     { path: '/api/workspace/reset', body: undefined },
