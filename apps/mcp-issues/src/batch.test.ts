@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_BODY_BYTES, refuseBatch } from './batch'
+import { MAX_BODY_BYTES, refuseBatch, refuseNonPost } from './batch'
 
 function post(body: string) {
   return new Request('https://mcp.test/mcp', {
@@ -21,6 +21,27 @@ function messageOf(bytes: number): string {
   const empty = JSON.stringify({ ...call(1), padding: '' })
   return JSON.stringify({ ...call(1), padding: 'x'.repeat(bytes - empty.length) })
 }
+
+describe('refuseNonPost', () => {
+  it.each(['GET', 'DELETE', 'OPTIONS', 'PUT'])(
+    'answers %s with a 405 naming POST',
+    async (method) => {
+      const response = refuseNonPost(new Request('https://mcp.test/mcp', { method }))
+
+      expect(response?.status).toBe(405)
+      expect(response?.headers.get('Allow')).toBe('POST')
+      await expect(response?.json()).resolves.toMatchObject({
+        jsonrpc: '2.0',
+        id: null,
+        error: { code: -32000 },
+      })
+    },
+  )
+
+  it('leaves a POST alone', () => {
+    expect(refuseNonPost(post(JSON.stringify(call(1))))).toBeUndefined()
+  })
+})
 
 describe('refuseBatch', () => {
   it('refuses an array of calls, which would ride one rate-limit token', async () => {
