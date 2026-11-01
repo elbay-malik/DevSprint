@@ -133,4 +133,22 @@ describe('toolErrorCopy', () => {
       'The board is full. Reset it to carry on.',
     )
   })
+
+  it('invites a retry of a read that failed unexpectedly', () => {
+    for (const tool of ['list_issues', 'search_issues']) {
+      expect(toolErrorCopy(tool, 'INTERNAL')).toBe(
+        'The board couldn’t be reached. Try again in a moment.',
+      )
+    }
+  })
+
+  it('does not invite a retry of a write that may have landed', () => {
+    // The commit can succeed and only its reply be lost, and a second
+    // create_issue would be a second issue.
+    for (const tool of ['create_issue', 'update_issue_status', 'assign_issue']) {
+      expect(toolErrorCopy(tool, 'INTERNAL')).toBe(
+        'The board couldn’t be reached, so this may not have saved. Check the board before trying again.',
+      )
+    }
+  })
 })

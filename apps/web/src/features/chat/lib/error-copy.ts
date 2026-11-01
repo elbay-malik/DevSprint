@@ -1,4 +1,5 @@
 import type { ToolErrorCode } from '@devsprint/shared'
+import type { ReadToolName } from '@devsprint/shared/tools'
 
 /**
  * A line of error copy, in pieces: plain words, and the identifiers inside
@@ -11,6 +12,9 @@ export type ErrorCopy = readonly (string | { id: string })[]
 export function errorCopyText(copy: ErrorCopy): string {
   return copy.map((part) => (typeof part === 'string' ? part : part.id)).join('')
 }
+
+/** The issue tools that only read, so asking again is safe. A typed copy, as in undo.ts. */
+const ISSUE_READS = ['list_issues', 'search_issues'] as const satisfies readonly ReadToolName[]
 
 /**
  * What a failed tool call means, in the board's words, per error code
@@ -95,8 +99,15 @@ export function toolErrorCopy(toolName: string, code: string, input?: unknown): 
       }
       return ['The board couldn’t accept that request.']
     }
+    // The workspace call threw. A read can simply be asked again, but a write may
+    // have landed with only its reply lost, and a second create_issue is a second
+    // issue, so anything not known to be a read sends the person to the board first.
     case 'INTERNAL':
-      return ['The board couldn’t be reached. Try again in a moment.']
+      return (ISSUE_READS as readonly string[]).includes(toolName)
+        ? ['The board couldn’t be reached. Try again in a moment.']
+        : [
+            'The board couldn’t be reached, so this may not have saved. Check the board before trying again.',
+          ]
     default:
       return ['That didn’t go through.']
   }
