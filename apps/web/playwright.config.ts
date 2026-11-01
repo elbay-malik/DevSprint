@@ -17,8 +17,8 @@ export default defineConfig({
   use: { baseURL: 'http://localhost:5173', trace: 'retain-on-failure' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   // Both panes and the production headers are under test, so all four servers
-  // run; e2e/servers.ts defines them for this file and scripts/ci-local.ts alike. Playwright
-  // starts them in order unless something else already has
+  // run; e2e/servers.ts defines them for this file and scripts/ci-local.ts
+  // alike. Playwright starts them in order unless something else already has
   // (E2E_EXTERNAL_SERVERS=1, set by `pnpm ci:local`).
   webServer: process.env.E2E_EXTERNAL_SERVERS
     ? []
