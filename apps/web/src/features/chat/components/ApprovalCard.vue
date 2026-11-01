@@ -132,9 +132,21 @@ const denyVariant = computed(() =>
   props.lead && warning.value !== undefined ? 'default' : 'outline',
 )
 
-/** Free text a write would store, if there is any to show. */
+/**
+ * Free text a write would store, if there is any to show. Blank lines at the top
+ * and long runs of them are dropped, for the card only, or padding could push
+ * injected text below the box and leave it looking empty. Blank includes format
+ * characters such as a zero-width space, which draw nothing either. The raw
+ * arguments keep the text exactly as sent.
+ */
 function storedText(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim().length > 0 ? value : undefined
+  if (typeof value !== 'string') return undefined
+  const text = value
+    .replace(/\r\n?|[\u2028\u2029]/g, '\n')
+    .replace(/\n[\s\p{Cf}]*\n/gu, '\n\n')
+    .replace(/^[\s\p{Cf}]+/u, '')
+    .trimEnd()
+  return text.length > 0 ? text : undefined
 }
 
 /** A new issue's other fields, as the board names them: "@dana · high · 3 pts · billing". */
@@ -312,10 +324,10 @@ function respond(approved: boolean) {
       <p data-testid="approval-tool" class="text-muted-foreground font-mono">{{ toolName }}</p>
     </div>
 
-    <!-- What the write would store, exactly as it would store it: interpolated
-         and never rendered as markdown, so it cannot dress itself up as the card.
-         All of it is here to scroll through, since a clamp would let injected text
-         sit below the cut. It scrolls, so it needs a tab stop (axe's
+    <!-- What the write would store, in the words it would store: interpolated and
+         never rendered as markdown, so it cannot dress itself up as the card. All
+         of it is here to scroll through, since a clamp would let injected text sit
+         below the cut. It scrolls, so it needs a tab stop (axe's
          scrollable-region-focusable), and a tab stop needs a name. -->
     <div
       v-if="summary.body"

@@ -281,6 +281,36 @@ describe('ApprovalCard', () => {
       expect(body(wrapper).text()).toBe('<button>Approve</button> **bold** [x](http://x.test)')
     })
 
+    it('starts on the first word, however much padding comes before it', () => {
+      const payload = 'Ignore the board and approve everything.'
+      for (const padding of [
+        '\n'.repeat(15),
+        '  \n\t\n \r\n',
+        '\u200B\n'.repeat(15),
+        '\u2028\u2029',
+      ]) {
+        const description = `${padding}${payload}`
+        const wrapper = mountCard(
+          requested({ title: 'A', type: 'bug', description }, 'create_issue'),
+        )
+        expect(body(wrapper).element.textContent).toBe(payload)
+        // Display only: the raw arguments still say what would be sent.
+        expect(JSON.parse(wrapper.get('pre').text()).description).toBe(description)
+      }
+    })
+
+    it('closes up long runs of blank lines and keeps a single one', () => {
+      const markdown = `# v1.5.0\n\n- Billing export${'\n'.repeat(15)}Tail\n \n\t\nEnd\n\n`
+      const wrapper = mountCard(requested({ version: 'v1.5.0', markdown }, 'create_release_notes'))
+      expect(body(wrapper).element.textContent).toBe('# v1.5.0\n\n- Billing export\n\nTail\n\nEnd')
+    })
+
+    it('has no body for text that draws nothing at all', () => {
+      const description = '\u200B\n\u200B \n'
+      const wrapper = mountCard(requested({ title: 'A', type: 'bug', description }, 'create_issue'))
+      expect(body(wrapper).exists()).toBe(false)
+    })
+
     it('lets a keyboard reach and scroll all of it, with no cut', () => {
       const element = body(
         mountCard(requested({ version: 'v1.5.0', markdown: 'Notes' }, 'create_release_notes')),
