@@ -97,7 +97,11 @@ function approvalGroupOf(parts: readonly object[], last: boolean): ApprovalGroup
     .filter(({ part }) => part.approval !== undefined)
   const open = gated.filter(({ part }) => part.state === 'approval-requested')
   const group: ApprovalGroup = { leadId: open[0]?.part.toolCallId }
-  if (gated.length < 2 || open.length === 0) return group
+  // A continuation appends to the same message, so cards that already ran belong
+  // to an earlier round. The header goes with the round still being decided: above
+  // the ones that ran, "Approve all" and the writes it answers could be a screen apart.
+  const round = gated.filter(({ part }) => !part.state?.startsWith('output-'))
+  if (round.length < 2 || open.length === 0) return group
 
   const issues = workspace.workspace.issues
   const points = [...pendingStatusMoves(parts, issues).keys()].reduce(
@@ -106,7 +110,7 @@ function approvalGroupOf(parts: readonly object[], last: boolean): ApprovalGroup
   )
   const header = {
     ...group,
-    headerAt: gated[0]?.index,
+    headerAt: round[0]?.index,
     header: changesToReview(open.length, points),
   }
   const plan = approveAllPlan(parts, issues, workspace.users)

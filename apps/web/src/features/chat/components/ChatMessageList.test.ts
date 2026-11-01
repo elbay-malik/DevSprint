@@ -467,6 +467,42 @@ describe('ChatMessageList status and focus', () => {
     }
   })
 
+  it('lands beside the open cards when the turn continued a round that ran', async () => {
+    const scrolled: Element[] = []
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+      scrolled.push(this)
+    })
+    try {
+      const wrapper = mount(Pane, { attachTo: document.body })
+      chat.status = 'submitted'
+      await nextTick()
+      const ran = (id: string, key: string) => gated(id, key, 'output-available', true)
+      chat.messages = [
+        ...chat.messages,
+        turnWith([
+          ran('c1', 'DS-7'),
+          ran('c2', 'DS-8'),
+          ran('c3', 'DS-10'),
+          ran('c4', 'DS-11'),
+          gated('c5', 'DS-9'),
+          gated('c6', 'DS-12'),
+        ]),
+      ]
+      chat.status = 'streaming'
+      await nextTick()
+      chat.status = 'ready'
+      await nextTick()
+
+      const header = wrapper.get('[data-testid="approval-group-header"]').element
+      expect(document.activeElement).toBe(header)
+      expect(scrolled).toEqual([header])
+      // What the view opens on, and Tab then Enter would approve, is what is on offer.
+      expect(header.nextElementSibling).toBe(wrapper.get('[data-call-id="c5"]').element)
+    } finally {
+      delete (Element.prototype as Partial<Element>).scrollIntoView
+    }
+  })
+
   it('brings the group header into view with the first card, not just its buttons', async () => {
     const scrolled: { el: Element; block: unknown }[] = []
     Element.prototype.scrollIntoView = vi.fn(function (this: Element, arg?: unknown) {
@@ -918,6 +954,54 @@ describe('ChatMessageList approval groups', () => {
       `2 changes to review · ${points('DS-7') + points('DS-8')} pts`,
     )
     expect(wrapper.find('[data-testid="approval-warning"]').exists()).toBe(false)
+  })
+
+  describe('a later round on the same message', () => {
+    const ran = (id: string, key: string) => gated(id, key, 'output-available', true)
+    const denied = (id: string, key: string) => gated(id, key, 'output-denied', false)
+
+    /** The transcript's own order of a message's header and cards, by what they are. */
+    const order = (wrapper: ReturnType<typeof mount>) =>
+      wrapper
+        .findAll('[data-testid="approval-group-header"], [data-call-id]')
+        .map((el) => el.attributes('data-call-id') ?? 'header')
+
+    it('puts the header above the cards still open, not the ones that already ran', () => {
+      chat.messages = [
+        turnWith([
+          ran('c1', 'DS-7'),
+          denied('c2', 'DS-8'),
+          { type: 'text', text: 'Two more.' },
+          gated('c3', 'DS-9'),
+          gated('c4', 'DS-10'),
+        ]),
+      ]
+      const wrapper = mount(ChatMessageList)
+
+      expect(order(wrapper)).toEqual(['c1', 'c2', 'header', 'c3', 'c4'])
+      expect(wrapper.get('[data-testid="approval-approve-all"]').text()).toBe('Approve all 2')
+    })
+
+    it('holds its place while the open round is answered one by one', () => {
+      chat.messages = [
+        turnWith([
+          ran('c1', 'DS-7'),
+          gated('c2', 'DS-8', 'approval-responded', true),
+          gated('c3', 'DS-9'),
+        ]),
+      ]
+      const wrapper = mount(ChatMessageList)
+
+      expect(order(wrapper)).toEqual(['c1', 'header', 'c2', 'c3'])
+    })
+
+    it('needs no header for one open card after a round that ran', () => {
+      chat.messages = [turnWith([ran('c1', 'DS-7'), ran('c2', 'DS-8'), gated('c3', 'DS-9')])]
+      const wrapper = mount(ChatMessageList)
+
+      expect(wrapper.find('[data-testid="approval-group-header"]').exists()).toBe(false)
+      expect(ink(wrapper)).toEqual([true])
+    })
   })
 
   it('needs no header for a single card, which keeps its Ink Approve', () => {
