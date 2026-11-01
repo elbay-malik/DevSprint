@@ -84,9 +84,14 @@ export interface WorkspaceApi {
    * or it is not a spend control. Unlike the board and the ledger it is *not*
    * cleared by `reset` — a cap a visitor can clear by pressing Reset is not a
    * cap (ADR-0016). It rolls over on the real UTC date instead.
+   *
+   * A `clientKey` also reads or adds to that client's share of the day, and
+   * the result then carries `clientTokens`. The same rules apply to the share:
+   * global, not cleared by `reset`, gone at the rollover. The key is hashed
+   * before it is stored, so a caller can pass the rate-limit key as it is.
    */
-  modelUsage(): Promise<DailyModelUsage>
-  recordModelUsage(tokens: number): Promise<DailyModelUsage>
+  modelUsage(clientKey?: string): Promise<DailyModelUsage>
+  recordModelUsage(tokens: number, clientKey?: string): Promise<DailyModelUsage>
 
   listIssues(input: ListIssuesInput): Promise<ToolResult<ListIssuesData>>
   searchIssues(input: SearchIssuesInput): Promise<ToolResult<SearchIssuesData>>
@@ -137,6 +142,8 @@ export interface DailyModelUsage {
   /** `YYYY-MM-DD`, in UTC. */
   day: string
   tokens: number
+  /** What the client named in the call has spent today. Absent when it named none. */
+  clientTokens?: number
 }
 
 export interface SetDeploymentStageInput {

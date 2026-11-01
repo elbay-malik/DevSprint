@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WorkspaceDO } from './durable-object'
 import type { BoardChange } from './changes'
+import { addClientTokens, CLIENT_USAGE_MAX, type ClientUsage } from './client-usage'
 import { fakeDurableObjectState } from '../../test/durable-object-state'
 
 /**
@@ -441,6 +442,153 @@ describe('WorkspaceDO — daily model budget', () => {
     await fake.ready()
 
     expect((await second.modelUsage()).tokens).toBe(4_200)
+  })
+})
+
+describe('WorkspaceDO — per-client share of the budget', () => {
+  const held = (fake: ReturnType<typeof fakeDurableObjectState>) =>
+    fake.raw.get('daily-client-usage') as ClientUsage | undefined
+
+  it('counts each client on its own, and every client toward the day', async () => {
+    const { stub } = await freshDO()
+
+    await stub.recordModelUsage(1_000, '203.0.113.7')
+    await stub.recordModelUsage(500, '203.0.113.7')
+    const other = await stub.recordModelUsage(200, '198.51.100.4')
+
+    expect(other).toMatchObject({ tokens: 1_700, clientTokens: 200 })
+    expect((await stub.modelUsage('203.0.113.7')).clientTokens).toBe(1_500)
+    expect((await stub.modelUsage('192.0.2.1')).clientTokens).toBe(0)
+  })
+
+  it('leaves the shape alone when no client is named', async () => {
+    const { fake, stub } = await freshDO()
+
+    await stub.recordModelUsage(1_000)
+
+    expect(await stub.modelUsage()).not.toHaveProperty('clientTokens')
+    expect(held(fake)).toBeUndefined()
+  })
+
+  it('stores a hash, never the key it was given', async () => {
+    const { fake, stub } = await freshDO()
+
+    await stub.recordModelUsage(1_000, '2001:db8:1:2::/64')
+
+    const stored = JSON.stringify(held(fake))
+    expect(stored).not.toContain('2001')
+    expect(Object.keys(held(fake)?.tokens ?? {})).toEqual([expect.stringMatching(/^[0-9a-f]{32}$/)])
+  })
+
+  it('hashes before it reads, so nothing waits between the read and the write', async () => {
+    // Only storage calls hold other requests back. A real object would let two
+    // steps interleave across a digest there, which the fake can't show directly.
+    const { fake, stub } = await freshDO()
+    const digest = vi.spyOn(crypto.subtle, 'digest')
+    const read = vi.spyOn(fake.ctx.storage, 'get')
+
+    await stub.recordModelUsage(1_000, '203.0.113.7')
+
+    expect(digest.mock.invocationCallOrder[0]).toBeLessThan(read.mock.invocationCallOrder[0]!)
+    digest.mockRestore()
+  })
+
+  it('survives a reset, because a share a visitor can clear is not a share', async () => {
+    const { stub } = await freshDO()
+    await stub.recordModelUsage(5_000, '203.0.113.7')
+
+    await stub.reset()
+
+    expect((await stub.modelUsage('203.0.113.7')).clientTokens).toBe(5_000)
+  })
+
+  it('persists across a fresh load of the object', async () => {
+    const fake = fakeDurableObjectState()
+    const first = new WorkspaceDO(fake.ctx, {} as Cloudflare.Env)
+    await fake.ready()
+    await first.recordModelUsage(4_200, '203.0.113.7')
+
+    const second = new WorkspaceDO(fake.ctx, {} as Cloudflare.Env)
+    await fake.ready()
+
+    expect((await second.modelUsage('203.0.113.7')).clientTokens).toBe(4_200)
+  })
+
+  it('rolls over with the day, and the next write drops the old entries', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(Date.parse('2026-09-23T22:00:00Z'))
+    const { fake, stub } = await freshDO()
+    await stub.recordModelUsage(9_000, '203.0.113.7')
+    const yesterday = Object.keys(held(fake)?.tokens ?? {})
+
+    vi.setSystemTime(Date.parse('2026-09-24T00:30:00Z'))
+
+    expect((await stub.modelUsage('203.0.113.7')).clientTokens).toBe(0)
+    await stub.recordModelUsage(100, '203.0.113.7')
+    expect(held(fake)?.day).toBe('2026-09-24')
+    const today = Object.keys(held(fake)?.tokens ?? {})
+    expect(today).toHaveLength(1)
+    // The same client hashes differently, so days can't be matched up.
+    expect(today).not.toEqual(yesterday)
+  })
+
+  it("has the midnight alarm remove the old day's map, with or without a new write", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(Date.parse('2026-09-23T22:00:00Z'))
+    const { fake, stub } = await freshDO()
+    await stub.recordModelUsage(9_000, '203.0.113.7')
+
+    vi.setSystemTime(Date.parse('2026-09-24T00:00:00Z'))
+    await stub.alarm()
+
+    expect(held(fake)).toBeUndefined()
+  })
+
+  it("keeps today's map if an alarm retries during the day", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(Date.parse('2026-09-24T00:10:00Z'))
+    const { stub } = await freshDO()
+    await stub.recordModelUsage(9_000, '203.0.113.7')
+
+    await stub.alarm()
+
+    expect((await stub.modelUsage('203.0.113.7')).clientTokens).toBe(9_000)
+  })
+
+  it('does not take a slot for a step that reported no usage', async () => {
+    const { fake, stub } = await freshDO()
+
+    await stub.recordModelUsage(0, '203.0.113.7')
+    await stub.recordModelUsage(Number.NaN, '203.0.113.8')
+    await stub.recordModelUsage(-5, '203.0.113.9')
+
+    expect(held(fake)?.tokens).toEqual({})
+  })
+
+  it('stays capped, and keeps the client nearest its limit when it is full', async () => {
+    const { fake, stub } = await freshDO()
+    await stub.recordModelUsage(25_000, 'heavy')
+
+    for (let client = 0; client <= CLIENT_USAGE_MAX; client += 1) {
+      await stub.recordModelUsage(1, `client-${client}`)
+    }
+
+    expect(Object.keys(held(fake)?.tokens ?? {})).toHaveLength(CLIENT_USAGE_MAX)
+    expect((await stub.modelUsage('heavy')).clientTokens).toBe(25_000)
+    expect((await stub.modelUsage(`client-${CLIENT_USAGE_MAX}`)).clientTokens).toBe(1)
+  })
+})
+
+describe('addClientTokens', () => {
+  it('evicts the lowest spender, and never the client it just wrote', () => {
+    const full = { a: 10, b: 2, c: 30 }
+
+    expect(addClientTokens(full, 'new', 1, 3)).toEqual({ a: 10, c: 30, new: 1 })
+    expect(addClientTokens({ a: 10, b: 20, c: 30 }, 'new', 1, 3)).toEqual({ b: 20, c: 30, new: 1 })
+  })
+
+  it('adds to a client it already holds without evicting anyone', () => {
+    expect(addClientTokens({ a: 10, b: 2, c: 30 }, 'b', 5, 3)).toEqual({ a: 10, b: 7, c: 30 })
   })
 })
 
