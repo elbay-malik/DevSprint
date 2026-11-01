@@ -354,7 +354,8 @@ Before it ships anything, the script can refuse:
   `GOOGLE_GENERATIVE_AI_API_KEY`, and would otherwise serve the scripted mock. A new api only gets a
   warning, because a Worker that does not exist cannot hold secrets yet.
 
-`--plan` is never blocked. It reports a missing key as a line in the plan.
+`--plan` is never blocked. It reports a missing key as a line in the plan, saying what a real deploy
+would do: stop if the api exists, warn and carry on if it is new.
 
 The smoke checks' board write and reset run only when the api is new, because that is the only time
 nobody can be using the board. If a step or a smoke check fails after something shipped, the script
