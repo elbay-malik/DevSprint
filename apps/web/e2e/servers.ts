@@ -17,14 +17,20 @@ export interface E2EServer {
   url: string
 }
 
+/**
+ * Not 4173, Vite's default preview port, which other projects on the same
+ * machine tend to hold.
+ */
+export const PREVIEW_PORT = 4317
+export const PREVIEW_ORIGIN = `http://localhost:${PREVIEW_PORT}`
+
 export const E2E_SERVERS: E2EServer[] = [
   {
     name: 'api',
     // `--var MODEL_PROVIDER:mock` pins the scripted model regardless of any
     // local apps/api/.dev.vars, so e2e stays deterministic, offline and free.
     // A reused local server is checked for this too (e2e/support.ts).
-    command:
-      'pnpm --filter @devsprint/api exec wrangler dev --var MODEL_PROVIDER:mock --var RESET_COOLDOWN_SECONDS:0 --var CORS_ORIGIN:http://localhost:5173,http://localhost:4173',
+    command: `pnpm --filter @devsprint/api exec wrangler dev --var MODEL_PROVIDER:mock --var RESET_COOLDOWN_SECONDS:0 --var CORS_ORIGIN:http://localhost:5173,${PREVIEW_ORIGIN}`,
     url: 'http://127.0.0.1:8787/api/health',
   },
   {
@@ -43,9 +49,8 @@ export const E2E_SERVERS: E2EServer[] = [
     // The production build on the same runtime it deploys to. Vite dev never
     // applies public/_headers, so only this one can test the CSP (csp.spec.ts).
     name: 'web-preview',
-    command:
-      'pnpm --filter @devsprint/web exec node e2e/build-preview.ts && pnpm --filter @devsprint/web exec wrangler dev --port 4173 --assets dist-e2e',
-    url: 'http://127.0.0.1:4173',
+    command: `pnpm --filter @devsprint/web exec node e2e/build-preview.ts && pnpm --filter @devsprint/web exec wrangler dev --port ${PREVIEW_PORT} --assets dist-e2e`,
+    url: `http://127.0.0.1:${PREVIEW_PORT}`,
   },
 ]
 

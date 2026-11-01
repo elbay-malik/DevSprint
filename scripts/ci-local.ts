@@ -19,7 +19,7 @@ import { createWriteStream, mkdirSync, readFileSync, writeFileSync } from 'node:
 import { get } from 'node:http'
 import { createServer } from 'node:net'
 import { join } from 'node:path'
-import { E2E_SERVERS } from '../apps/web/e2e/servers.ts'
+import { E2E_SERVERS, PREVIEW_PORT } from '../apps/web/e2e/servers.ts'
 
 const ROOT = join(import.meta.dirname, '..')
 const WEB = join(ROOT, 'apps/web')
@@ -163,7 +163,7 @@ async function startServers(): Promise<boolean> {
   // a debugger (9229, and 9230 for apps/mcp-issues), which other Wrangler
   // projects on the same machine often hold; those get a free port instead.
   const busy: string[] = []
-  for (const port of [8787, 8788, 5173, 4173]) {
+  for (const port of [8787, 8788, 5173, PREVIEW_PORT]) {
     if (!(await portFree(port))) busy.push(`  :${port} is held by\n    ${holderOf(port)}`)
   }
   if (busy.length > 0) {
