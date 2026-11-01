@@ -77,3 +77,13 @@ use per-IP limits only to slow a script down:
   rejection of an issue-count cap are corrected here
 - `apps/api/src/workspace/durable-object.ts`, `apps/api/src/index.ts`,
   `apps/mcp-issues/src/batch.ts`, `packages/shared/src/tools/schemas.ts`
+
+## Status note — 2026-11-01
+
+Reading the body whole to spot a batch left that read unbounded, and the SDK's own
+`maxRequestBodySize` is skipped once a body is handed to the transport. So `refuseBatch` now stops
+reading at 64 KB and answers 413, for a declared `Content-Length` and for a chunked body that
+declares none. The transport has the same limit for the `Internal` entrypoint, which it reads for
+itself. Both entrypoints also set the SDK's `maxToolInputElements` to 100, and zod moved to a version
+that reports an oversized array once rather than once per element. The 413 comes after the
+rate-limit token is spent, which keeps ADR-0020's order.

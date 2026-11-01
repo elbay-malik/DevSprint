@@ -65,3 +65,8 @@ deploy's smoke checks confirm it lists exactly the five issue tools and reads th
 the api. It has no preview URLs, because a preview would write to the production board. The public `/mcp`
 endpoint allows 30 requests a minute per client IP. Past that it answers HTTP 429 with a JSON-RPC
 error. The in-app agent uses the `Internal` entrypoint and is not counted (ADR-0020).
+
+Both entrypoints refuse a body over 64 KB with HTTP 413, and a tool call whose arguments hold more
+than 100 array elements and object members gets `isError` before the schema runs. The costliest
+real `create_issue` is under 30 KB and about 20 elements, so neither limit touches a legitimate
+call (ADR-0024).
