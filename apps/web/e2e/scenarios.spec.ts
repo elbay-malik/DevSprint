@@ -1,6 +1,5 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { expect, test, type Page } from '@playwright/test'
 import { MCP, recordStream, resetBoard, send, storedWorkspace, turnSettled } from './support'
 
@@ -442,9 +441,7 @@ test.describe('S-F — an external MCP host operates the same workspace', () => 
     // The host side, with the stock MCP SDK client and nothing DevSprint-specific:
     // if this works, any Streamable HTTP host does the same.
     const client = new Client({ name: 'e2e-external-host', version: '1.0.0' })
-    // The SDK's own transport is not exactOptionalPropertyTypes-clean against
-    // its own interface; the cast changes no runtime behaviour.
-    await client.connect(new StreamableHTTPClientTransport(new URL(`${MCP}/mcp`)) as Transport)
+    await client.connect(new StreamableHTTPClientTransport(new URL(`${MCP}/mcp`)))
     try {
       // The SPA is already open when the write happens (precondition). Its
       // clock is pinned so the operator's switch back can step past the
