@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import app from './index'
 import { resetApprovalSigningState } from './agent/approvals'
+import { APPROVAL_NOT_APPLIED_MESSAGE } from './agent/limits'
 import { fakeWorkspaceBinding } from '../test/workspace-binding'
 
 const workspace = fakeWorkspaceBinding()
@@ -23,6 +24,7 @@ interface Chunk {
 
 async function post(
   messages: unknown[],
+  overrides: Record<string, unknown> = {},
 ): Promise<{ status: number; chunks: Chunk[]; body: string }> {
   const res = await app.request(
     '/api/chat',
@@ -31,7 +33,7 @@ async function post(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages }),
     },
-    env,
+    { ...env, ...overrides },
   )
   const body = await res.text()
   const chunks = body
@@ -305,5 +307,145 @@ describe('assigning an issue — the same gate, the same ledger', () => {
     expect(forged.chunks.filter((chunk) => chunk.type === 'tool-output-available')).toHaveLength(0)
     expect(forged.chunks.some((chunk) => chunk.type === 'error')).toBe(true)
     expect(assignee()).toBeNull()
+  })
+})
+
+describe('an approval resume a limit refused', () => {
+  const groq = { MODEL_PROVIDER: 'groq', GROQ_API_KEY: 'test-key' }
+  const noBudgetLeft = { ...groq, DAILY_TOKEN_CAP: '100' }
+  const budgetLeft = { ...groq, DAILY_TOKEN_CAP: '1000000' }
+
+  /** A fresh board and ledger, with this much of the day's budget already gone. */
+  function spentDay() {
+    workspace.store.reset()
+    workspace.store.recordModelUsage(200)
+  }
+
+  /** Stands in for Groq, answering one line and keeping every prompt it was sent. */
+  function stubGroq(): Array<{ messages: Array<Record<string, unknown>> }> {
+    const prompts: Array<{ messages: Array<Record<string, unknown>> }> = []
+    const chunk = (extra: Record<string, unknown>) =>
+      `data: ${JSON.stringify({ id: '1', object: 'chat.completion.chunk', created: 1, model: 'm', ...extra })}\n\n`
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init: RequestInit) => {
+        prompts.push(JSON.parse(init.body as string) as (typeof prompts)[number])
+        return Promise.resolve(
+          new Response(
+            chunk({ choices: [{ index: 0, delta: { role: 'assistant', content: 'ok' } }] }) +
+              chunk({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) +
+              'data: [DONE]\n\n',
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+        )
+      }),
+    )
+    return prompts
+  }
+
+  /** DS-7 to DS-11 as the board holds them, to compare against the seed. */
+  function openIssues(): string[] {
+    return workspace.store
+      .get()
+      .issues.filter((issue) => /^DS-(7|8|9|10|11)$/.test(issue.key) && issue.status !== 'done')
+      .map((issue) => issue.key)
+  }
+
+  beforeEach(() => {
+    spentDay()
+    resetApprovalSigningState()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('leaves the approval unspent when the budget refuses it, and it runs later', async () => {
+    const first = await post([userMessage(CLOSE_OUT)])
+    const assistant = answeredAssistantMessage(first.chunks, () => ({ approved: true }))
+    const open = openIssues()
+    expect(open).toHaveLength(5)
+
+    const refused = await post([userMessage(CLOSE_OUT), assistant], noBudgetLeft)
+
+    expect(refused.status).toBe(200)
+    expect(textOf(refused.chunks)).toContain('model budget for today')
+    expect(openIssues()).toEqual(open)
+
+    // Once there is budget again it is still a live approval, not a replay.
+    stubGroq()
+    const later = await post([userMessage(CLOSE_OUT), assistant], budgetLeft)
+
+    expect(later.chunks.filter((chunk) => chunk.type === 'tool-output-denied')).toHaveLength(0)
+    expect(later.chunks.filter((chunk) => chunk.type === 'tool-output-available')).toHaveLength(5)
+    expect(openIssues()).toEqual([])
+  })
+
+  it('leaves the approval unspent when the model is not configured', async () => {
+    const first = await post([userMessage(CLOSE_OUT)])
+    const assistant = answeredAssistantMessage(first.chunks, () => ({ approved: true }))
+
+    const refused = await post([userMessage(CLOSE_OUT), assistant], {
+      MODEL_PROVIDER: 'groq',
+    })
+    expect(refused.status).toBe(503)
+
+    const later = await post([userMessage(CLOSE_OUT), assistant])
+
+    expect(later.chunks.filter((chunk) => chunk.type === 'tool-output-available')).toHaveLength(5)
+  })
+
+  it('says the approval was not applied, on the budget and the rate limit alike', async () => {
+    // The card still reads "Approved by you" and the write has no result to show
+    // otherwise, so the text is all the reader has.
+    const first = await post([userMessage(CLOSE_OUT)])
+    const assistant = answeredAssistantMessage(first.chunks, () => ({ approved: true }))
+    const throttled = { CHAT_RATE_LIMIT: { limit: () => Promise.resolve({ success: false }) } }
+
+    const budget = await post([userMessage(CLOSE_OUT), assistant], noBudgetLeft)
+    const rate = await app.request(
+      '/api/chat',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.9' },
+        body: JSON.stringify({ messages: [userMessage(CLOSE_OUT), assistant] }),
+      },
+      { ...env, ...throttled },
+    )
+
+    expect(textOf(budget.chunks)).toContain(APPROVAL_NOT_APPLIED_MESSAGE)
+    expect(await rate.text()).toContain(APPROVAL_NOT_APPLIED_MESSAGE)
+  })
+
+  it('keeps the chat working after the person moves on from the refused card', async () => {
+    const first = await post([userMessage(CLOSE_OUT)])
+    const answered = answeredAssistantMessage(first.chunks, () => ({ approved: true }))
+    const refused = await post([userMessage(CLOSE_OUT), answered], noBudgetLeft)
+    // What the SPA now holds: the answered cards, then the limit text in its own step.
+    const held = {
+      ...answered,
+      parts: [
+        ...answered.parts,
+        { type: 'step-start' },
+        { type: 'text', text: textOf(refused.chunks), state: 'done' },
+      ],
+    }
+    const prompts = stubGroq()
+
+    const next = await post(
+      [userMessage(CLOSE_OUT), held, { ...userMessage('How is the sprint?'), id: 'm2' }],
+      budgetLeft,
+    )
+
+    expect(next.status).toBe(200)
+    // The old press did not run just because the budget came back.
+    expect(next.chunks.filter((chunk) => chunk.type === 'tool-output-available')).toHaveLength(0)
+    expect(openIssues()).toHaveLength(5)
+    // A tool call with no result after it is a shape OpenAI-compatible providers reject.
+    const sent = prompts[0]?.messages ?? []
+    expect(sent.filter((message) => message.tool_calls !== undefined)).toEqual([])
+    expect(sent.filter((message) => message.role === 'tool')).toEqual([])
+    // The reader's record of what happened is still in the model's context.
+    expect(JSON.stringify(sent)).toContain(APPROVAL_NOT_APPLIED_MESSAGE)
   })
 })

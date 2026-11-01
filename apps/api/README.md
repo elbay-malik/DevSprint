@@ -78,6 +78,8 @@ refusing outright would strand the conversation the first time a resume failed. 
 tracks what has been spent lives in the workspace Durable Object rather than in the Worker's own
 memory, so the guarantee holds across isolates and restarts, not just within the one that happened
 to handle a given request ([ADR-0014](../../docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
+An approval is spent only by a turn that will act on it, so a press the rate limit, the budget or a
+missing model config refused stays good, and the limit message says it was not applied.
 
 Two limits worth knowing. With no secret configured the Worker signs with a random per-isolate
 secret and warns, rather than running unsigned — that keeps keyless dev and CI working, but
