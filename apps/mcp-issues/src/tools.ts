@@ -96,7 +96,9 @@ export function registerIssueTools(server: McpServer, workspace: WorkspaceApi): 
         } catch (error) {
           // Only the unexpected lands here. Left to the SDK, its message would go
           // to anyone on the internet as the tool's text, so the detail stays in
-          // the log. The arguments stay out of it: they are the visitor's.
+          // the log. The arguments stay out of it: they are the visitor's. The write
+          // may have landed with only its reply lost, so the message does not invite
+          // a blind retry: a host may run the second call without asking anyone.
           console.error(
             JSON.stringify({
               event: 'tool-failed',
@@ -106,7 +108,11 @@ export function registerIssueTools(server: McpServer, workspace: WorkspaceApi): 
           )
           return envelope({
             ok: false,
-            error: { code: 'INTERNAL', message: 'The workspace is unavailable, try again.' },
+            error: {
+              code: 'INTERNAL',
+              message:
+                'The workspace call failed. A write may or may not have landed, so read the board before trying it again.',
+            },
           })
         }
       },

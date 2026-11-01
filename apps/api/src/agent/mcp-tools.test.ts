@@ -68,7 +68,11 @@ describe('unwrapEnvelope', () => {
   it('hands on the server’s INTERNAL as it is, not as a mislabelled INVALID_INPUT', () => {
     const envelope = {
       ok: false,
-      error: { code: 'INTERNAL', message: 'The workspace is unavailable, try again.' },
+      error: {
+        code: 'INTERNAL',
+        message:
+          'The workspace call failed. A write may or may not have landed, so read the board before trying it again.',
+      },
     }
     const wrapped = { content: [{ type: 'text', text: JSON.stringify(envelope) }] }
 

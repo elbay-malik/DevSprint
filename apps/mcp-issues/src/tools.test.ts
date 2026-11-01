@@ -207,7 +207,11 @@ describe('registerIssueTools', () => {
 
       expect(parse(result)).toEqual({
         ok: false,
-        error: { code: 'INTERNAL', message: 'The workspace is unavailable, try again.' },
+        error: {
+          code: 'INTERNAL',
+          message:
+            'The workspace call failed. A write may or may not have landed, so read the board before trying it again.',
+        },
       })
       expect(result.content[0]!.text).not.toContain('secret internals')
     })
