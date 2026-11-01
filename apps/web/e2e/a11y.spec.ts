@@ -75,10 +75,16 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await send(page, 'Looks good, save it.')
       const body = page.getByTestId('approval-card').getByTestId('approval-body')
       await expect(body).toContainText('v1.5.0')
-      // A draft this long scrolls, which is what makes axe ask for the tab stop.
-      await expect
-        .poll(() => body.evaluate((element) => element.scrollHeight > element.clientHeight))
-        .toBe(true)
+      await expectNoViolations(page)
+
+      // The scripted draft fits. A real one scrolls, which is when axe asks for
+      // the tab stop, so this audits the box as it would be with one.
+      await body.evaluate((element) => {
+        element.textContent = 'A line of release notes.\n'.repeat(40)
+      })
+      expect(await body.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(
+        true,
+      )
       await expectNoViolations(page)
     })
 
