@@ -67,6 +67,21 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expectNoViolations(page)
     })
 
+    test('a pending save with the release notes it would store', async ({ page }) => {
+      await page.goto('/')
+      await send(page, 'Summarize Sprint 12 and draft release notes for v1.5.0.')
+      await expect(page.getByTestId('tool-call-chip').first()).toBeVisible()
+      await expect(page.getByTestId('chat-input')).toBeEnabled({ timeout: 15_000 })
+      await send(page, 'Looks good, save it.')
+      const body = page.getByTestId('approval-card').getByTestId('approval-body')
+      await expect(body).toContainText('v1.5.0')
+      // A draft this long scrolls, which is what makes axe ask for the tab stop.
+      await expect
+        .poll(() => body.evaluate((element) => element.scrollHeight > element.clientHeight))
+        .toBe(true)
+      await expectNoViolations(page)
+    })
+
     test('pending approval gates, then their recorded outcomes', async ({ page }) => {
       await page.goto('/')
       await send(page, CLOSE_OUT)

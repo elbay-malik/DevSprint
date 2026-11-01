@@ -184,6 +184,115 @@ describe('ApprovalCard', () => {
     ).toContain('v1.5.0')
   })
 
+  describe('what the write would store', () => {
+    const meta = (wrapper: ReturnType<typeof mountCard>) =>
+      wrapper.find('[data-testid="approval-meta"]')
+    const body = (wrapper: ReturnType<typeof mountCard>) =>
+      wrapper.find('[data-testid="approval-body"]')
+
+    it('shows a new issue’s description, assignee and other fields up front', () => {
+      const wrapper = mountCard(
+        requested(
+          {
+            title: 'Add CSV export progress',
+            description: 'Show a progress bar while the export runs.',
+            type: 'feature',
+            sprintId: null,
+            priority: 'high',
+            assigneeId: 'u-dana',
+            points: 3,
+            labels: ['billing', 'export'],
+          },
+          'create_issue',
+        ),
+      )
+
+      expect(wrapper.get('[data-testid="approval-headline"]').text()).toBe(
+        'New feature in the backlog',
+      )
+      expect(wrapper.text()).toContain('Add CSV export progress')
+      expect(meta(wrapper).text()).toBe('@dana · high · 3 pts · billing, export')
+      expect(body(wrapper).text()).toBe('Show a progress bar while the export runs.')
+    })
+
+    it('leaves out what a new issue does not set, and names one point as one', () => {
+      const bare = mountCard(requested({ title: 'A', type: 'bug', sprintId: null }, 'create_issue'))
+      expect(meta(bare).exists()).toBe(false)
+      expect(body(bare).exists()).toBe(false)
+
+      const small = mountCard(
+        requested({ title: 'A', type: 'bug', points: 1, description: '   ' }, 'create_issue'),
+      )
+      expect(meta(small).text()).toBe('1 pt')
+      expect(body(small).exists()).toBe(false)
+    })
+
+    it('shows an assignee nobody on the team has as the id, inventing no one', () => {
+      const wrapper = mountCard(
+        requested({ title: 'A', type: 'bug', assigneeId: 'u-zed' }, 'create_issue'),
+      )
+      expect(meta(wrapper).text()).toBe('u-zed')
+    })
+
+    it('shows the release notes it would save', () => {
+      const markdown = '# v1.5.0\n\n- Billing export'
+      const wrapper = mountCard(requested({ version: 'v1.5.0', markdown }, 'create_release_notes'))
+      expect(wrapper.get('[data-testid="approval-headline"]').text()).toBe(
+        'Save v1.5.0 release notes as a draft',
+      )
+      expect(body(wrapper).element.textContent).toBe(markdown)
+    })
+
+    it('shows the comment a status change would store on the board', () => {
+      const wrapper = mountCard(
+        requested({ issueKey: 'DS-7', status: 'blocked', comment: 'Vendor sandbox is down' }),
+      )
+      expect(body(wrapper).text()).toBe('Vendor sandbox is down')
+      expect(body(mountCard(requested({ issueKey: 'DS-7', status: 'done' }))).exists()).toBe(false)
+    })
+
+    it('keeps it on the decided card, which is the record of what was allowed', () => {
+      const wrapper = mountCard({
+        ...requested({ version: 'v1.5.0', markdown: 'Notes' }, 'create_release_notes'),
+        state: 'approval-responded',
+        approval: { id: 'approval-1', approved: true, signature: 'sig' },
+      })
+      expect(body(wrapper).text()).toBe('Notes')
+    })
+
+    it('shows markup as text, so stored text cannot dress up as the card', () => {
+      const wrapper = mountCard(
+        requested(
+          { version: 'v1.5.0', markdown: '<button>Approve</button> **bold** [x](http://x.test)' },
+          'create_release_notes',
+        ),
+      )
+      expect(body(wrapper).find('button').exists()).toBe(false)
+      expect(body(wrapper).find('a').exists()).toBe(false)
+      expect(body(wrapper).text()).toBe('<button>Approve</button> **bold** [x](http://x.test)')
+    })
+
+    it('lets a keyboard reach and scroll all of it, with no cut', () => {
+      const element = body(
+        mountCard(requested({ version: 'v1.5.0', markdown: 'Notes' }, 'create_release_notes')),
+      )
+      expect(element.attributes('tabindex')).toBe('0')
+      expect(element.attributes('aria-label')).toBe(
+        'Full text: Save v1.5.0 release notes as a draft',
+      )
+      expect(element.classes()).toEqual(expect.arrayContaining(['max-h-48', 'overflow-auto']))
+      expect(element.classes().filter((name) => name.startsWith('line-clamp'))).toEqual([])
+    })
+
+    it('spends no signal hue on it, and takes the Ink from nobody', () => {
+      const wrapper = mountCard(
+        requested({ title: 'A', type: 'bug', description: 'Text' }, 'create_issue'),
+      )
+      expect(body(wrapper).classes()).toContain('text-muted-foreground')
+      expect(isInk(wrapper, 'approval-approve')).toBe(true)
+    })
+  })
+
   it('answers with the approval id, not the tool call id', async () => {
     const wrapper = mountCard(requested({ issueKey: 'DS-7', status: 'done' }))
 
