@@ -142,6 +142,15 @@ export async function smoke(options: { proveSharedBoard: boolean } = { proveShar
   const preview = `https://pr-1-devsprint-web.${SUBDOMAIN}`
   check('CORS admits a PR preview alias', (await allowed(preview)) === preview)
   check('CORS refuses another origin', (await allowed('https://example.com')) === null)
+  const versionUrl = `https://3f9a1b2c-devsprint-web.${SUBDOMAIN}`
+  check('CORS refuses a version URL', (await allowed(versionUrl)) === null)
+  // Empty messages, so even a build without the refusal would spend nothing.
+  const foreign = await fetch(`${URLS.api}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: 'https://example.com' },
+    body: JSON.stringify({ messages: [] }),
+  })
+  check('a POST from another origin is refused', foreign.status === 403, `got ${foreign.status}`)
 
   // A real turn, read-only: the model the demo is meant to run, and the issue
   // tools sourced over the service binding rather than the local fallback.

@@ -418,6 +418,95 @@ describe('GET /api/workspace', () => {
   })
 })
 
+describe('a POST from another origin', () => {
+  const ROUTES = [
+    { path: '/api/workspace/reset', body: undefined },
+    { path: '/api/workspace/undo', body: { changeId: 'any' } },
+    { path: '/api/deployments/any/cancel', body: { cancelToken: 'any' } },
+    {
+      path: '/api/chat',
+      body: { messages: [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }] },
+    },
+  ]
+
+  function post(path: string, body: unknown, origin: string | undefined) {
+    return app.request(
+      path,
+      {
+        method: 'POST',
+        // A simple request's content type, which needs no preflight: the case
+        // CORS never stops, because the browser sends it and only hides the answer.
+        headers: { 'Content-Type': 'text/plain', ...(origin ? { Origin: origin } : {}) },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      },
+      env,
+    )
+  }
+
+  it.each(ROUTES)('is refused on $path', async ({ path, body }) => {
+    for (const origin of ['https://evil.example', 'null', 'http://localhost:5174']) {
+      const res = await post(path, body, origin)
+      expect(res.status, origin).toBe(403)
+      await expect(res.json()).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'FORBIDDEN_ORIGIN' },
+      })
+      expect(res.headers.get('access-control-allow-origin')).toBeNull()
+    }
+  })
+
+  it('leaves the board alone', async () => {
+    const { updateIssueStatus } = await import('./workspace/mutations')
+    updateIssueStatus(workspace.store.get(), { issueKey: 'DS-7', status: 'done' })
+    const res = await post('/api/workspace/reset', undefined, 'https://evil.example')
+    expect(res.status).toBe(403)
+    expect(workspace.store.get().issues.find((issue) => issue.key === 'DS-7')?.status).toBe('done')
+    await post('/api/workspace/reset', undefined, undefined)
+  })
+
+  it('never reaches the model', async () => {
+    const res = await post('/api/chat', ROUTES[3]?.body, 'https://evil.example')
+    expect(res.status).toBe(403)
+    expect(res.headers.get('x-devsprint-model')).toBeNull()
+  })
+
+  it.each(ROUTES)('passes from the allowed origin on $path', async ({ path, body }) => {
+    const res = await post(path, body, 'http://localhost:5173')
+    expect(res.status).not.toBe(403)
+    await res.text()
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:5173')
+  })
+
+  it.each(ROUTES)('passes with no Origin on $path, as curl sends it', async ({ path, body }) => {
+    const res = await post(path, body, undefined)
+    expect(res.status).not.toBe(403)
+    await res.text()
+  })
+
+  it('does not touch a GET, which a board reader may send from anywhere', async () => {
+    const res = await app.request(
+      '/api/workspace',
+      { headers: { Origin: 'https://evil.example' } },
+      env,
+    )
+    expect(res.status).toBe(200)
+    expect(res.headers.get('access-control-allow-origin')).toBeNull()
+  })
+
+  it('answers the preflight before refusing, with no allow header', async () => {
+    const res = await app.request(
+      '/api/chat',
+      {
+        method: 'OPTIONS',
+        headers: { Origin: 'https://evil.example', 'Access-Control-Request-Method': 'POST' },
+      },
+      env,
+    )
+    expect(res.status).toBe(204)
+    expect(res.headers.get('access-control-allow-origin')).toBeNull()
+  })
+})
+
 describe('POST /api/chat — spend controls', () => {
   /**
    * A paid route. The budget is checked *before* the model is called, so a
