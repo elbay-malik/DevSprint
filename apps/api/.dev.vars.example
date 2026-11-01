@@ -36,3 +36,8 @@
 # tier. Set 0 to disable. The scripted mock is always exempt — it spends
 # nothing, so local dev and CI are never rationed.
 # DAILY_TOKEN_CAP=100000
+
+# How much of that one client may spend per UTC day before it alone degrades
+# into the "share used" state (ADR-0016). Default: 25000. Set 0 to disable. The
+# scripted mock is exempt from this too.
+# CLIENT_DAILY_TOKEN_SHARE=25000
