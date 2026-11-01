@@ -17,7 +17,7 @@
  * spent the first time it is acted on — via `workspace.spendApprovals`, the
  * one piece of durable, serialising state this Worker has (ADR-0014).
  */
-import type { UIMessage } from 'ai'
+import { isToolUIPart, type UIMessage } from 'ai'
 import { WRITE_TOOL_NAMES, type WorkspaceApi } from '@devsprint/shared/tools'
 
 /** Env var name for the production signing secret. */
@@ -97,6 +97,23 @@ function currentTurn<MESSAGE extends UIMessage>(messages: MESSAGE[]): MESSAGE[] 
 }
 
 /**
+ * The approval on a part the ledger will spend: answered but not yet run, on a
+ * write tool, signed, with an id of a real length. Anything else keeps away from
+ * the ledger, because each junk id spent would push a real one towards eviction.
+ */
+function spendableApproval(part: UIMessage['parts'][number]): RespondedApproval | undefined {
+  if (!WRITE_TOOL_PART_TYPES.has(part.type)) return undefined
+  if (!('state' in part) || part.state !== 'approval-responded') return undefined
+  const approval: unknown = part.approval
+  if (typeof approval !== 'object' || approval === null) return undefined
+  if (!('id' in approval) || !('signature' in approval)) return undefined
+  const { id, signature } = approval
+  if (typeof signature !== 'string' || typeof id !== 'string') return undefined
+  if (id.length === 0 || id.length > MAX_APPROVAL_ID_LENGTH) return undefined
+  return approval as RespondedApproval
+}
+
+/**
  * Approvals the client is asking us to act on *now*: answered, but whose tool
  * call has not produced a result yet.
  *
@@ -104,31 +121,16 @@ function currentTurn<MESSAGE extends UIMessage>(messages: MESSAGE[]): MESSAGE[] 
  * state is what separates "act on this" from "this already happened". Spending
  * the latter would refuse every later message in the conversation.
  *
- * The rest of the filter keeps junk away from the ledger, and is only safe
- * because of what the SDK can execute: an approval on a read tool can never
- * verify, since read tools are never signed, and an unsigned one is refused.
  * The whole turn is scanned, not just its last message. A trailing message
  * holding only a step-start converts to nothing, which leaves the approval
  * before it as the last thing the model sees, so it would run without ever being
- * spent.
+ * spent. This filter only holds because `dropUnusableApprovals` removes every
+ * answer it leaves out.
  */
 function pendingApprovals(messages: UIMessage[]): RespondedApproval[] {
-  const approvals: RespondedApproval[] = []
-  for (const message of currentTurn(messages)) {
-    for (const part of message.parts) {
-      if (!WRITE_TOOL_PART_TYPES.has(part.type)) continue
-      if (!('state' in part) || part.state !== 'approval-responded') continue
-      const approval: unknown = part.approval
-      if (typeof approval !== 'object' || approval === null) continue
-      if (!('id' in approval) || !('signature' in approval)) continue
-      const { id, signature } = approval
-      if (typeof signature !== 'string' || typeof id !== 'string') continue
-      if (id.length > 0 && id.length <= MAX_APPROVAL_ID_LENGTH) {
-        approvals.push(approval as RespondedApproval)
-      }
-    }
-  }
-  return approvals
+  return currentTurn(messages).flatMap((message) =>
+    message.parts.flatMap((part) => spendableApproval(part) ?? []),
+  )
 }
 
 /** Whether this request answers more approvals than any real step could. */
@@ -136,34 +138,56 @@ export function hasTooManyApprovals(messages: UIMessage[]): boolean {
   return pendingApprovals(messages).length > MAX_APPROVALS_PER_REQUEST
 }
 
+/** The part with its answer removed. Its id and any denial reason stay. */
+function withoutAnswer<PART extends UIMessage['parts'][number]>(
+  part: PART,
+  approval: object,
+): PART {
+  const kept: { approved?: boolean } = { ...approval }
+  delete kept.approved
+  return { ...part, approval: kept }
+}
+
 /**
- * The transcript without answered approvals that cannot be acted on, so that
- * every one left is one `settleApprovals` spends. Two kinds:
+ * The transcript with an answer left only on approvals `settleApprovals` spends.
  *
- * The person has since moved on. A resume refused by a limit leaves its card
- * answered but never run, and a later message carries it along. Nothing executes
- * from there, since the SDK only acts on the last model message, but the
+ * The SDK does not read approvals the way the ledger does. It takes an answer from
+ * any tool part that has one, in any state, then finds the call to run through
+ * maps keyed by approval id and tool call id, where the last entry wins. So a part
+ * the ledger skips can answer for a part it would have denied, and a captured
+ * approval runs again without being spent. Removing every other answer before
+ * conversion means there is nothing else for the SDK to read. Three kinds go:
+ *
+ * A call that has finished keeps its result but loses the answer. The prompt reads
+ * the result, not the answer, so the model sees no difference.
+ *
+ * An answered card the person has since moved on from is dropped. A resume refused
+ * by a limit leaves one behind and a later message carries it along. Nothing
+ * executes from there, since the SDK only acts on the last model message, but the
  * conversion still writes the tool call into the prompt with no result after it.
  * OpenAI-compatible providers usually reject that shape, so one refused press
  * would wedge the chat. The limit message the person read is still in the
  * transcript and says what happened.
  *
- * A `dynamic-tool` part. This agent has none, and the signature covers the tool
- * name and not the part type, so a captured approval rewritten as one would still
- * verify. It would execute while `pendingApprovals` looked straight past it.
+ * An answered card the ledger would not spend is dropped: a `dynamic-tool` part, a
+ * read tool part, or one that is unsigned or has an oversized id. The SPA sends
+ * none of these. The signature covers the tool name and not the part type, so a
+ * captured approval moved onto one of the first two still verifies.
  *
  * Returns a copy of the messages it changes, and leaves the rest as they are.
  */
 export function dropUnusableApprovals<MESSAGE extends UIMessage>(messages: MESSAGE[]): MESSAGE[] {
   const lastUser = messages.findLastIndex((message) => message.role === 'user')
   return messages.map((message, index) => {
-    const isUnusable = (part: UIMessage['parts'][number]) =>
-      'state' in part &&
-      part.state === 'approval-responded' &&
-      (index < lastUser || part.type === 'dynamic-tool')
-    return message.parts.some(isUnusable)
-      ? { ...message, parts: message.parts.filter((part) => !isUnusable(part)) }
-      : message
+    const parts = message.parts.flatMap((part) => {
+      if (!isToolUIPart(part) || part.approval?.approved === undefined) return [part]
+      if (part.state !== 'approval-responded') return [withoutAnswer(part, part.approval)]
+      return index > lastUser && spendableApproval(part) !== undefined ? [part] : []
+    })
+    const unchanged =
+      parts.length === message.parts.length &&
+      parts.every((part, partIndex) => part === message.parts[partIndex])
+    return unchanged ? message : { ...message, parts }
   })
 }
 
