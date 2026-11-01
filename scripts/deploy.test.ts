@@ -336,3 +336,36 @@ void test('the approval secret is still generated only when the api lacks it', (
     lacks.calls.join(' | '),
   )
 })
+
+const smokeCall = (calls: string[]) => calls.find((call) => call.startsWith('smoke '))
+
+void test('a routine deploy runs only the read-only smoke checks', (t) => {
+  const repo = makeRepo(t)
+  const run = repo.deploy(repo.main)
+  assert.equal(smokeCall(run.calls), 'smoke {"proveSharedBoard":false}')
+  assert.doesNotMatch(run.output, /shared-board write/)
+})
+
+void test('a recreated MCP Worker does not write to the live board', (t) => {
+  const repo = makeRepo(t)
+  const run = repo.deploy(repo.main, [], { STUB_MCP_EXISTS: '0' })
+  assert.match(run.output, /First deploy plan:/)
+  assert.doesNotMatch(run.output, /shared-board write/)
+  assert.equal(smokeCall(run.calls), 'smoke {"proveSharedBoard":false}')
+})
+
+void test('a new api proves the shared board, because nobody can be using it', (t) => {
+  const repo = makeRepo(t)
+  const run = repo.deploy(repo.main, [], { STUB_API_EXISTS: '0', STUB_MCP_EXISTS: '0' })
+  assert.match(run.output, /including the shared-board write/)
+  assert.equal(smokeCall(run.calls), 'smoke {"proveSharedBoard":true}')
+})
+
+void test('--plan shows the same answer on the shared-board write', (t) => {
+  const repo = makeRepo(t)
+  const recreated = repo.deploy(repo.main, ['--plan'], { STUB_MCP_EXISTS: '0' })
+  assert.doesNotMatch(recreated.output, /shared-board write/)
+  const fresh = repo.deploy(repo.main, ['--plan'], { STUB_API_EXISTS: '0', STUB_MCP_EXISTS: '0' })
+  assert.match(fresh.output, /including the shared-board write/)
+  assert.equal(smokeCall(fresh.calls), undefined)
+})

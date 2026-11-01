@@ -4,7 +4,7 @@
  *
  *   pnpm smoke          (read-only — safe against the live demo at any time)
  *
- * The deploy script also calls it after every deploy. On the first deploy it
+ * The deploy script also calls it after every deploy. When the api is new it
  * additionally proves the two Workers share one board by writing through MCP
  * and reading back through the api — which mutates the board, so it then
  * resets it, and it is only done while nobody can have been using it yet.
