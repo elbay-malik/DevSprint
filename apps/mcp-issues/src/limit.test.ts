@@ -19,6 +19,15 @@ describe('refuseIfThrottled', () => {
     expect(binding.limit).toHaveBeenCalledWith({ key: '203.0.113.9' })
   })
 
+  it('keys an IPv6 client on its /64, so rotating addresses does not escape the limit', async () => {
+    const binding = limiter(true)
+    await refuseIfThrottled(request('2001:db8:1:2::a'), binding)
+    await refuseIfThrottled(request('2001:db8:1:2::b'), binding)
+    expect(binding.limit).toHaveBeenCalledTimes(2)
+    expect(binding.limit).toHaveBeenNthCalledWith(1, { key: '2001:db8:1:2::/64' })
+    expect(binding.limit).toHaveBeenNthCalledWith(2, { key: '2001:db8:1:2::/64' })
+  })
+
   it('refuses a throttled client as a readable JSON-RPC error with a 429', async () => {
     const refused = await refuseIfThrottled(request('203.0.113.9'), limiter(false))
     expect(refused?.status).toBe(429)

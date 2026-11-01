@@ -210,7 +210,8 @@ Two of them, and deliberately not the same mechanism
 | Daily token cap   | Has the demo spent its budget? | The workspace Durable Object    | `DAILY_TOKEN_CAP` (default `100000`) |
 
 The rate limit is bound at 60 requests/60s on `/api/chat`, keyed on `cf-connecting-ip` — far above
-a human session, far below a crawler. A request with no such header is **not** limited rather than
+a human session, far below a crawler. An IPv6 client is keyed on its /64, because a single host can
+hold a whole /64 and take a new address per request. A request with no such header is **not** limited rather than
 being folded into a shared bucket, because one shared key lets a single abusive client lock
 everyone else out.
 

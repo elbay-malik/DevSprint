@@ -34,6 +34,13 @@ describe('rateLimitKey', () => {
     expect(rateLimitKey(request)).toBe('203.0.113.7')
   })
 
+  it('keys an IPv6 client on its /64, so rotating addresses does not escape the limit', () => {
+    const keyOf = (ip: string) =>
+      rateLimitKey(new Request('https://example.test', { headers: { 'cf-connecting-ip': ip } }))
+    expect(keyOf('2001:db8:1:2::a')).toBe('2001:db8:1:2::/64')
+    expect(keyOf('2001:db8:1:2::b')).toBe('2001:db8:1:2::/64')
+  })
+
   it('skips rather than sharing one bucket when the IP is missing', () => {
     // A shared key would let a single abusive client lock out everyone else,
     // which is worse than not limiting. Cloudflare sets this header on every
