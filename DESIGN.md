@@ -539,7 +539,8 @@ capture.
 
 Decisions are followed by focus and by voice. The pending controls are a named group ("Decision:
 DS-7: In review → Done"). When a turn ends waiting on approvals, focus moves to the first open
-card's group. After each Approve or Deny it moves to the next open card, and back to the composer
+card's group, or to the group header when it offers "Approve all", so that button is the next Tab.
+It never lands on the button itself, where a stray Enter would approve the batch. After each Approve or Deny it moves to the next open card, and back to the composer
 once none are left. Focus moves only when it was already in the chat pane or had fallen to the
 page, so someone working on the board is not pulled away. The outcome line is also what the
 transcript's status line announces.
@@ -548,7 +549,8 @@ transcript's status line announces.
 12px medium line in the bubble's text colour above the first card (Graphite would fall under
 4.5:1 on the bubble's Paper Tint): "5 changes to review · 23 pts", counting the open
 cards and the board points of the issues they would move (the points are left off when none are
-known). It goes once every card is decided. Each card keeps its own decision.
+known). It is a named group that takes focus by script, with the shared focus outline. It goes once
+every card is decided. Each card keeps its own decision.
 
 **Approve all.** When two or more of the open cards on the last message are board writes that can
 land (a status change for a key the board holds, a new issue, or a reassignment of an issue the
