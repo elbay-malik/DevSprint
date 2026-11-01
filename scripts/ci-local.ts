@@ -11,6 +11,10 @@
  * apps/web/e2e/servers.ts, which playwright.config.ts also uses. Every step
  * runs with CI=1, as on a runner, so forbidOnly and the CI reporter apply.
  *
+ * Steps get this shell's environment minus its credentials (ci-env.ts). That is
+ * not a sandbox: it runs ci.yml verbatim as you, so a step can still read
+ * ~/.wrangler and any .env file on disk.
+ *
  * It never kills a process it did not start: if a port the stack needs is
  * taken, it stops and says what holds it. Logs go to .ci-local/.
  */
@@ -20,12 +24,13 @@ import { get } from 'node:http'
 import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { E2E_SERVERS, PREVIEW_PORT } from '../apps/web/e2e/servers.ts'
+import { ciEnv } from './ci-env.ts'
 import { jobSteps } from './ci-workflow.ts'
 
 const ROOT = join(import.meta.dirname, '..')
 const WEB = join(ROOT, 'apps/web')
 const LOGS = join(ROOT, '.ci-local')
-const ENV = { ...process.env, CI: '1' }
+const ENV = ciEnv(process.env)
 
 /** The single-line `- run:` steps of one job in ci.yml, in order. */
 function stepsOf(job: string): string[] {
