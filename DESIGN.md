@@ -573,6 +573,9 @@ refusal reads in Stop Red in the board's words ("That change to DS-9 can’t be 
 moved on."), and the Undo does not come back. Both are said on the status line, and focus lands on
 the new line. A network failure toasts and keeps the Undo.
 
+**No approve shortcut.** No key or chord approves a write. It was left out on purpose: Approve all
+covers the batch, and a chord would make a gated decision easier to pass by accident.
+
 ### Deployment Progress (signature)
 
 A version and an environment in mono, a stage list where each line carries a glyph (○ pending,
