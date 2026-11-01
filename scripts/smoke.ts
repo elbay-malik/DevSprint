@@ -123,6 +123,17 @@ export async function smoke(options: { proveSharedBoard: boolean } = { proveShar
     sources.some((source) => source.includes(`${URLS.mcp}/mcp`)),
     `searched ${entry || 'no entry'} and ${chunks.length} chunk(s)`,
   )
+  // The policy from public/_headers, which only the real runtime applies. An SPA
+  // route too, because the fallback is a separate path through the asset server.
+  // Hard-coded there, the api origin has to match what the build calls.
+  for (const path of ['/', '/not-a-real-route']) {
+    const csp = (await fetch(`${URLS.web}${path}`)).headers.get('content-security-policy') ?? ''
+    check(
+      `SPA serves its CSP on ${path}, allowing the deployed api`,
+      /(^|; )connect-src [^;]*/.exec(csp)?.[0].includes(URLS.api) === true,
+      `got ${csp || 'none'}`,
+    )
+  }
   const robots = await fetch(`${URLS.web}/robots.txt`)
   check(
     'robots.txt is a file, not the SPA fallback',
@@ -130,7 +141,12 @@ export async function smoke(options: { proveSharedBoard: boolean } = { proveShar
   )
 
   // The api, and that CORS admits the SPA and its previews but not strangers.
-  check('api health', (await fetch(`${URLS.api}/api/health`)).ok)
+  const health = await fetch(`${URLS.api}/api/health`)
+  check('api health', health.ok)
+  check(
+    'api sends its security headers',
+    health.headers.get('x-content-type-options') === 'nosniff',
+  )
   const allowed = async (origin: string) =>
     (
       await fetch(`${URLS.api}/api/chat`, {
