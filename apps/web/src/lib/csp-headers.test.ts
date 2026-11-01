@@ -26,8 +26,8 @@ describe('the CSP in public/_headers', () => {
     expect(inline.length).toBeGreaterThan(0)
 
     const hashes = await Promise.all(inline.map(async ([, body]) => sha256(body ?? '')))
-    expect(cspSources('script-src').toSorted()).toEqual(
-      ["'self'", ...hashes.map((hash) => `'sha256-${hash}'`)].toSorted(),
+    expect(cspSources('script-src').sort()).toEqual(
+      ["'self'", ...hashes.map((hash) => `'sha256-${hash}'`)].sort(),
     )
   })
 
