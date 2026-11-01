@@ -93,7 +93,8 @@ storyboard; recording pending), then the ADRs and tests on GitHub.
 - No authentication and no multi-tenancy. Mobile app, real tracker or CI integrations, and
   persistence beyond the demo workspace are non-goals.
 - Free-tier model capacity bounds use: Groq allows about 8K tokens a minute, and the Gemini
-  fallback about 20 requests a day. A per-IP rate limit and a daily token cap protect it.
+  fallback about 20 requests a day. A per-IP rate limit, a daily token share per client and a daily
+  token cap protect it.
 - Chat text renders a safe markdown subset. There is no `v-html` and there are no links (ADR-0022).
 
 **Unbuilt or open**
