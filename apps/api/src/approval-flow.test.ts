@@ -569,6 +569,45 @@ describe('an approval resume a limit refused', () => {
     return prompts
   }
 
+  /** Stands in for Groq, asking for a read that costs 1,500 tokens. */
+  function stubSpendingToolCall() {
+    const chunk = (extra: Record<string, unknown>) =>
+      `data: ${JSON.stringify({ id: '1', object: 'chat.completion.chunk', created: 1, model: 'm', ...extra })}\n\n`
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            chunk({
+              choices: [
+                {
+                  index: 0,
+                  delta: {
+                    role: 'assistant',
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: 'call-read',
+                        type: 'function',
+                        function: { name: 'get_sprint_status', arguments: '{}' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }) +
+              chunk({
+                choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+                x_groq: { usage: { prompt_tokens: 1200, completion_tokens: 300 } },
+              }) +
+              'data: [DONE]\n\n',
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+        ),
+      ),
+    )
+  }
+
   /** DS-7 to DS-11 as the board holds them, to compare against the seed. */
   function openIssues(): string[] {
     return workspace.store
@@ -655,6 +694,36 @@ describe('an approval resume a limit refused', () => {
       expect(later.chunks.filter((chunk) => chunk.type === 'tool-output-denied')).toHaveLength(0)
       expect(later.chunks.filter((chunk) => chunk.type === 'tool-output-available')).toHaveLength(5)
       expect(openIssues()).toEqual([])
+    })
+
+    it('does not claim an approval was not applied when the turn ran it first', async () => {
+      // Here the door lets the resume through, the approved writes run, and the
+      // share only runs out on the step after. The cards are telling the truth,
+      // so the line for a refused approval would be false.
+      const first = await post([userMessage(CLOSE_OUT)])
+      const assistant = answeredAssistantMessage(first.chunks, () => ({ approved: true }))
+      const held = assistant as unknown as UIMessage
+      stubSpendingToolCall()
+      // One token of room, whatever earlier tests in this file left behind.
+      const spent = workspace.store.modelUsage(CLIENT).clientTokens ?? 0
+      const share = { ...budgetLeft, CLIENT_DAILY_TOKEN_SHARE: String(spent + 1) }
+
+      const resumed = await postAs([userMessage(CLOSE_OUT), assistant], share)
+
+      expect(openIssues()).toEqual([])
+      expect(textOf(resumed.chunks)).toBe(CLIENT_BUDGET_REACHED_MESSAGE)
+
+      // On the SDK's own reducer and predicate: this must not resend either.
+      const stream = new ReadableStream<UIMessageChunk>({
+        start(controller) {
+          for (const chunk of resumed.chunks) controller.enqueue(chunk as UIMessageChunk)
+          controller.close()
+        },
+      })
+      let after = held
+      for await (const next of readUIMessageStream({ message: held, stream })) after = next
+      expect(after.parts.at(-1)).toMatchObject({ type: 'text' })
+      expect(lastAssistantMessageIsCompleteWithApprovalResponses({ messages: [after] })).toBe(false)
     })
 
     it('does not make the SPA resend the answered approval', async () => {

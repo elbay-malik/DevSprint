@@ -763,10 +763,58 @@ describe('POST /api/chat — spend controls', () => {
       },
       { ...env, ...paid, WORKSPACE: fresh.binding, DAILY_TOKEN_CAP: '1000' },
     )
-    await res.text()
+    const chunks = parseChunks(await res.text())
 
     expect(provider).toHaveBeenCalledTimes(1)
     expect(fresh.store.modelUsage().tokens).toBe(1500)
+    // Not bare tool chips: the turn says why it ended, after the tool's result.
+    expect(textOf(chunks)).toBe(BUDGET_REACHED_MESSAGE)
+    expect(chunks.map((chunk) => chunk.type).slice(-6)).toEqual([
+      'start-step',
+      'text-start',
+      'text-delta',
+      'text-end',
+      'finish-step',
+      'finish',
+    ])
+  })
+
+  it('says nothing extra when the turn ends by itself', async () => {
+    const chunk = (extra: Record<string, unknown>) =>
+      `data: ${JSON.stringify({ id: '1', object: 'chat.completion.chunk', created: 1, model: 'm', ...extra })}\n\n`
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            chunk({ choices: [{ index: 0, delta: { role: 'assistant', content: 'done' } }] }) +
+              chunk({
+                choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+                x_groq: { usage: { prompt_tokens: 1200, completion_tokens: 300 } },
+              }) +
+              'data: [DONE]\n\n',
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+        ),
+      ),
+    )
+    const fresh = fakeWorkspaceBinding()
+
+    // Over the cap by the end, and still the model's own last word: it already
+    // wrote an answer, so there is nothing left to explain.
+    const res = await app.request(
+      '/api/chat',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hello' }] }],
+        }),
+      },
+      { ...env, ...paid, WORKSPACE: fresh.binding, DAILY_TOKEN_CAP: '1000' },
+    )
+
+    expect(textOf(parseChunks(await res.text()))).toBe('done')
   })
 
   describe('per-client share', () => {
@@ -915,10 +963,63 @@ describe('POST /api/chat — spend controls', () => {
       vi.stubGlobal('fetch', provider)
       const fresh = fakeWorkspaceBinding()
 
-      await askAs(ME, { ...SHARE, WORKSPACE: fresh.binding })
+      const { answer } = await askAs(ME, { ...SHARE, WORKSPACE: fresh.binding })
 
       expect(provider).toHaveBeenCalledTimes(1)
       expect(fresh.store.modelUsage(ME).clientTokens).toBe(1_500)
+      // Not bare tool chips: the turn says why it ended, after the tool's result.
+      const chunks = parseChunks(answer)
+      expect(textOf(chunks)).toBe(CLIENT_BUDGET_REACHED_MESSAGE)
+      const types = chunks.map((chunk) => chunk.type)
+      expect(types.indexOf('tool-output-available')).toBeLessThan(types.indexOf('text-delta'))
+      expect(types.at(-1)).toBe('finish')
+    })
+
+    it('does not log the key when a share runs out between steps', async () => {
+      const chunk = (extra: Record<string, unknown>) =>
+        `data: ${JSON.stringify({ id: '1', object: 'chat.completion.chunk', created: 1, model: 'm', ...extra })}\n\n`
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() =>
+          Promise.resolve(
+            new Response(
+              chunk({
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      role: 'assistant',
+                      tool_calls: [
+                        {
+                          index: 0,
+                          id: 'call-1',
+                          type: 'function',
+                          function: { name: 'get_sprint_status', arguments: '{}' },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              }) +
+                chunk({
+                  choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+                  x_groq: { usage: { prompt_tokens: 1200, completion_tokens: 300 } },
+                }) +
+                'data: [DONE]\n\n',
+              { headers: { 'content-type': 'text/event-stream' } },
+            ),
+          ),
+        ),
+      )
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+      await askAs(ME, { ...SHARE, WORKSPACE: fakeWorkspaceBinding().binding })
+
+      const logged = warn.mock.calls.map((call) => String(call[0])).join('\n')
+      warn.mockRestore()
+      expect(logged).toContain('turn-stopped-by-limit')
+      expect(logged).toContain('client-budget')
+      expect(logged).not.toContain(ME)
     })
 
     describe('a client that leaves during a model call', () => {
