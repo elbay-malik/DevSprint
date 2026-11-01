@@ -99,3 +99,33 @@ void test('the audit runs in a job that cannot fail the run or hold back a deplo
   assert.match(jobBlock(workflow, 'audit'), /^ {4}continue-on-error: true$/m)
   assert.match(jobBlock(workflow, 'deploy'), /^ {4}needs: \[checks, e2e\]$/m)
 })
+
+/** A job's steps as text. Everything before the first step is its job-level config. */
+function stepsIn(job: string): { config: string; steps: string[] } {
+  const [config = '', steps = ''] = jobBlock(workflow, job).split(/^ {4}steps:\n/m)
+  return { config, steps: steps.split(/^(?= {6}- )/m) }
+}
+
+for (const [job, command] of [
+  ['deploy', 'pnpm deploy:all'],
+  ['preview', 'wrangler versions upload'],
+] as const) {
+  void test(`${job} gives the Cloudflare token only to the step that runs ${command}`, () => {
+    const { config, steps } = stepsIn(job)
+    assert.doesNotMatch(config, /secrets\./)
+    const holders = steps.filter((step) => step.includes('secrets.CLOUDFLARE_API_TOKEN'))
+    assert.equal(holders.length, 1)
+    assert.ok(holders[0]?.includes(command))
+    assert.match(holders[0] ?? '', /secrets\.CLOUDFLARE_ACCOUNT_ID/)
+  })
+}
+
+void test('the Cloudflare secrets appear nowhere but those two steps', () => {
+  assert.equal(workflow.match(/secrets\.CLOUDFLARE_API_TOKEN/g)?.length, 2)
+  assert.equal(workflow.match(/secrets\.CLOUDFLARE_ACCOUNT_ID/g)?.length, 2)
+})
+
+void test('deploy and preview run in their own environments, so each can hold its own token', () => {
+  assert.match(stepsIn('deploy').config, /environment:\n\s+name: production/)
+  assert.match(stepsIn('preview').config, /^ {4}environment: preview$/m)
+})
