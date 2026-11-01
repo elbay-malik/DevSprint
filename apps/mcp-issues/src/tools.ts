@@ -91,7 +91,24 @@ export function registerIssueTools(server: McpServer, workspace: WorkspaceApi): 
         // content, so a domain failure stays a value the caller can read
         // instead of becoming a protocol error (docs/domain-model.md §4).
         const invoke = tool.invoke as (workspace: WorkspaceApi, input: unknown) => Promise<unknown>
-        return envelope(await invoke(workspace, parsed.data))
+        try {
+          return envelope(await invoke(workspace, parsed.data))
+        } catch (error) {
+          // Only the unexpected lands here. Left to the SDK, its message would go
+          // to anyone on the internet as the tool's text, so the detail stays in
+          // the log. The arguments stay out of it: they are the visitor's.
+          console.error(
+            JSON.stringify({
+              event: 'tool-failed',
+              tool: tool.name,
+              error: error instanceof Error ? error.message : String(error),
+            }),
+          )
+          return envelope({
+            ok: false,
+            error: { code: 'INTERNAL', message: 'The workspace is unavailable, try again.' },
+          })
+        }
       },
     )
   }

@@ -139,6 +139,11 @@ export type ToolErrorCode =
   /** A visitor's reset that came too soon after the last one. */
   | 'RESET_COOLDOWN'
   | 'INVALID_INPUT'
+  /**
+   * The issues MCP server's answer to a failure it did not expect, such as the
+   * Durable Object being unreachable. The detail goes to its log, not the caller.
+   */
+  | 'INTERNAL'
 
 export interface ToolError {
   code: ToolErrorCode

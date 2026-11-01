@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { createWorkspaceSeed, type Workspace } from '@devsprint/shared'
 import { TOOL_DESCRIPTIONS, type WorkspaceApi } from '@devsprint/shared/tools'
@@ -49,6 +49,26 @@ function fakeWorkspace() {
 
 function parse(result: { content: { text: string }[] }): Record<string, unknown> {
   return JSON.parse(result.content[0]!.text) as Record<string, unknown>
+}
+
+/** A valid call to each tool, so each one gets as far as the workspace. */
+const VALID_CALLS: [string, Record<string, unknown>][] = [
+  ['list_issues', {}],
+  ['search_issues', { query: 'visitor-text' }],
+  ['create_issue', { title: 'visitor-text', type: 'bug' }],
+  ['update_issue_status', { issueKey: 'DS-1', status: 'done' }],
+  ['assign_issue', { issueKey: 'DS-1', assigneeId: null }],
+]
+
+/** A workspace whose every method does what `fail` does. */
+function brokenWorkspace(fail: () => Promise<never>) {
+  return {
+    listIssues: fail,
+    searchIssues: fail,
+    createIssue: fail,
+    updateIssueStatus: fail,
+    assignIssue: fail,
+  } as unknown as WorkspaceApi
 }
 
 describe('registerIssueTools', () => {
@@ -166,5 +186,90 @@ describe('registerIssueTools', () => {
     const missing = await assign.handler({ issueKey: 'DS-12' })
     expect(parse(missing)).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } })
     expect(workspace.calls.assignIssue).toHaveBeenCalledTimes(2)
+  })
+
+  describe('when the workspace fails unexpectedly', () => {
+    beforeEach(() => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+    })
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it.each(VALID_CALLS)('%s answers INTERNAL and keeps the message back', async (name, args) => {
+      const { server, registered } = fakeServer()
+      registerIssueTools(
+        server,
+        brokenWorkspace(() => Promise.reject(new Error('secret internals'))),
+      )
+
+      const result = await registered.get(name)!.handler(args)
+
+      expect(parse(result)).toEqual({
+        ok: false,
+        error: { code: 'INTERNAL', message: 'The workspace is unavailable, try again.' },
+      })
+      expect(result.content[0]!.text).not.toContain('secret internals')
+    })
+
+    it('logs the tool and the detail, but not the arguments', async () => {
+      const { server, registered } = fakeServer()
+      registerIssueTools(
+        server,
+        brokenWorkspace(() => Promise.reject(new Error('secret internals'))),
+      )
+
+      await registered.get('create_issue')!.handler({ title: 'visitor-text', type: 'bug' })
+
+      const logged = vi.mocked(console.error).mock.calls.map(([line]) => String(line))
+      expect(logged).toHaveLength(1)
+      expect(JSON.parse(logged[0]!)).toEqual({
+        event: 'tool-failed',
+        tool: 'create_issue',
+        error: 'secret internals',
+      })
+      expect(logged[0]).not.toContain('visitor-text')
+    })
+
+    it('catches a method that throws before it returns a promise', async () => {
+      const { server, registered } = fakeServer()
+      registerIssueTools(
+        server,
+        brokenWorkspace(() => {
+          throw new Error('secret internals')
+        }),
+      )
+
+      const result = await registered.get('list_issues')!.handler({})
+
+      expect(parse(result)).toMatchObject({ ok: false, error: { code: 'INTERNAL' } })
+    })
+
+    it('logs a rejection that is not an Error', async () => {
+      const { server, registered } = fakeServer()
+      registerIssueTools(
+        server,
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        brokenWorkspace(() => Promise.reject('plain text')),
+      )
+
+      await registered.get('list_issues')!.handler({})
+
+      expect(JSON.parse(String(vi.mocked(console.error).mock.calls[0]![0]))).toMatchObject({
+        error: 'plain text',
+      })
+    })
+
+    it('leaves a domain failure alone, with nothing logged', async () => {
+      const { server, registered } = fakeServer()
+      registerIssueTools(server, fakeWorkspace().api)
+
+      const missing = await registered
+        .get('update_issue_status')!
+        .handler({ issueKey: 'DS-99', status: 'done' })
+
+      expect(parse(missing)).toMatchObject({ ok: false, error: { code: 'ISSUE_NOT_FOUND' } })
+      expect(console.error).not.toHaveBeenCalled()
+    })
   })
 })
