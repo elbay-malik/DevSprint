@@ -251,6 +251,15 @@ describe('ApprovalCard', () => {
       expect(body(mountCard(requested({ issueKey: 'DS-7', status: 'done' }))).exists()).toBe(false)
     })
 
+    it('shows no comment on a move that would drop it, leaving it in the raw arguments', () => {
+      const comment = 'Shipped with the vendor workaround, see notes'
+      for (const status of ['todo', 'in_progress', 'in_review', 'done']) {
+        const wrapper = mountCard(requested({ issueKey: 'DS-7', status, comment }))
+        expect(body(wrapper).exists()).toBe(false)
+        expect(wrapper.get('pre').text()).toContain(comment)
+      }
+    })
+
     it('keeps it on the decided card, which is the record of what was allowed', () => {
       const wrapper = mountCard({
         ...requested({ version: 'v1.5.0', markdown: 'Notes' }, 'create_release_notes'),

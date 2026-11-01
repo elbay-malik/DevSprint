@@ -169,7 +169,9 @@ const summary = computed(
       const fromStatus = decided.value ? record.value?.from : issue?.status
       const from = fromStatus === undefined ? '' : `${statusLabel(fromStatus)} → `
       // Named as the board spells it, so the card and the board agree on "DS-7".
-      const comment = storedText(input.comment)
+      // Only a move to blocked keeps its comment, as the blocked reason. Any other
+      // move drops it, so showing it would promise a record the write never makes.
+      const comment = input.status === 'blocked' ? storedText(input.comment) : undefined
       return {
         headline: `${issue?.key ?? input.issueKey}: ${from}${statusLabel(input.status)}`,
         ...(issue ? { detail: issue.title } : {}),
