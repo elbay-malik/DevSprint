@@ -41,4 +41,10 @@ export type AppEnv = Omit<Env, 'MODEL_PROVIDER'> & {
    * Defaults to Groq's free-tier 100K/day; `0` disables the cap.
    */
   DAILY_TOKEN_CAP?: string
+  /**
+   * How much of that one client may spend in a UTC day before it alone gets the
+   * "share used" turn (ADR-0016's 2026-11-02 status note). Defaults to 25K;
+   * `0` disables the share and leaves the cap as it was.
+   */
+  CLIENT_DAILY_TOKEN_SHARE?: string
 }
