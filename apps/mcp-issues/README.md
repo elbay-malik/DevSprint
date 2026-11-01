@@ -27,7 +27,9 @@ tool-permission prompt, which replaces our ApprovalCard
 call is checked against the schema before it reaches the workspace, whatever the host allowed.
 
 Domain failures come back as the shared `{ ok, error }` envelope rather than protocol errors, so a
-host can read `ISSUE_NOT_FOUND` and recover instead of seeing the call blow up.
+host can read `ISSUE_NOT_FOUND` and recover instead of seeing the call blow up. An unexpected failure,
+such as the Durable Object being unreachable, comes back in the same envelope as `INTERNAL` with a
+fixed message. The detail goes to the Worker's log as a `tool-failed` event, without the arguments.
 
 ## State
 
