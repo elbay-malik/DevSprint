@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, useId } from 'vue'
+import { useResizeObserver } from '@vueuse/core'
 import { getToolName, type DynamicToolUIPart, type ToolUIPart } from 'ai'
 import { toast } from 'vue-sonner'
 import type { DevSprintUITools } from '@devsprint/shared/tools'
@@ -242,6 +243,20 @@ const summary = computed(
 
 const argumentsJson = computed(() => JSON.stringify(props.part.input ?? {}, null, 2))
 
+const bodyBox = ref<HTMLElement>()
+const bodyMoreId = useId()
+
+/**
+ * Whether the body runs past its box, measured, since that depends on the pane's
+ * width. An overlay scrollbar shows nothing at rest, and a cut at a line ending
+ * looks finished, so without this the rest of the text could pass unseen.
+ */
+const bodyOverflows = ref(false)
+useResizeObserver(bodyBox, () => {
+  const box = bodyBox.value
+  bodyOverflows.value = box !== undefined && box.scrollHeight > box.clientHeight
+})
+
 /**
  * An applied board write the workspace recorded can be put back, once. What it
  * puts back is the workspace's own record (the route takes only the change id),
@@ -331,14 +346,24 @@ function respond(approved: boolean) {
          scrollable-region-focusable), and a tab stop needs a name. -->
     <div
       v-if="summary.body"
+      ref="bodyBox"
       role="group"
       tabindex="0"
       data-testid="approval-body"
       :aria-label="`Full text: ${summary.headline}`"
+      :aria-describedby="bodyOverflows ? bodyMoreId : undefined"
       class="text-muted-foreground max-h-48 overflow-auto rounded-sm border px-2 py-1 wrap-anywhere whitespace-pre-wrap"
     >
       {{ summary.body }}
     </div>
+    <p
+      v-if="summary.body && bodyOverflows"
+      :id="bodyMoreId"
+      data-testid="approval-body-more"
+      class="text-muted-foreground"
+    >
+      Scroll to read all of it.
+    </p>
 
     <details>
       <summary
