@@ -86,7 +86,9 @@ secret and warns, rather than running unsigned — that keeps keyless dev and CI
 approvals stop verifying after a restart, so set the secret before deploying. And the ledger is not
 an unconditional single-use guarantee: `reset()` clears it along with the board, and it caps at
 1,500 entries with the oldest evicted first, so either can in principle let a captured approval
-replay once more — both accepted trade-offs for a demo board, documented in
+replay once more. Eviction can be forced, because ids reach the ledger before any signature is
+checked, though only from the current turn, on signed write-tool parts, and at most 60 a request.
+All accepted trade-offs for a demo board, documented in
 [ADR-0014](../../docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md).
 
 Tool descriptions and input schemas come verbatim from `@devsprint/shared/tools`; the query

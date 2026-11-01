@@ -18,7 +18,7 @@
  * one piece of durable, serialising state this Worker has (ADR-0014).
  */
 import type { UIMessage } from 'ai'
-import type { WorkspaceApi } from '@devsprint/shared/tools'
+import { WRITE_TOOL_NAMES, type WorkspaceApi } from '@devsprint/shared/tools'
 
 /** Env var name for the production signing secret. */
 export const APPROVAL_SECRET_VAR = 'TOOL_APPROVAL_SECRET'
@@ -80,53 +80,91 @@ interface RespondedApproval {
 const MAX_APPROVAL_ID_LENGTH = 64
 
 /**
+ * The most approvals one request may answer. The board tops out at about 50
+ * issues, so a real bulk step fits under it with room left. It exists because
+ * the ledger is written before any signature is checked and evicts its oldest
+ * entries past its cap, so each junk id pushes a real one closer to the door.
+ */
+export const MAX_APPROVALS_PER_REQUEST = 60
+
+const WRITE_TOOL_PART_TYPES: ReadonlySet<string> = new Set(
+  WRITE_TOOL_NAMES.map((name) => `tool-${name}`),
+)
+
+/** The messages after the person's latest one: the turn this request is continuing. */
+function currentTurn<MESSAGE extends UIMessage>(messages: MESSAGE[]): MESSAGE[] {
+  return messages.slice(messages.findLastIndex((message) => message.role === 'user') + 1)
+}
+
+/**
  * Approvals the client is asking us to act on *now*: answered, but whose tool
  * call has not produced a result yet.
  *
  * Answered approvals stay in the transcript forever, so filtering on the part's
  * state is what separates "act on this" from "this already happened". Spending
  * the latter would refuse every later message in the conversation.
+ *
+ * The rest of the filter keeps junk away from the ledger, and is only safe
+ * because of what the SDK can execute: an approval on a read tool can never
+ * verify, since read tools are never signed, and an unsigned one is refused.
+ * The whole turn is scanned, not just its last message. A trailing message
+ * holding only a step-start converts to nothing, which leaves the approval
+ * before it as the last thing the model sees, so it would run without ever being
+ * spent.
  */
 function pendingApprovals(messages: UIMessage[]): RespondedApproval[] {
   const approvals: RespondedApproval[] = []
-  for (const message of messages) {
+  for (const message of currentTurn(messages)) {
     for (const part of message.parts) {
+      if (!WRITE_TOOL_PART_TYPES.has(part.type)) continue
       if (!('state' in part) || part.state !== 'approval-responded') continue
       const approval: unknown = part.approval
-      if (typeof approval === 'object' && approval !== null && 'id' in approval) {
-        const { id } = approval
-        if (typeof id === 'string' && id.length > 0 && id.length <= MAX_APPROVAL_ID_LENGTH) {
-          approvals.push(approval as RespondedApproval)
-        }
+      if (typeof approval !== 'object' || approval === null) continue
+      if (!('id' in approval) || !('signature' in approval)) continue
+      const { id, signature } = approval
+      if (typeof signature !== 'string' || typeof id !== 'string') continue
+      if (id.length > 0 && id.length <= MAX_APPROVAL_ID_LENGTH) {
+        approvals.push(approval as RespondedApproval)
       }
     }
   }
   return approvals
 }
 
+/** Whether this request answers more approvals than any real step could. */
+export function hasTooManyApprovals(messages: UIMessage[]): boolean {
+  return pendingApprovals(messages).length > MAX_APPROVALS_PER_REQUEST
+}
+
 /**
- * The transcript without answered approvals the person has since moved on from.
+ * The transcript without answered approvals that cannot be acted on, so that
+ * every one left is one `settleApprovals` spends. Two kinds:
  *
- * A resume refused by a limit leaves its card answered but never run, and a
- * later message carries it along. Nothing executes from there, since the SDK
- * only acts on the last model message, but the conversion still writes the tool
- * call into the prompt with no result after it. OpenAI-compatible providers
- * usually reject that shape, so one refused press would wedge the chat. The limit
- * message the person read is still in the transcript and says what happened.
+ * The person has since moved on. A resume refused by a limit leaves its card
+ * answered but never run, and a later message carries it along. Nothing executes
+ * from there, since the SDK only acts on the last model message, but the
+ * conversion still writes the tool call into the prompt with no result after it.
+ * OpenAI-compatible providers usually reject that shape, so one refused press
+ * would wedge the chat. The limit message the person read is still in the
+ * transcript and says what happened.
+ *
+ * A `dynamic-tool` part. This agent has none, and the signature covers the tool
+ * name and not the part type, so a captured approval rewritten as one would still
+ * verify. It would execute while `pendingApprovals` looked straight past it.
  *
  * Returns a copy of the messages it changes, and leaves the rest as they are.
  */
-export function dropStaleApprovals<MESSAGE extends UIMessage>(messages: MESSAGE[]): MESSAGE[] {
+export function dropUnusableApprovals<MESSAGE extends UIMessage>(messages: MESSAGE[]): MESSAGE[] {
   const lastUser = messages.findLastIndex((message) => message.role === 'user')
-  return messages.map((message, index) =>
-    index < lastUser && message.parts.some(isAnsweredApproval)
-      ? { ...message, parts: message.parts.filter((part) => !isAnsweredApproval(part)) }
-      : message,
-  )
-}
-
-function isAnsweredApproval(part: UIMessage['parts'][number]): boolean {
-  return 'state' in part && part.state === 'approval-responded'
+  return messages.map((message, index) => {
+    const isUnusable = (part: UIMessage['parts'][number]) =>
+      'state' in part &&
+      part.state === 'approval-responded' &&
+      (index < lastUser || part.type === 'dynamic-tool')
+    return message.parts.some(isUnusable)
+      ? { ...message, parts: message.parts.filter((part) => !isUnusable(part)) }
+      : message
+  })
 }
 
 const REPLAY_REASON = 'This approval was already used, so it was not applied again.'

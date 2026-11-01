@@ -19,7 +19,12 @@ import { ModelConfigError, resolveModel } from './agent/model'
 import { buildSystemPrompt } from './agent/system-prompt'
 import { createTools, MCP_OWNED_TOOL_NAMES, type DevSprintTools } from './agent/tools'
 import { createMcpIssueTools } from './agent/mcp-tools'
-import { dropStaleApprovals, resolveApprovalSecret, settleApprovals } from './agent/approvals'
+import {
+  dropUnusableApprovals,
+  hasTooManyApprovals,
+  resolveApprovalSecret,
+  settleApprovals,
+} from './agent/approvals'
 import { createTurnTracer, resolveTracingConfig } from './agent/tracing'
 import {
   BUDGET_REACHED_MESSAGE,
@@ -316,6 +321,9 @@ app.post(API_ROUTES.chat, async (c) => {
   } catch (error) {
     return invalidInput(c, `Invalid UI messages: ${describeError(error).message}`)
   }
+  if (hasTooManyApprovals(uiMessages)) {
+    return invalidInput(c, 'Too many approvals in one request.')
+  }
 
   let resolved
   try {
@@ -353,7 +361,7 @@ app.post(API_ROUTES.chat, async (c) => {
   // Down here, after every check that can refuse the turn, so an approval is
   // spent only by a turn that will act on it. Spent earlier, a press refused by
   // the budget would read as a replay once the budget came back.
-  const messagesForTurn = dropStaleApprovals(uiMessages)
+  const messagesForTurn = dropUnusableApprovals(uiMessages)
   const { replayed } = await settleApprovals(messagesForTurn, workspace)
   if (replayed > 0) {
     console.warn(JSON.stringify({ event: 'approval-replay-blocked', count: replayed }))
