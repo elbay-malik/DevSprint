@@ -9,7 +9,7 @@ import { isKnownAssignee } from '@/features/workspace/lib/people'
  * you — applied." would be two records of one decision.
  */
 export interface ApprovalOutcome {
-  /** True only for an approved write that did not land; drives the red line. */
+  /** True only for an approved write that did not land, or may not have; drives the red line. */
   failed: boolean
   /**
    * The state glyph that leads the line, in the deployment card's language:
@@ -46,7 +46,7 @@ interface Result {
   /**
    * The call threw rather than returning an envelope. No ErrorCard follows it,
    * so the line has to carry the reason itself. A typed envelope error gets an
-   * ErrorCard right below the card, and the line only records that it did not land.
+   * ErrorCard right below the card, and the line only records how it ended.
    */
   thrown?: boolean
 }
@@ -81,7 +81,9 @@ function resultOf(part: ApprovalPartLike): Result | undefined {
     return {
       failed: true,
       mark: '✕',
-      text: 'not applied',
+      // INTERNAL is the one code that is not a refusal: the write may have landed
+      // with only its reply lost (docs/domain-model.md §4).
+      text: code === 'INTERNAL' ? 'outcome unknown' : 'not applied',
       ...(code === undefined ? {} : { code }),
     }
   }
@@ -120,7 +122,8 @@ function deploymentStatus(data: unknown): string | undefined {
  * simply has no time. A failure has to read as one: reporting only "Approved
  * by you" would present a write that never landed as one that did. A typed
  * error is shown in full by the ErrorCard below the card, so the line there
- * stays short ("— not applied.") rather than saying it twice.
+ * stays short ("— not applied.", or "— outcome unknown." when the write may have
+ * landed) rather than saying it twice.
  */
 export function approvalOutcome(part: ApprovalPartLike, at?: string): ApprovalOutcome | undefined {
   if (part.state === 'approval-requested') return undefined

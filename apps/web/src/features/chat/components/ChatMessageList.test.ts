@@ -188,6 +188,35 @@ describe('ChatMessageList', () => {
     expect(error.text()).toContain('ISSUE_NOT_FOUND')
   })
 
+  it('tells one story about a write whose outcome is unknown', () => {
+    chat.messages = [
+      {
+        id: 'm1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-create_issue',
+            toolCallId: 'c1',
+            state: 'output-available',
+            input: { title: 'Fix the export', type: 'bug' },
+            approval: { id: 'a1', approved: true },
+            output: { ok: false, error: { code: 'INTERNAL', message: 'The call failed.' } },
+          },
+        ],
+      } as unknown as DevSprintUIMessage,
+    ]
+    chat.status = 'ready'
+
+    const wrapper = mount(ChatMessageList)
+
+    const outcome = wrapper.get('[data-testid="approval-outcome"]')
+    expect(outcome.text()).toContain('outcome unknown')
+    expect(outcome.text()).not.toContain('not applied')
+    const message = wrapper.get('[data-testid="error-message"]')
+    expect(message.text()).toContain('may not have saved')
+    expect(message.text()).not.toContain('Try again')
+  })
+
   it('shows a deployment awaiting its gate as the approval card alone (S-C step 3)', () => {
     // Until it is approved there is no run to draw, and a chip of the same call
     // under the card would say it twice — once without the decision attached.
