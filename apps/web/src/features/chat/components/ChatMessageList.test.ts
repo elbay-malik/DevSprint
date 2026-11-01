@@ -425,6 +425,14 @@ describe('ChatMessageList status and focus', () => {
       tabindex: '-1',
       'aria-label': '2 changes to review · 10 pts',
     })
+    // tabindex -1 is outside main.css's scroll-region rule, so these are its only ring.
+    expect(header.classes()).toEqual(
+      expect.arrayContaining([
+        'focus-visible:outline-ring',
+        'focus-visible:outline-2',
+        'focus-visible:outline-offset-2',
+      ]),
+    )
     // Not the button: Enter here must not approve anything.
     const button = wrapper.get('[data-testid="approval-approve-all"]')
     expect(document.activeElement).not.toBe(button.element)
