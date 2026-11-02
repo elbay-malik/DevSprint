@@ -15,6 +15,11 @@ Any other method on `/mcp` gets HTTP 405 with `Allow: POST`, on both entrypoints
 stateless, so it has no server-to-client stream to open with a GET and no session to end with a
 DELETE. The MCP SDK's client and `@ai-sdk/mcp` both take that 405 as normal, and their tests pin it.
 
+The public entrypoint answers 403 to an `Origin` that isn't loopback, which closes DNS rebinding
+against a local `wrangler dev`. A request with no `Origin` passes. The
+MCP SDK's client sends none. A host that runs its MCP client inside a web page would need adding here,
+but the deployed endpoint already fails such a page's preflight.
+
 ## Tools
 
 `list_issues`, `search_issues`, `create_issue`, `update_issue_status`, `assign_issue` — the five

@@ -240,6 +240,12 @@ export async function smoke(options: { proveSharedBoard: boolean } = { proveShar
   }
 
   // The public MCP server (scenario S-F), and that it reads the same board.
+  const foreignMcp = await fetch(`${URLS.mcp}/mcp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: 'https://example.com' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+  })
+  check('MCP refuses another origin', foreignMcp.status === 403, `got ${foreignMcp.status}`)
   const tools = (await mcp('tools/list', {})) as { tools: Array<{ name: string }> }
   check(
     'MCP lists exactly the five issue tools',
