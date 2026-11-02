@@ -105,15 +105,28 @@ export async function readShell(url: string, tries = 20, pauseMs = 3000) {
 }
 
 /**
- * The limit that answered this chat turn, if one did. At a limit the api sends a
- * fixed message without calling the model, so there is no tool call to look for.
- * That says nothing about the deploy: each deploy's own turn spends from the daily
- * cap, so a day of merges can use it up. Any other value is not a known limit, and
- * the checks run as usual.
+ * The spend limit that answered this chat turn, if one did. At a limit the api
+ * sends a fixed message without calling the model, so there is no tool call to
+ * look for. That says nothing about the deploy: each deploy's own turn spends from
+ * the daily cap, so a day of merges can use it up. A failed response or any other
+ * value is not that, and the checks run as usual. Neither is the short per-client
+ * `rate` limit, which is no reason to leave a deploy unproven.
  */
-export function limitOnTurn(headers: Headers): string | undefined {
-  const limit = headers.get('x-devsprint-limit') ?? ''
-  return ['budget', 'client-budget', 'rate'].includes(limit) ? limit : undefined
+export function spendLimitOn(turn: Response): string | undefined {
+  const limit = turn.headers.get('x-devsprint-limit') ?? ''
+  return turn.ok && ['budget', 'client-budget'].includes(limit) ? limit : undefined
+}
+
+/** The two checks only a real model turn can answer, or why they could not run. */
+export function chatTurnChecks(turn: Response, stream: string) {
+  const limit = spendLimitOn(turn)
+  if (limit) return { skip: `the api answered with its ${limit} limit, so no model call ran` }
+  const tools = turn.headers.get('x-devsprint-tools')
+  return {
+    grounded: turn.ok && stream.includes('"tool-input-available"'),
+    binding: tools === 'mcp',
+    tools,
+  }
 }
 
 export async function smoke(options: { proveSharedBoard: boolean } = { proveSharedBoard: false }) {
@@ -208,11 +221,9 @@ export async function smoke(options: { proveSharedBoard: boolean } = { proveShar
     }),
   })
   const stream = await turn.text()
-  const limit = limitOnTurn(turn.headers)
-  const limited = `the api answered with its ${limit} limit, so no model call ran`
-  if (limit) skip('chat streams a grounded tool call', limited)
-  else
-    check('chat streams a grounded tool call', turn.ok && stream.includes('"tool-input-available"'))
+  const chat = chatTurnChecks(turn, stream)
+  if ('skip' in chat) skip('chat streams a grounded tool call', chat.skip ?? '')
+  else check('chat streams a grounded tool call', chat.grounded === true)
   // The model the committed config asks for, so switching MODEL_PROVIDER is
   // a one-line change. On the live demo `auto` should resolve to groq; the mock
   // here means the api has lost its key.
@@ -223,13 +234,9 @@ export async function smoke(options: { proveSharedBoard: boolean } = { proveShar
     configured === 'auto' ? served !== 'mock' && served.length > 0 : served.startsWith(configured),
     `got ${served || 'none'}`,
   )
-  if (limit) skip('issue tools come over the service binding', limited)
+  if ('skip' in chat) skip('issue tools come over the service binding', chat.skip ?? '')
   else {
-    check(
-      'issue tools come over the service binding',
-      turn.headers.get('x-devsprint-tools') === 'mcp',
-      `got ${turn.headers.get('x-devsprint-tools')}`,
-    )
+    check('issue tools come over the service binding', chat.binding === true, `got ${chat.tools}`)
   }
 
   // The public MCP server (scenario S-F), and that it reads the same board.
