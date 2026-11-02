@@ -14,9 +14,12 @@ import type { JSONValue } from 'ai'
  * the output on the UI stream alone. The cards still get every character, and
  * ADR-0016's objection to rewriting the output contract does not apply. It also
  * runs on the tool results a request carries in its history, so that JSON comes
- * from the client and its shape can't be assumed. No shape gets past the limit:
+ * from the client and its shape can't be assumed. No output gets past the limit:
  * what compacting can't shrink goes to the model as cut-off text, which nothing
- * a real tool returns ever needs.
+ * a real tool returns ever needs. This covers these tools' outputs only. The SDK
+ * skips `toModelOutput` for a part in the `output-error` state, and other tools
+ * have no bound here, so for those a client's own history is held by the 256 KB
+ * body limit and the daily budget.
  */
 export const MODEL_ISSUE_LIST_CHARS = 12_000
 
