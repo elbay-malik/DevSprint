@@ -6,7 +6,7 @@ const CHARS_PER_TOKEN = 4
 /**
  * How much written output builds up before it is charged. An answer that stops
  * sooner is left to its step's real figure, and a step cut off here goes
- * undercharged by no more than this. Up to about 30 writes for the longest call
+ * undercharged by no more than this. Up to about 8 writes for the longest call
  * `MAX_OUTPUT_TOKENS` allows, and none for most answers.
  */
 const OUTPUT_CHARGE_CHARS = 2000
