@@ -141,8 +141,8 @@ spec cited. What changed is when it re-reads:
 What reaches the ledger is narrower now, and a third exception joins the two named above.
 
 - **An approval is spent only by a turn that will run.** `settleApprovals` used to run before the
-  budget check and the model lookup, so a press those refused was gone and read as a replay when
-  the budget came back. It now runs after both. A limit message says the approval was not applied,
+  budget check and the model lookup, so a press that either one refused was gone and read as a
+  replay when the budget came back. It now runs after both. A limit message says the approval was not applied,
   since the card still reads "Approved by you".
 - **Only the current turn is scanned:** every message after the last user message, on the same
   array that is converted. Not just the last message, because a trailing message holding only a
