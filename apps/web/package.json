@@ -12,7 +12,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "deploy": "pnpm run build && wrangler deploy",
-    "lighthouse": "node scripts/lighthouse.ts"
+    "lighthouse": "13.6.0"
   },
   "dependencies": {
     "@ai-sdk/vue": "catalog:",
@@ -38,10 +38,10 @@
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
-    "@vue/test-utils": "2.5.0",
+    "@vue/test-utils": "2.5.1",
     "@vue/tsconfig": "catalog:",
     "happy-dom": "catalog:",
-    "lighthouse": "13.5.0",
+    "lighthouse": "13.6.0",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
