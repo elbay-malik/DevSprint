@@ -508,8 +508,8 @@ describe('assigning an issue — read first, then the gated write', () => {
     ).toBe('DS-11 already has that assignee.')
   })
 
-  describe('a write that failed unexpectedly', () => {
-    const answerTo = (code: string) =>
+  describe('a tool that failed unexpectedly', () => {
+    const answerTo = (code: string, toolName = 'assign_issue') =>
       scriptChunks({
         prompt: [
           { role: 'user', content: [{ type: 'text', text: 'Assign DS-12 to Dana' }] },
@@ -519,7 +519,7 @@ describe('assigning an issue — read first, then the gated write', () => {
               {
                 type: 'tool-call',
                 toolCallId: 'c1',
-                toolName: 'assign_issue',
+                toolName,
                 input: { issueKey: 'DS-12', assigneeId: 'u-dana' },
               },
             ],
@@ -530,7 +530,7 @@ describe('assigning an issue — read first, then the gated write', () => {
               {
                 type: 'tool-result',
                 toolCallId: 'c1',
-                toolName: 'assign_issue',
+                toolName,
                 output: { type: 'json', value: { ok: false, error: { code, message: 'no' } } },
               },
             ],
@@ -548,6 +548,12 @@ describe('assigning an issue — read first, then the gated write', () => {
     it('says the outcome is unknown rather than that nothing changed', () => {
       expect(answerTo('INTERNAL')).toBe(
         'The board couldn’t be reached, so this may not have saved. Check the board before trying again.',
+      )
+    })
+
+    it('tells a failed read to try again, since a read changes nothing', () => {
+      expect(answerTo('INTERNAL', 'list_issues')).toBe(
+        'The board couldn’t be reached. Try again in a moment.',
       )
     })
 
