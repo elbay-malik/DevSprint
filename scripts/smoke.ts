@@ -34,6 +34,12 @@ export function expectedModelProvider(): string {
 }
 
 let failures = 0
+let skipped = 0
+function skip(name: string, why: string) {
+  console.log(`- ${name}: skipped, ${why}`)
+  if (process.env.GITHUB_ACTIONS === 'true') console.log(`::warning::${name}: skipped, ${why}`)
+  skipped += 1
+}
 function check(name: string, ok: boolean, detail = '') {
   console.log(`${ok ? '✓' : '✗'} ${name}${!ok && detail ? ` — ${detail}` : ''}`)
   if (!ok) failures += 1
@@ -98,8 +104,21 @@ export async function readShell(url: string, tries = 20, pauseMs = 3000) {
   }
 }
 
+/**
+ * The limit that answered this chat turn, if one did. At a limit the api sends a
+ * fixed message without calling the model, so there is no tool call to look for.
+ * That says nothing about the deploy: each deploy's own turn spends from the daily
+ * cap, so a day of merges can use it up. Any other value is not a known limit, and
+ * the checks run as usual.
+ */
+export function limitOnTurn(headers: Headers): string | undefined {
+  const limit = headers.get('x-devsprint-limit') ?? ''
+  return ['budget', 'client-budget', 'rate'].includes(limit) ? limit : undefined
+}
+
 export async function smoke(options: { proveSharedBoard: boolean } = { proveSharedBoard: false }) {
   failures = 0
+  skipped = 0
   console.log(`\nSmoke checks against ${SUBDOMAIN}`)
 
   // The SPA, and that its build points at the deployed api: a build without
@@ -189,7 +208,11 @@ export async function smoke(options: { proveSharedBoard: boolean } = { proveShar
     }),
   })
   const stream = await turn.text()
-  check('chat streams a grounded tool call', turn.ok && stream.includes('"tool-input-available"'))
+  const limit = limitOnTurn(turn.headers)
+  const limited = `the api answered with its ${limit} limit, so no model call ran`
+  if (limit) skip('chat streams a grounded tool call', limited)
+  else
+    check('chat streams a grounded tool call', turn.ok && stream.includes('"tool-input-available"'))
   // The model the committed config asks for, so switching MODEL_PROVIDER is
   // a one-line change. On the live demo `auto` should resolve to groq; the mock
   // here means the api has lost its key.
@@ -200,11 +223,14 @@ export async function smoke(options: { proveSharedBoard: boolean } = { proveShar
     configured === 'auto' ? served !== 'mock' && served.length > 0 : served.startsWith(configured),
     `got ${served || 'none'}`,
   )
-  check(
-    'issue tools come over the service binding',
-    turn.headers.get('x-devsprint-tools') === 'mcp',
-    `got ${turn.headers.get('x-devsprint-tools')}`,
-  )
+  if (limit) skip('issue tools come over the service binding', limited)
+  else {
+    check(
+      'issue tools come over the service binding',
+      turn.headers.get('x-devsprint-tools') === 'mcp',
+      `got ${turn.headers.get('x-devsprint-tools')}`,
+    )
+  }
 
   // The public MCP server (scenario S-F), and that it reads the same board.
   const tools = (await mcp('tools/list', {})) as { tools: Array<{ name: string }> }
@@ -247,7 +273,11 @@ export async function smoke(options: { proveSharedBoard: boolean } = { proveShar
   }
 
   if (failures > 0) throw new Error(`${failures} smoke check(s) failed`)
-  console.log('All smoke checks passed.')
+  console.log(
+    skipped > 0
+      ? `All smoke checks passed, but ${skipped} were skipped and need a re-run.`
+      : 'All smoke checks passed.',
+  )
 }
 
 if (import.meta.main) await smoke()
