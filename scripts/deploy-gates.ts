@@ -42,6 +42,8 @@ export function unknownProvider(provider: string): string | undefined {
  * What the api lacks to run MODEL_PROVIDER, or undefined if it has it. `auto`
  * without the key does not fail: apps/api/src/agent/model.ts falls back to the
  * scripted mock, which is right for a fresh clone and wrong for the live demo.
+ * The deploy refuses an existing api over this answer, and only warns on a new
+ * one, because a Worker that does not exist yet cannot hold a secret.
  */
 export function missingProviderSecret(
   provider: string,

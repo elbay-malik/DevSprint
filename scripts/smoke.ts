@@ -191,7 +191,8 @@ export async function smoke(options: { proveSharedBoard: boolean } = { proveShar
   const stream = await turn.text()
   check('chat streams a grounded tool call', turn.ok && stream.includes('"tool-input-available"'))
   // The model the committed config asks for, so switching MODEL_PROVIDER is
-  // a one-line change: `auto` may resolve to groq, never to mock.
+  // a one-line change. On the live demo `auto` should resolve to groq; the mock
+  // here means the api has lost its key.
   const configured = expectedModelProvider()
   const served = turn.headers.get('x-devsprint-model') ?? ''
   check(
