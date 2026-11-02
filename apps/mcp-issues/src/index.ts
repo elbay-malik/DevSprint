@@ -1,5 +1,5 @@
 import { WorkerEntrypoint } from 'cloudflare:workers'
-import { refuseBatch, refuseNonPost } from './batch'
+import { refuseBatch, refuseForeignOrigin, refuseNonPost } from './batch'
 import { refuseIfThrottled } from './limit'
 import { handleMcpRequest } from './mcp'
 import { workspaceOf } from './workspace'
@@ -39,6 +39,8 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (new URL(request.url).pathname !== '/mcp') return await serve(request, env)
 
+    const foreign = refuseForeignOrigin(request)
+    if (foreign) return foreign
     const refused = await refuseIfThrottled(request, env.MCP_RATE_LIMIT)
     if (refused) return refused
     const body = await refuseBatch(request)

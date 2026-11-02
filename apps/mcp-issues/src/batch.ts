@@ -23,6 +23,25 @@ export function refuseNonPost(request: Request): Response | undefined {
   return jsonRpcError(-32000, 'Method not allowed.', 405, { Allow: 'POST' })
 }
 
+/** A browser page on this machine, which is what local development looks like. */
+const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/
+
+/**
+ * Refuses a browser page on another origin, on the public endpoint. The MCP spec
+ * says a server must validate Origin, to stop DNS rebinding: a hostile page that
+ * repoints its own name at a local `wrangler dev` reaches it as same-origin, so
+ * the preflight that stops browsers on the deployed endpoint never happens.
+ *
+ * No Origin at all passes. The MCP SDK's client sends none, and native hosts have
+ * no browser to add one. Refused here, before the rate limit, so a refusal costs
+ * no token and no body read.
+ */
+export function refuseForeignOrigin(request: Request): Response | undefined {
+  const origin = request.headers.get('Origin')
+  if (origin === null || LOOPBACK_ORIGIN.test(origin)) return undefined
+  return jsonRpcError(-32000, 'Origin not allowed.', 403)
+}
+
 /**
  * Refuses a JSON-RPC batch or an oversized body on the public endpoint
  * (ADR-0024).

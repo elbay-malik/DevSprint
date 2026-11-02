@@ -109,6 +109,61 @@ describe('the public fetch handler', () => {
     expect(openWorkspace).not.toHaveBeenCalled()
   })
 
+  it.each([
+    'https://evil.example',
+    'http://localhost.evil.example',
+    'http://127.0.0.1.evil.example:8788',
+    'null',
+    'vscode-file://vscode-app',
+  ])('refuses the origin %s before it spends a token or reads the body', async (origin) => {
+    const { env, limit, createIssue } = fakeEnv()
+    const request = post(JSON.stringify(call(1)))
+    request.headers.set('Origin', origin)
+
+    const response = await worker.fetch(request, env)
+
+    expect(response.status).toBe(403)
+    expect(limit).not.toHaveBeenCalled()
+    expect(request.bodyUsed).toBe(false)
+    expect(createIssue).not.toHaveBeenCalled()
+  })
+
+  it.each(['http://localhost:5173', 'http://127.0.0.1:8788', 'http://[::1]:8788'])(
+    'lets the loopback origin %s through',
+    async (origin) => {
+      const { env, createIssue } = fakeEnv()
+      const request = post(JSON.stringify(call(1)))
+      request.headers.set('Origin', origin)
+
+      const response = await worker.fetch(request, env)
+
+      expect(response.status).toBe(200)
+      await response.text()
+      expect(createIssue).toHaveBeenCalledOnce()
+    },
+  )
+
+  it('serves a real MCP client, which sends no Origin', async () => {
+    const { env, createIssue } = fakeEnv()
+    const origins: (string | null)[] = []
+    const transport = new StreamableHTTPClientTransport(new URL('https://mcp.test/mcp'), {
+      fetch: async (input, init) => {
+        const request = new Request(input, init)
+        origins.push(request.headers.get('Origin'))
+        return await worker.fetch(request, env)
+      },
+    })
+    const client = new Client({ name: 'test-host', version: '1.0.0' })
+
+    await client.connect(transport)
+    await client.callTool({ name: 'create_issue', arguments: { title: 'a title', type: 'bug' } })
+    await client.close()
+
+    expect(origins.length).toBeGreaterThan(0)
+    expect(new Set(origins)).toEqual(new Set([null]))
+    expect(createIssue).toHaveBeenCalledOnce()
+  })
+
   it('still answers a GET on /health', async () => {
     const { env } = fakeEnv()
 
