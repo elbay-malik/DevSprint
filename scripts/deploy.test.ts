@@ -272,6 +272,37 @@ void test('CI is not gated: it checks out a detached HEAD and has no credentials
   assertDeployed(repo.deploy(repo.main, [], { GITHUB_ACTIONS: 'true' }))
 })
 
+void test('only a real CI run skips the git gate, not any value of the variable', (t) => {
+  const repo = makeRepo(t)
+  repo.git(repo.main, 'checkout', '--quiet', '--detach')
+  assertRefused(repo.deploy(repo.main, [], { GITHUB_ACTIONS: '1' }), /detached HEAD/)
+})
+
+void test('a new api runs the bootstrap even when its MCP Worker still exists', (t) => {
+  const repo = makeRepo(t)
+  const run = repo.deploy(repo.main, [], { STUB_API_EXISTS: '0' })
+  assert.equal(run.status, 0, run.output)
+  assert.match(run.output, /First deploy plan:/)
+  const shipped = run.calls.filter((call) => / deploy( |$)/.test(call))
+  assert.match(shipped[0] ?? '', /@devsprint\/api .*--config/, 'api first, without its binding')
+  assert.match(shipped[1] ?? '', /@devsprint\/mcp-issues/)
+  assert.match(shipped[2] ?? '', /@devsprint\/api/)
+  assert.doesNotMatch(shipped[2] ?? '', /--config/, 'then the api again, with its binding')
+})
+
+void test('a provider the api would reject stops a new api as well as an existing one', (t) => {
+  const repo = makeRepo(t)
+  for (const env of [{}, { STUB_API_EXISTS: '0', STUB_MCP_EXISTS: '0' }]) {
+    const run = repo.deploy(repo.main, [], { STUB_PROVIDER: 'openai', ...env })
+    assert.notEqual(run.status, 0, run.output)
+    assert.match(run.output, /Refusing to deploy: MODEL_PROVIDER='openai'/)
+    assert.ok(!run.calls.some((call) => / deploy( |$)/.test(call)), run.calls.join(' | '))
+
+    const plan = repo.deploy(repo.main, ['--plan'], { STUB_PROVIDER: 'openai', ...env })
+    assert.match(plan.output, /a real deploy would stop here: MODEL_PROVIDER='openai'/)
+  }
+})
+
 void test('an existing api with no provider key is refused before anything ships', (t) => {
   const repo = makeRepo(t)
   const run = repo.deploy(repo.main, [], { STUB_SECRETS: secretsJson('TOOL_APPROVAL_SECRET') })
@@ -343,7 +374,7 @@ void test('--plan on a new api warns as the real deploy does, and does not predi
 void test('a new api whose MCP Worker exists is told the same by --plan', (t) => {
   const repo = makeRepo(t)
   const plan = repo.deploy(repo.main, ['--plan'], { STUB_API_EXISTS: '0' })
-  assert.match(plan.output, /Deploy plan:/)
+  assert.match(plan.output, /First deploy plan:/)
   assert.doesNotMatch(plan.output, /would stop here/)
   assert.match(plan.output, /set it after this deploy/)
 })

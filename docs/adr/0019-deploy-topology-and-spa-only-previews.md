@@ -186,6 +186,10 @@ Changes to the deploy script:
 - **The provider key is checked up front.** With an existing api, a `MODEL_PROVIDER` whose key is
   missing now refuses before anything ships. It used to be caught only by the smoke check, after all
   three Workers were live. ADR-0021's fallback to the mock is unchanged, and a new api only warns.
+  A provider the api doesn't know is refused for a new api as well, since no secret can fix it.
+- **The bootstrap runs when either Worker is new.** It used to depend on the MCP Worker alone, so a
+  recreated api with its MCP Worker still in place shipped MCP first, bound to a Durable Object that
+  did not exist yet.
 - **"On the first deploy alone" now means a new api.** The shared-board write and reset used to run
   when the MCP Worker was new, which would have reset a live board had only that Worker been
   recreated. They now run only when `devsprint-api`, which holds the Durable Object, is new.

@@ -15,6 +15,7 @@ import { pathToFileURL } from 'node:url'
 import {
   deployRefusal,
   missingProviderSecret,
+  unknownProvider,
   rollbackHints,
   type GitState,
 } from './deploy-gates.ts'
@@ -68,8 +69,15 @@ void test('mock needs no key', () => {
   assert.equal(missingProviderSecret('mock', new Set()), undefined)
 })
 
-void test('a provider the api would reject is not let through', () => {
-  assert.match(missingProviderSecret('openai', new Set([GROQ, GEMINI])) ?? '', /not 'openai'/)
+void test('a provider the api would reject is named, and is not a missing key', () => {
+  assert.match(unknownProvider('openai') ?? '', /'openai'/)
+  assert.equal(missingProviderSecret('openai', new Set()), undefined)
+})
+
+void test('every provider the api accepts is known', () => {
+  for (const provider of ['auto', 'groq', 'gemini', 'mock']) {
+    assert.equal(unknownProvider(provider), undefined)
+  }
 })
 
 void test('the provider checked is the one the committed config deploys', () => {
