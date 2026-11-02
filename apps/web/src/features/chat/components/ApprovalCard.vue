@@ -136,9 +136,10 @@ const denyVariant = computed(() =>
 /**
  * Free text a write would store, if there is any to show. Blank lines at the top
  * and long runs of them are dropped, for the card only, or padding could push
- * injected text below the box and leave it looking empty. Blank includes format
- * characters such as a zero-width space, which draw nothing either. The raw
- * arguments keep the text exactly as sent.
+ * injected text below the box and leave it looking empty. The first line's indent
+ * goes too, because spaces wrap and pad just as blank lines do. Blank includes
+ * format characters such as a zero-width space, which draw nothing either. The
+ * raw arguments keep the text exactly as sent.
  */
 function storedText(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
