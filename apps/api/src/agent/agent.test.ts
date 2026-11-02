@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { simulateReadableStream } from 'ai'
+import { APICallError, simulateReadableStream } from 'ai'
 import { createLocalWorkspaceApi, createWorkspaceStore } from '../workspace/store'
-import { createCopilotAgent, MAX_OUTPUT_TOKENS, MAX_STEPS } from './agent'
+import { createCopilotAgent, MAX_MODEL_RETRIES, MAX_OUTPUT_TOKENS, MAX_STEPS } from './agent'
 import { createTools } from './tools'
 import type {
   LanguageModelV3,
@@ -17,6 +17,18 @@ const NO_USAGE: LanguageModelV3Usage = {
     cacheWrite: undefined,
   },
   outputTokens: { total: undefined, text: undefined, reasoning: undefined },
+}
+
+/** Groq's answer at its per-minute limit, with a wait short enough for a test. */
+function rateLimited() {
+  return new APICallError({
+    message: 'Rate limit reached on tokens per minute (TPM)',
+    url: 'https://groq.test',
+    requestBodyValues: {},
+    statusCode: 429,
+    responseHeaders: { 'retry-after-ms': '1' },
+    isRetryable: true,
+  })
 }
 
 /** A model that answers in one step and reports what the turn cost. */
@@ -106,6 +118,31 @@ function loopingModel(inputTokens?: number, outputTokens?: number) {
 const tools = createTools(createLocalWorkspaceApi(createWorkspaceStore()))
 
 describe('createCopilotAgent', () => {
+  it('waits out a rate limit that a few seconds will clear', async () => {
+    const answering = answeringModel(10, 5)
+    const refusals = MAX_MODEL_RETRIES
+    let calls = 0
+    const model: LanguageModelV3 = {
+      ...answering,
+      doStream: (options) => {
+        calls += 1
+        return calls <= refusals ? Promise.reject(rateLimited()) : answering.doStream(options)
+      },
+    }
+    const agent = createCopilotAgent({
+      model,
+      instructions: 'test',
+      tools: createTools(createLocalWorkspaceApi(createWorkspaceStore())),
+      approvalSecret: 'test-secret',
+    })
+
+    const stream = await agent.stream({ prompt: 'hello' })
+    await stream.consumeStream()
+
+    expect(calls).toBe(refusals + 1)
+    expect(await stream.finishReason).toBe('stop')
+  })
+
   it('stops a runaway loop at the step budget', async () => {
     const { model, seen } = loopingModel()
     const agent = createCopilotAgent({

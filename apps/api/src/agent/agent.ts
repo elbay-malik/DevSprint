@@ -10,6 +10,16 @@ import type { DevSprintTools } from './tools'
 export const MAX_STEPS = 6
 
 /**
+ * Retries on one model call. Groq's free tier allows 8,000 tokens a minute and a
+ * call here costs about 3,000, so the third call of a turn can be refused, and
+ * Groq asks for a wait of seconds. With no second provider since ADR-0026, a
+ * refusal ends the turn unless it is waited out. The SDK honours the Retry-After
+ * and backs off otherwise, about 14 seconds at worst, and a refused call is
+ * refunded (spend-meter.ts), so a retry costs the budget nothing.
+ */
+export const MAX_MODEL_RETRIES = 3
+
+/**
  * Most a single model call may write. Without it a client can ask for an essay
  * and let the provider's default decide what that costs. Real release-notes
  * drafts fit well inside it. One at the 20,000-character limit would not, and
@@ -99,7 +109,7 @@ export function createCopilotAgent({
     // Low but not zero: the agent picks tools, it does not need to be creative.
     temperature: 0.2,
     maxOutputTokens: MAX_OUTPUT_TOKENS,
-    maxRetries: 1,
+    maxRetries: MAX_MODEL_RETRIES,
   })
 }
 
