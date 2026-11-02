@@ -1,37 +1,30 @@
 /**
- * Model routing per ADR-0005: Groq primary, Gemini Flash fallback, selected
- * from the Worker env. The Groq model is `openai/gpt-oss-120b`: Groq retired
+ * Model routing per ADR-0005: Groq, selected from the Worker env. ADR-0026
+ * removed the Gemini fallback. The Groq model is `openai/gpt-oss-120b`: Groq retired
  * `llama-3.3-70b-versatile`, and gpt-oss beat the one other tool-calling model
  * it offers on the live scenario evals (ADR-0021). With no keys at all the
  * scripted mock keeps local dev and CI running end-to-end. API keys are read
  * here and passed straight to the provider factories — never logged.
  */
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createGroq } from '@ai-sdk/groq'
-import { APICallError } from 'ai'
 import type { AppEnv } from '../env'
 
 /**
  * Only the model settings — routing has no business reading the workspace
  * binding or the approval secret.
  */
-export type ModelEnv = Pick<
-  AppEnv,
-  'MODEL_PROVIDER' | 'GROQ_API_KEY' | 'GOOGLE_GENERATIVE_AI_API_KEY' | 'GROQ_MODEL' | 'GEMINI_MODEL'
->
-import { withFallback } from './fallback-model'
+export type ModelEnv = Pick<AppEnv, 'MODEL_PROVIDER' | 'GROQ_API_KEY' | 'GROQ_MODEL'>
 import { createMockModel } from './mock-model'
 import type { LanguageModelV3 } from './provider-types'
 
 export const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-120b'
-export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash'
 
-const MODEL_PROVIDERS = ['auto', 'groq', 'gemini', 'mock'] as const
+const MODEL_PROVIDERS = ['auto', 'groq', 'mock'] as const
 export type ModelProvider = (typeof MODEL_PROVIDERS)[number]
 
 export interface ResolvedModel {
   model: LanguageModelV3
-  /** Human-readable route, e.g. `groq:llama-3.3-70b-versatile+fallback:gemini:gemini-2.5-flash`. */
+  /** Human-readable route, e.g. `groq:openai/gpt-oss-120b`. */
   label: string
 }
 
@@ -52,19 +45,6 @@ function nonEmpty(value: string | undefined): string | undefined {
   return value !== undefined && value.trim().length > 0 ? value.trim() : undefined
 }
 
-function requireKey(key: string | undefined, provider: 'groq' | 'gemini', envName: string): string {
-  if (key === undefined) {
-    throw new ModelConfigError(`MODEL_PROVIDER=${provider} requires ${envName} to be set.`)
-  }
-  return key
-}
-
-function logFallback(error: unknown): void {
-  // Status only — provider error payloads may echo request details.
-  const statusCode = APICallError.isInstance(error) ? error.statusCode : undefined
-  console.warn(JSON.stringify({ event: 'model-fallback', from: 'groq', to: 'gemini', statusCode }))
-}
-
 let warnedMock = false
 
 /** Warn once per isolate, not once per request. */
@@ -72,7 +52,7 @@ function mockModel(): ResolvedModel {
   if (!warnedMock) {
     warnedMock = true
     console.warn(
-      'No GROQ_API_KEY or GOOGLE_GENERATIVE_AI_API_KEY set — using the scripted mock model. ' +
+      'No GROQ_API_KEY set — using the scripted mock model. ' +
         'Copy apps/api/.dev.vars.example to .dev.vars to talk to a real provider.',
     )
   }
@@ -88,35 +68,18 @@ export function resolveModel(env: ModelEnv): ResolvedModel {
   }
 
   const groqKey = nonEmpty(env.GROQ_API_KEY)
-  const geminiKey = nonEmpty(env.GOOGLE_GENERATIVE_AI_API_KEY)
   const groqId = nonEmpty(env.GROQ_MODEL) ?? DEFAULT_GROQ_MODEL
-  const geminiId = nonEmpty(env.GEMINI_MODEL) ?? DEFAULT_GEMINI_MODEL
   const groq = (apiKey: string) => createGroq({ apiKey })(groqId)
-  const gemini = (apiKey: string) => createGoogleGenerativeAI({ apiKey })(geminiId)
 
   switch (provider) {
     case 'mock':
       return { model: createMockModel(), label: 'mock' }
     case 'groq':
-      return { model: groq(requireKey(groqKey, 'groq', 'GROQ_API_KEY')), label: `groq:${groqId}` }
-    case 'gemini':
-      return {
-        model: gemini(requireKey(geminiKey, 'gemini', 'GOOGLE_GENERATIVE_AI_API_KEY')),
-        label: `gemini:${geminiId}`,
+      if (groqKey === undefined) {
+        throw new ModelConfigError('MODEL_PROVIDER=groq requires GROQ_API_KEY to be set.')
       }
+      return { model: groq(groqKey), label: `groq:${groqId}` }
     case 'auto':
-      if (groqKey !== undefined && geminiKey !== undefined) {
-        return {
-          model: withFallback({
-            primary: groq(groqKey),
-            fallback: gemini(geminiKey),
-            onFallback: logFallback,
-          }),
-          label: `groq:${groqId}+fallback:gemini:${geminiId}`,
-        }
-      }
-      if (groqKey !== undefined) return { model: groq(groqKey), label: `groq:${groqId}` }
-      if (geminiKey !== undefined) return { model: gemini(geminiKey), label: `gemini:${geminiId}` }
-      return mockModel()
+      return groqKey === undefined ? mockModel() : { model: groq(groqKey), label: `groq:${groqId}` }
   }
 }

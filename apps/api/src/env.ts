@@ -11,14 +11,11 @@
  * rely on that, so the optional declaration below replaces the generated one.
  */
 export type AppEnv = Omit<Env, 'MODEL_PROVIDER'> & {
-  /** Groq API key — primary provider (ADR-0005). */
+  /** Groq API key (ADR-0026). */
   GROQ_API_KEY?: string
-  /** Google Generative AI key — Gemini Flash fallback (ADR-0005). */
-  GOOGLE_GENERATIVE_AI_API_KEY?: string
-  /** 'auto' (default) | 'groq' | 'gemini' | 'mock' — see agent/model.ts. */
+  /** 'auto' (default) | 'groq' | 'mock' — see agent/model.ts. */
   MODEL_PROVIDER?: string
   GROQ_MODEL?: string
-  GEMINI_MODEL?: string
   /**
    * Signs tool approvals so a forged one cannot execute a write. Unset falls
    * back to a random per-isolate secret — fine locally, not for a deploy.

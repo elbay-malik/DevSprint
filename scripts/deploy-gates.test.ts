@@ -50,19 +50,12 @@ void test('every reason is reported at once', () => {
 })
 
 const GROQ = 'GROQ_API_KEY'
-const GEMINI = 'GOOGLE_GENERATIVE_AI_API_KEY'
-
-void test('auto needs either provider key', () => {
-  assert.match(missingProviderSecret('auto', new Set()) ?? '', /GROQ_API_KEY or GOOGLE_/)
-  assert.equal(missingProviderSecret('auto', new Set([GROQ])), undefined)
-  assert.equal(missingProviderSecret('auto', new Set([GEMINI])), undefined)
-})
-
-void test('a named provider needs its own key, not the other one', () => {
-  assert.equal(missingProviderSecret('groq', new Set([GEMINI])), GROQ)
-  assert.equal(missingProviderSecret('groq', new Set([GROQ])), undefined)
-  assert.equal(missingProviderSecret('gemini', new Set([GROQ])), GEMINI)
-  assert.equal(missingProviderSecret('gemini', new Set([GEMINI])), undefined)
+void test('auto and groq both need the Groq key, and a Google key does not stand in', () => {
+  for (const provider of ['auto', 'groq']) {
+    assert.equal(missingProviderSecret(provider, new Set()), GROQ)
+    assert.equal(missingProviderSecret(provider, new Set(['GOOGLE_GENERATIVE_AI_API_KEY'])), GROQ)
+    assert.equal(missingProviderSecret(provider, new Set([GROQ])), undefined)
+  }
 })
 
 void test('mock needs no key', () => {
@@ -74,8 +67,12 @@ void test('a provider the api would reject is named, and is not a missing key', 
   assert.equal(missingProviderSecret('openai', new Set()), undefined)
 })
 
+void test('gemini is no longer a provider (ADR-0026)', () => {
+  assert.match(unknownProvider('gemini') ?? '', /'gemini'/)
+})
+
 void test('every provider the api accepts is known', () => {
-  for (const provider of ['auto', 'groq', 'gemini', 'mock']) {
+  for (const provider of ['auto', 'groq', 'mock']) {
     assert.equal(unknownProvider(provider), undefined)
   }
 })
@@ -107,8 +104,8 @@ void test('the provider comes from the config, and defaults to auto without one'
   )) as typeof import('./smoke.ts')
   const config = join(base, 'apps/api/wrangler.jsonc')
 
-  writeFileSync(config, '{\n  // jsonc\n  "vars": { "MODEL_PROVIDER": "gemini" },\n}\n')
-  assert.equal(copy.expectedModelProvider(), 'gemini')
+  writeFileSync(config, '{\n  // jsonc\n  "vars": { "MODEL_PROVIDER": "mock" },\n}\n')
+  assert.equal(copy.expectedModelProvider(), 'mock')
   writeFileSync(config, '{ "vars": {} }\n')
   assert.equal(copy.expectedModelProvider(), 'auto')
 })

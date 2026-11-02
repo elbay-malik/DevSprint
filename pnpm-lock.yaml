@@ -6,9 +6,6 @@ settings:
 
 catalogs:
   default:
-    '@ai-sdk/google':
-      specifier: 3.0.121
-      version: 3.0.121
     '@ai-sdk/groq':
       specifier: 3.0.64
       version: 3.0.64
@@ -164,9 +161,6 @@ importers:
 
   apps/api:
     dependencies:
-      '@ai-sdk/google':
-        specifier: 'catalog:'
-        version: 3.0.121(zod@4.6.7)
       '@ai-sdk/groq':
         specifier: 'catalog:'
         version: 3.0.64(zod@4.6.7)
@@ -332,12 +326,6 @@ packages:
 
   '@ai-sdk/gateway@3.0.189':
     resolution: {integrity: sha512-roPKojHenQm7U77kNNE0w586jP2vnjxaNx/+KFSQkJRLLAxrg7yUwZQfyOEizoTxdaltu+ZIlLRTw09X3XbGvQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
-  '@ai-sdk/google@3.0.121':
-    resolution: {integrity: sha512-By38FKjOn5QDN+1UK4yI7gbssSe3tK9mvEKrkP3QiHJY+eDXxOo2jT11Cw3QD8b4OWcSIvoPp4+IT4ZaVv+p8g==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -3337,12 +3325,6 @@ snapshots:
       '@ai-sdk/provider': 3.0.15
       '@ai-sdk/provider-utils': 4.0.50(zod@4.6.7)
       '@vercel/oidc': 3.2.0
-      zod: 4.6.7
-
-  '@ai-sdk/google@3.0.121(zod@4.6.7)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.15
-      '@ai-sdk/provider-utils': 4.0.50(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/groq@3.0.64(zod@4.6.7)':

@@ -191,7 +191,7 @@ describe('approval gates (scenario S-B)', () => {
   })
 
   it('still resumes with call metadata on the tool parts', async () => {
-    // Gemini reads its thought signature back from here, so nothing may strip it.
+    // A provider may read its own metadata back from here, so nothing may strip it.
     const first = await post([userMessage(CLOSE_OUT)])
     const assistant = answeredAssistantMessage(first.chunks, () => ({ approved: true }))
     const withMetadata = {

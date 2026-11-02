@@ -92,7 +92,7 @@ describe('stripUserProviderMetadata', () => {
     expect(stripped?.parts).toEqual([text('hi')])
   })
 
-  it('leaves assistant parts alone, since Gemini needs its thought signature back', () => {
+  it('leaves assistant parts alone, which the provider wrote itself', () => {
     const assistant = {
       id: 'a1',
       role: 'assistant',
