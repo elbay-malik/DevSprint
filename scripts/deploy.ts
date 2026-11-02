@@ -45,7 +45,13 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import ts from 'typescript'
-import { deployRefusal, missingProviderSecret, rollbackHints, type App } from './deploy-gates.ts'
+import {
+  deployRefusal,
+  missingProviderSecret,
+  unknownProvider,
+  rollbackHints,
+  type App,
+} from './deploy-gates.ts'
 import { expectedModelProvider, smoke } from './smoke.ts'
 
 const ROOT = join(import.meta.dirname, '..')
@@ -150,7 +156,7 @@ function deployApi(options: { bootstrap: boolean; secretsFile: string | undefine
 async function main() {
   const planOnly = process.argv.includes('--plan')
 
-  if (!planOnly && !process.env.GITHUB_ACTIONS) {
+  if (!planOnly && process.env.GITHUB_ACTIONS !== 'true') {
     if (process.argv.includes(SKIP_GIT_GATE)) {
       console.warn(`${SKIP_GIT_GATE}: deploying this checkout as it is, whatever its git state.`)
     } else {
@@ -161,8 +167,10 @@ async function main() {
   // Built first so a type or build error stops the run before anything ships.
   if (!planOnly) must('building the SPA', run('pnpm', ['--filter', '@devsprint/web', 'build']))
 
-  const firstDeploy = !workerExists('devsprint-mcp-issues')
   const apiExists = workerExists('devsprint-api')
+  // Either one missing needs the bootstrap: the mcp Worker binds the api's Durable
+  // Object and the api binds the mcp entrypoint, so neither can go first alone.
+  const firstDeploy = !apiExists || !workerExists('devsprint-mcp-issues')
   // The smoke check's board write resets the board afterwards, so it runs only
   // while nobody can be using it. The api holds the Durable Object, so a new api
   // is what says that: a recreated MCP Worker leaves the live board in place.
@@ -174,6 +182,7 @@ async function main() {
   const needsSecret = !apiSecrets.has('TOOL_APPROVAL_SECRET')
 
   const provider = expectedModelProvider()
+  const unknown = unknownProvider(provider)
   const missing = missingProviderSecret(provider, apiSecrets)
   const missingLine = missing && `MODEL_PROVIDER=${provider} needs ${missing} on the api`
 
@@ -225,6 +234,7 @@ async function main() {
   // on: set the keys afterwards, or its smoke check will fail.
   const setAfterDeploy = `${missingLine}; a new Worker has no secrets yet, so set it after this deploy.`
   if (planOnly) {
+    if (unknown) console.log(`  a real deploy would stop here: ${unknown}`)
     if (missingLine) {
       console.log(
         `  ${apiExists ? `a real deploy would stop here: ${missingLine}` : setAfterDeploy}`,
@@ -232,6 +242,7 @@ async function main() {
     }
     return
   }
+  if (unknown) refuse(`${unknown}. Commit one of auto, groq, gemini or mock.`)
   if (missingLine) {
     if (apiExists) {
       refuse(`${missingLine}. Set it with \`wrangler secret put\`, or commit MODEL_PROVIDER=mock.`)

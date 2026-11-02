@@ -353,6 +353,8 @@ Before it ships anything, the script can refuse:
 - **When the api exists and lacks the key `MODEL_PROVIDER` needs.** `auto` needs `GROQ_API_KEY` or
   `GOOGLE_GENERATIVE_AI_API_KEY`, and would otherwise serve the scripted mock. A new api only gets a
   warning, because a Worker that does not exist cannot hold secrets yet.
+- **When `MODEL_PROVIDER` is not one the api knows,** whether the api exists or not, because no
+  secret can fix that.
 
 `--plan` is never blocked. It reports a missing key as a line in the plan, saying what a real deploy
 would do: stop if the api exists, warn and carry on if it is new.

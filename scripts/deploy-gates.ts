@@ -29,6 +29,17 @@ const GROQ = 'GROQ_API_KEY'
 const GEMINI = 'GOOGLE_GENERATIVE_AI_API_KEY'
 
 /**
+ * A MODEL_PROVIDER that apps/api/src/agent/model.ts would reject on every chat.
+ * Unlike a missing key, no secret set after the deploy can fix it, so a first
+ * deploy refuses it too.
+ */
+export function unknownProvider(provider: string): string | undefined {
+  return ['auto', 'groq', 'gemini', 'mock'].includes(provider)
+    ? undefined
+    : `MODEL_PROVIDER='${provider}' is not one the api knows`
+}
+
+/**
  * What the api lacks to run MODEL_PROVIDER, or undefined if it has it. `auto`
  * with neither key does not fail: apps/api/src/agent/model.ts falls back to the
  * scripted mock, which is right for a fresh clone and wrong for the live demo.
@@ -47,7 +58,7 @@ export function missingProviderSecret(
     case 'auto':
       return secrets.has(GROQ) || secrets.has(GEMINI) ? undefined : `${GROQ} or ${GEMINI}`
     default:
-      return `a MODEL_PROVIDER the api knows, not '${provider}'`
+      return undefined
   }
 }
 
