@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { readShell } from './smoke.ts'
+import { limitOnTurn, readShell } from './smoke.ts'
 
 const WEB = 'https://web.test'
 const shell = (entry: string) =>
@@ -36,4 +36,13 @@ void test('does not wait on a shell that names no entry', async (t) => {
   const read = await readShell(WEB, 5, 0)
   assert.equal(read.entry, '')
   assert.equal(stub.mock.callCount(), 1)
+})
+
+void test('names a spend limit, and only a known one', () => {
+  const on = (limit: string) => limitOnTurn(new Headers({ 'x-devsprint-limit': limit }))
+  assert.equal(on('budget'), 'budget')
+  assert.equal(on('client-budget'), 'client-budget')
+  assert.equal(on('rate'), 'rate')
+  assert.equal(on('something-else'), undefined)
+  assert.equal(limitOnTurn(new Headers()), undefined)
 })
