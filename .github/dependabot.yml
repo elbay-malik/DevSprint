@@ -22,6 +22,19 @@ updates:
         update-types: ['version-update:semver-major']
       - dependency-name: vue
         versions: ['>=3.6.0']
+      # TypeScript 7 drops the API typescript-eslint and Vue's compiler call, and
+      # scripts/smoke.ts reads wrangler.jsonc with it. @types/node follows the
+      # Node line in .node-version. The other three need a migration, not a bump.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+      - dependency-name: vitest
+        update-types: ['version-update:semver-major']
+      - dependency-name: pinia
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@vueuse/core'
+        update-types: ['version-update:semver-major']
   # Bumps the commit pins in ci.yml and the version comment beside each one.
   - package-ecosystem: github-actions
     directory: /
