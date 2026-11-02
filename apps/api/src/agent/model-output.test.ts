@@ -137,18 +137,27 @@ describe('compactIssueListForModel', () => {
     expect(compactIssueListForModel({ output: undefined })).toEqual({ type: 'json', value: null })
     expect(compactIssueListForModel({ output: 'plain' })).toEqual({ type: 'text', value: 'plain' })
 
+    const short = { ok: true, data: { issues: [null, 7, 'row', { title: 7, labels: 'x' }] } }
+    expect(modelSees(short)).toEqual(short)
+  })
+
+  it('never lets anything past the limit, whatever the shape', () => {
     const big = 'z'.repeat(MODEL_ISSUE_LIST_CHARS + 1)
     for (const output of [
+      big,
       { ok: false, error: { code: 'INTERNAL', message: big } },
       { ok: true, data: big },
       { ok: true, data: { other: big } },
       [big],
+      // A list whose rows hold what compacting does not touch.
+      { ok: true, data: { issues: [big, null, 7, { title: 7, labels: big }] } },
+      { ok: true, data: { issues: [{ ...worstRow(1), extra: big }] } },
     ]) {
-      expect(compactIssueListForModel({ output })).toEqual({ type: 'json', value: output })
+      const result = compactIssueListForModel({ output })
+      const size =
+        result.type === 'text' ? result.value.length : JSON.stringify(result.value).length
+      expect(size).toBeLessThanOrEqual(MODEL_ISSUE_LIST_CHARS)
+      expect(result.type).toBe('text')
     }
-
-    const odd = { ok: true, data: { issues: [big, null, 7, { title: 7, labels: big }] } }
-    expect(modelSees(odd).data.issues).toEqual([big, null, 7, { title: 7, labels: big }])
-    expect(modelSees(odd).data.truncated).toBe(true)
   })
 })
