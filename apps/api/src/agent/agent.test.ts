@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { APICallError, simulateReadableStream } from 'ai'
 import { createLocalWorkspaceApi, createWorkspaceStore } from '../workspace/store'
-import { createCopilotAgent, MAX_MODEL_RETRIES, MAX_OUTPUT_TOKENS, MAX_STEPS } from './agent'
+import { createCopilotAgent, MAX_OUTPUT_TOKENS, MAX_STEPS } from './agent'
 import { createTools } from './tools'
 import type {
   LanguageModelV3,
@@ -120,7 +120,8 @@ const tools = createTools(createLocalWorkspaceApi(createWorkspaceStore()))
 describe('createCopilotAgent', () => {
   it('waits out a rate limit that a few seconds will clear', async () => {
     const answering = answeringModel(10, 5)
-    const refusals = MAX_MODEL_RETRIES
+    // Three, not the constant: a test that read it would pass at any value.
+    const refusals = 3
     let calls = 0
     const model: LanguageModelV3 = {
       ...answering,
