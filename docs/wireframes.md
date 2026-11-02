@@ -66,7 +66,7 @@ Annotations:
   (Is the sprint on track?) (Draft release notes) (Close out the sprint)
   (Deploy to staging) (Mark DS-42 as done)
   Every visitor shares this board. It resets at 00:00 UTC.
-  Messages go to third-party AI providers (Groq, Google Gemini) and may be logged.
+  Messages go to a third-party AI provider (Groq) and may be logged.
   Don’t enter personal information.
   Any MCP client can work on it too: [Copy]
   https://devsprint-mcp-issues.eleo-666.workers.dev/mcp

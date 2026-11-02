@@ -14,8 +14,8 @@ An AI copilot for a sprint board, built to show how an agent can be **useful wit
 
 ## Try it
 
-The live demo runs a **real model**: Groq's `openai/gpt-oss-120b`, with Gemini 3.8 Flash taking
-over when Groq fails or hits its rate limit. Ask it anything about the board. These six prompts
+The live demo runs a **real model**: Groq's `openai/gpt-oss-120b`. It has no fallback, so a busy
+minute can end in a rate-limit message. Ask it anything about the board. These six prompts
 are the demo scenarios, and each one exercises a different part of the system. A real model words
 its answers its own way, and may take a slightly different route than described here:
 
@@ -31,8 +31,8 @@ its answers its own way, and may take a slightly different route than described 
 The board is shared by every visitor and resets itself at midnight UTC. **Reset board** in the
 header restores it at any time, once you confirm it for everyone.
 
-Messages go to third-party AI providers (Groq, Google Gemini) and may be logged. Don't enter
-personal information.
+Messages go to a third-party AI provider (Groq) and may be logged. Don't enter personal
+information.
 
 ## How it works
 
@@ -44,7 +44,7 @@ flowchart LR
   Api --> DO[("WorkspaceDO<br/>board, approval ledger,<br/>token budget, reset alarm")]
   Mcp --> DO
   Api -.->|"OTLP/HTTP JSON, optional"| Langfuse["Langfuse"]
-  Api -.->|"Groq, Gemini fallback, or mock"| Model["Model"]
+  Api -.->|"Groq or mock"| Model["Model"]
 ```
 
 A turn starts when the SPA streams a question to the **api Worker**. There, an AI SDK v6
@@ -135,17 +135,15 @@ pnpm dev        # web on :5173, api on :8787, mcp-issues on :8788
 ```
 
 That runs end to end on the scripted model, with no keys and no account. To use a real model
-locally, copy `apps/api/.dev.vars.example` to `apps/api/.dev.vars` and set `GROQ_API_KEY` and/or
-`GOOGLE_GENERATIVE_AI_API_KEY`.
+locally, copy `apps/api/.dev.vars.example` to `apps/api/.dev.vars` and set `GROQ_API_KEY`.
 
 #### Model providers
 
-Routing follows [ADR-0005](docs/adr/0005-model-routing-groq-primary-gemini-fallback.md) and
-[ADR-0021](docs/adr/0021-a-live-model-on-the-demo.md). Groq `openai/gpt-oss-120b` is primary,
-since Groq retired `llama-3.3-70b-versatile`. Gemini `gemini-3.8-flash` is the fallback, since
-Google no longer offers `gemini-2.5-flash` to new users. It is used when Groq fails with a
-retryable error, a 429 or a 5xx. `MODEL_PROVIDER` takes `auto`, `groq`, `gemini` or `mock`.
-`wrangler.jsonc` sets `auto`, which falls back to the mock when no keys are set, so a
+Groq `openai/gpt-oss-120b` is the only live model
+([ADR-0021](docs/adr/0021-a-live-model-on-the-demo.md)). The Gemini fallback was removed, because
+Google's terms allow only its paid services for an app open to users in the EEA, Switzerland or
+the UK ([ADR-0026](docs/adr/0026-groq-only-on-the-public-demo.md)). `MODEL_PROVIDER` takes `auto`,
+`groq` or `mock`. `wrangler.jsonc` sets `auto`, which falls back to the mock when no key is set, so a
 fresh clone still runs without any. Each response reports the resolved route in the `X-DevSprint-Model` header.
 Three spend controls bound a live model: 60 chat requests a minute per IP, a 25,000-token daily
 share per client, and a 100,000-token daily cap. The mock never counts against the share or the cap.

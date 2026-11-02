@@ -3,7 +3,7 @@
 A 3½-minute screen recording of the live demo, shot by shot. Narration lines are suggestions; say
 them in your own words.
 
-**The live site runs a real model** (Groq gpt-oss-120b, Gemini fallback; ADR-0021), so each take
+**The live site runs a real model** (Groq gpt-oss-120b; ADR-0021, ADR-0026), so each take
 can word things differently, and may take a slightly different route. The shots below were
 rehearsed against the scripted mock, which is what the quoted outputs show. Two shots differ in
 practice:
