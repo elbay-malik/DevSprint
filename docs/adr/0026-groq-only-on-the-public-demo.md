@@ -25,8 +25,10 @@ because ADR-0005's budget target is zero and the free tier's 20 requests a day n
 ## Consequences
 
 - Positive: the demo no longer sends visitors' messages to a service its terms rule out here.
-- Negative: when Groq rate-limits at about 8K tokens a minute, or fails, the turn ends in an error
-  rather than moving to another model. The demo video needs its takes spaced out.
+- Negative: there is no second model. A per-minute refusal at about 8K tokens is waited out, for up
+  to about 14 seconds (`MAX_MODEL_RETRIES`), and anything longer ends the turn in an error. So do
+  Groq's 200K tokens a day, and failures a retry can't help, such as a tool call its validation
+  refuses. The demo video needs its takes spaced out.
 - Groq's [Services Agreement](https://console.groq.com/docs/legal/services-agreement), last modified
   June 22, 2026, allows making its services available to end users and bars training on inputs and
   outputs. No paid-plan or regional condition turned up, but only part of that text was read word
