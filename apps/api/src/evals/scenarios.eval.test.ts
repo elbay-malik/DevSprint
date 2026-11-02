@@ -16,7 +16,7 @@ import { CLAIMS_ALL_FIVE_DONE } from './claims'
 import { runScenario } from './harness'
 import { resetApprovalSigningState } from '../agent/approvals'
 
-/** Set to `groq` or `gemini` to run the same assertions against a live model. */
+/** Set to `groq` to run the same assertions against a live model. */
 const modelProvider = process.env.EVAL_MODEL_PROVIDER ?? 'mock'
 
 /**
@@ -28,7 +28,7 @@ const liveEnv: Record<string, unknown> =
   modelProvider === 'mock'
     ? {}
     : Object.fromEntries(
-        (['GROQ_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GROQ_MODEL', 'GEMINI_MODEL'] as const)
+        (['GROQ_API_KEY', 'GROQ_MODEL'] as const)
           .filter((name) => process.env[name])
           .map((name) => [name, process.env[name]]),
       )

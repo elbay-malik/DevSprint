@@ -1,6 +1,6 @@
 /**
  * Scripted stand-in for a real model: keyless local dev, CI and e2e runs
- * without spending Groq/Gemini quota. It speaks the LanguageModelV3 streaming
+ * without spending Groq quota. It speaks the LanguageModelV3 streaming
  * protocol, so `streamText` drives it exactly like a provider. On a user turn
  * it picks ONE tool by keyword (restricted to the tools the caller registered);
  * on a tool turn it streams a short summary grounded in the tool output. The

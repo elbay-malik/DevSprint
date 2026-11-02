@@ -307,27 +307,27 @@ void test('an existing api with no provider key is refused before anything ships
   const repo = makeRepo(t)
   const run = repo.deploy(repo.main, [], { STUB_SECRETS: secretsJson('TOOL_APPROVAL_SECRET') })
   assert.notEqual(run.status, 0, run.output)
-  assert.match(run.output, /Refusing to deploy: MODEL_PROVIDER=auto needs GROQ_API_KEY or GOOGLE_/)
+  assert.match(run.output, /Refusing to deploy: MODEL_PROVIDER=auto needs GROQ_API_KEY/)
   assert.ok(!run.calls.some((call) => call.endsWith(' deploy')), run.calls.join(' | '))
 })
 
-void test('an existing api with one provider key deploys', (t) => {
+void test('an existing api with the Groq key deploys', (t) => {
   const repo = makeRepo(t)
   assertDeployed(
     repo.deploy(repo.main, [], {
-      STUB_SECRETS: secretsJson('TOOL_APPROVAL_SECRET', 'GOOGLE_GENERATIVE_AI_API_KEY'),
+      STUB_SECRETS: secretsJson('TOOL_APPROVAL_SECRET', 'GROQ_API_KEY'),
     }),
   )
 })
 
-void test('a named provider is held to its own key', (t) => {
+void test('a Google key left on the api does not stand in for the Groq key', (t) => {
   const repo = makeRepo(t)
   const run = repo.deploy(repo.main, [], {
-    STUB_PROVIDER: 'gemini',
-    STUB_SECRETS: secretsJson('TOOL_APPROVAL_SECRET', 'GROQ_API_KEY'),
+    STUB_PROVIDER: 'groq',
+    STUB_SECRETS: secretsJson('TOOL_APPROVAL_SECRET', 'GOOGLE_GENERATIVE_AI_API_KEY'),
   })
   assert.notEqual(run.status, 0, run.output)
-  assert.match(run.output, /MODEL_PROVIDER=gemini needs GOOGLE_GENERATIVE_AI_API_KEY/)
+  assert.match(run.output, /MODEL_PROVIDER=groq needs GROQ_API_KEY/)
 })
 
 void test('MODEL_PROVIDER=mock deploys with no provider key', (t) => {

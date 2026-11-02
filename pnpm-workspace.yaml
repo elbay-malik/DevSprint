@@ -60,7 +60,6 @@ catalog:
   ai: 6.0.277
   '@ai-sdk/vue': 3.0.277
   '@ai-sdk/groq': 3.0.64
-  '@ai-sdk/google': 3.0.121
   # MCP (Phase 6). Both are mid-split, exactly like the `ai` line: @ai-sdk/mcp
   # `latest` is 2.x, and the MCP SDK is splitting into
   # @modelcontextprotocol/{server,client}@2. Stay on these lines: @ai-sdk/mcp
@@ -71,7 +70,6 @@ catalog:
 minimumReleaseAgeExclude:
   - '@ai-sdk/mcp@1.0.78'
   - '@ai-sdk/gateway@3.0.189'
-  - '@ai-sdk/google@3.0.121'
   - '@ai-sdk/groq@3.0.64'
   - '@ai-sdk/provider@3.0.15'
   - '@ai-sdk/provider-utils@4.0.50'

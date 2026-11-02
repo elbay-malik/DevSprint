@@ -242,7 +242,7 @@ async function main() {
     }
     return
   }
-  if (unknown) refuse(`${unknown}. Commit one of auto, groq, gemini or mock.`)
+  if (unknown) refuse(`${unknown}. Commit one of auto, groq or mock.`)
   if (missingLine) {
     if (apiExists) {
       refuse(`${missingLine}. Set it with \`wrangler secret put\`, or commit MODEL_PROVIDER=mock.`)

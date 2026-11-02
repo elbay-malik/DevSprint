@@ -56,8 +56,8 @@ export function chatRequestRefusal(messages: unknown[]): string | undefined {
  * The transcript with client-supplied provider options removed from user text,
  * where the conversion would otherwise pass them straight to the provider.
  *
- * User parts only. On assistant parts this same metadata is how Gemini gets its
- * thought signature back on an approval resume, and it degrades without it.
+ * User parts only. On assistant parts this metadata is what the provider itself
+ * wrote on an earlier step, and an approval resume sends it back as it came.
  *
  * Returns a copy of the messages it changes, and leaves the rest as they are.
  */

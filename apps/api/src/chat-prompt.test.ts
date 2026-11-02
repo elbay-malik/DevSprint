@@ -124,7 +124,7 @@ describe('the prompt a chat request becomes', () => {
     expect(JSON.stringify(prompt)).not.toContain('by-the-client')
   })
 
-  it('keeps provider metadata on assistant parts, or Gemini loses its thought signature', async () => {
+  it('keeps provider metadata on assistant parts, which the provider wrote itself', async () => {
     const prompt = await promptFor([
       { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'first' }] },
       {
