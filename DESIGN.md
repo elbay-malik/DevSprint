@@ -297,7 +297,7 @@ the copilot follows, divided by a hairline, with a full screen of its own.
 - **First run:** the empty transcript is the product's help. One 14px Graphite line says what to
   ask, then a labelled group ("Suggested requests") of five suggestion chips, wrapping, and then
   12px Graphite lines: "Every visitor shares this board. It resets at 00:00 UTC.", then "Messages
-  go to third-party AI providers (Groq, Google Gemini) and may be logged. Don’t enter personal
+  go to a third-party AI provider (Groq) and may be logged. Don’t enter personal
   information.", then "Any MCP client can work on it too:" with a ghost Copy beside it, then the public MCP endpoint on a
   line of its own, in mono and the text colour (the live address alone nearly fills the 440px
   column, so a Copy after it always wrapped onto a line by itself). Copy reads "Copied" for 2s;

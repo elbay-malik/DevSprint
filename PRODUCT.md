@@ -54,8 +54,7 @@ Success, from `docs/product-brief.md`:
 - **API:** https://devsprint-api.eleo-666.workers.dev
 - **Public MCP endpoint:** `https://devsprint-mcp-issues.eleo-666.workers.dev/mcp`
 
-All three run on Cloudflare Workers. The demo models are Groq `openai/gpt-oss-120b`, with Gemini
-`gemini-3.8-flash` as the fallback.
+All three run on Cloudflare Workers. The demo model is Groq `openai/gpt-oss-120b` (ADR-0026).
 
 Two panes, side by side:
 
@@ -92,8 +91,8 @@ storyboard; recording pending), then the ADRs and tests on GitHub.
 
 - No authentication and no multi-tenancy. Mobile app, real tracker or CI integrations, and
   persistence beyond the demo workspace are non-goals.
-- Free-tier model capacity bounds use: Groq allows about 8K tokens a minute, and the Gemini
-  fallback about 20 requests a day. A per-IP rate limit, a daily token share per client and a daily
+- Free-tier model capacity bounds use: Groq allows about 8K tokens a minute, and there is no
+  fallback when it runs out. A per-IP rate limit, a daily token share per client and a daily
   token cap protect it.
 - Chat text renders a safe markdown subset. There is no `v-html` and there are no links (ADR-0022).
 

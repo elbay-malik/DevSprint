@@ -1,6 +1,6 @@
 # ADR-0021: A live model on the demo, and what the scripted mock had been hiding
 
-- Status: Accepted
+- Status: Accepted; the Gemini fallback was removed by [ADR-0026](0026-groq-only-on-the-public-demo.md)
 - Date: 2026-10-22
 - Deciders: repo owner (solo project)
 

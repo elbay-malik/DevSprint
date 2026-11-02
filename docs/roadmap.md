@@ -9,7 +9,7 @@ a v1.0.0 release asset, is left.
 Since the Phase 15 write-up: the public MCP endpoint is rate-limited, with an internal entrypoint
 for the agent (ADR-0020); deploys go MCP Worker → api → SPA, with `pnpm deploy:all --plan`
 (ADR-0019 status note); the live demo runs a real model, `MODEL_PROVIDER=auto` with Groq
-`openai/gpt-oss-120b` and a Gemini `gemini-3.8-flash` fallback (ADR-0021); chat renders a safe
+`openai/gpt-oss-120b` (ADR-0021, ADR-0026); chat renders a safe
 markdown subset without `v-html` (ADR-0022); PRODUCT.md and DESIGN.md record the product and
 its design system; and the composer buttons Phase 13 lists as unbuilt now exist, as one-click
 suggestions for the five chat scenarios in the empty transcript, with the MCP endpoint to copy for
@@ -48,10 +48,9 @@ Go/no-go rules condensed from the planning brief's recommendations:
   (see [ADR-0008](./adr/0008-vapor-mode-deferred.md)).
 - Skip the public MCP server if Phase 6 slips past 2 weeks — keep the internal MCP refactor,
   drop the externally exposed issues server.
-- Model fallback: when a Groq call fails with a rate-limit, quota or server error, the same call
-  goes to Gemini Flash (`apps/api/src/agent/fallback-model.ts`), with a global daily token cap as
-  kill-switch (see [ADR-0005](./adr/0005-model-routing-groq-primary-gemini-fallback.md) and
-  [ADR-0021](./adr/0021-a-live-model-on-the-demo.md)).
+- Model limits: a global daily token cap is the kill-switch. The Gemini fallback was removed
+  ([ADR-0026](./adr/0026-groq-only-on-the-public-demo.md)), so a Groq rate limit ends the turn with
+  a message.
 - Drop Langfuse if OTLP export from workerd proves flaky — keep the `onStepFinish` audit log as
   the observability floor.
 - MCP App (rich UI inside external MCP hosts) is stretch-only; it never blocks any phase.
@@ -69,9 +68,8 @@ Condensed from the planning brief's risk register — top 5, one line each:
 2. MCP transport/spec churn on Workers (Phase 6): vendored tool definitions and the
    skip-public-server threshold above cap the blast radius.
 3. Free-tier model quota exhaustion: Groq allows 8K tokens/minute for `openai/gpt-oss-120b`
-   (about four agent turns), and Gemini `gemini-3.8-flash`'s free tier allows only about 20
-   requests and sometimes answers 503 "high demand" (ADR-0021). Mitigated by the automatic
-   fallback, the global daily token cap, and a graceful "demo budget reached" state; the real
+   (about four agent turns), with no fallback since ADR-0026. Mitigated by the global daily token
+   cap, and a graceful "demo budget reached" state; the real
    remedy is billing or a larger free quota.
 4. OTLP export instability on workerd (Phase 10): observability degrades to the `onStepFinish`
    audit log rather than blocking the phase.

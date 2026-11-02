@@ -1,6 +1,6 @@
 # ADR-0005: Model routing — Groq primary, Gemini Flash fallback
 
-- Status: Accepted
+- Status: Accepted; the Gemini fallback was removed by [ADR-0026](0026-groq-only-on-the-public-demo.md)
 - Date: 2026-07-08
 - Deciders: repo owner (solo project)
 

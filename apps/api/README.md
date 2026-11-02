@@ -176,26 +176,23 @@ CI's job.
 
 ## Model routing
 
-Per [ADR-0005](../../docs/adr/0005-model-routing-groq-primary-gemini-fallback.md) and
-[ADR-0021](../../docs/adr/0021-a-live-model-on-the-demo.md), selected from the environment at
+Per [ADR-0021](../../docs/adr/0021-a-live-model-on-the-demo.md) and
+[ADR-0026](../../docs/adr/0026-groq-only-on-the-public-demo.md), selected from the environment at
 request time:
 
-| `MODEL_PROVIDER` | Behaviour                                                                       |
-| ---------------- | ------------------------------------------------------------------------------- |
-| `auto` (default) | Both keys → Groq with a Gemini fallback; one key → that provider; none → `mock` |
-| `groq`           | Groq only; **503** `MODEL_NOT_CONFIGURED` if `GROQ_API_KEY` is missing          |
-| `gemini`         | Gemini only; **503** `MODEL_NOT_CONFIGURED` if the Google key is missing        |
-| `mock`           | Scripted local model — no network, no quota                                     |
+| `MODEL_PROVIDER` | Behaviour                                                         |
+| ---------------- | ----------------------------------------------------------------- |
+| `auto` (default) | `GROQ_API_KEY` set → Groq; otherwise `mock`                       |
+| `groq`           | Groq; **503** `MODEL_NOT_CONFIGURED` if `GROQ_API_KEY` is missing |
+| `mock`           | Scripted local model — no network, no quota                       |
 
 The 503's message does not name the missing key, so an operator finds that in Workers Logs, as the
 `model-not-configured` event.
 
-Defaults are `openai/gpt-oss-120b` (Groq) and `gemini-3.8-flash` (Gemini), overridable via
-`GROQ_MODEL` / `GEMINI_MODEL`. Groq retired `llama-3.3-70b-versatile`, and gpt-oss beat Groq's other
+The default is `openai/gpt-oss-120b`, overridable via `GROQ_MODEL`. Groq retired `llama-3.3-70b-versatile`, and gpt-oss beat Groq's other
 tool-calling model on the live scenario evals
-([ADR-0021](../../docs/adr/0021-a-live-model-on-the-demo.md)). The fallback triggers when the
-**initial** provider call fails with a retryable error, a 429, or a 5xx; once a stream has started,
-errors are not retried, because chunks may already have reached the client. Every response carries
+([ADR-0021](../../docs/adr/0021-a-live-model-on-the-demo.md)). There is no second model to fall back on
+([ADR-0026](../../docs/adr/0026-groq-only-on-the-public-demo.md)). Every response carries
 the chosen route in the `X-DevSprint-Model` header (exposed via CORS), and a 429 surfaces as a
 friendly "demo budget reached" message rather than a provider error. The global daily token cap
 ADR-0005 asked for is below, under [Spend controls](#spend-controls).
@@ -262,7 +259,7 @@ A transcript with a system message, a user message holding anything but text, or
 file from a URL the client chose, and the third would put a forged result where the SDK does not
 look for one.
 Provider options on a user part are removed before conversion, and the ones on assistant parts stay,
-because they carry Gemini's thought signature through an approval resume.
+because the provider wrote them itself and an approval resume sends them back as they came.
 
 The scripted mock is exempt, so local dev, CI and e2e spend nothing and are never rationed. Set
 `DAILY_TOKEN_CAP=0` to turn the cap off entirely, or `CLIENT_DAILY_TOKEN_SHARE=0` for the share; one
@@ -310,8 +307,7 @@ pnpm --filter @devsprint/api dev    # wrangler dev on http://localhost:8787
 ```
 
 `.dev.vars` is gitignored; in production the same names are set with
-`pnpm --filter @devsprint/api exec wrangler secret put GROQ_API_KEY` (and likewise for
-`GOOGLE_GENERATIVE_AI_API_KEY`). CORS is locked to the origin in the `CORS_ORIGIN` var
+`pnpm --filter @devsprint/api exec wrangler secret put GROQ_API_KEY`. CORS is locked to the origin in the `CORS_ORIGIN` var
 (`http://localhost:5173` in dev). A POST with any other `Origin` gets a 403 with `FORBIDDEN_ORIGIN`,
 so a dev SPA on a fallback port such as 5174 can't write until the var names it. A request with no
 `Origin`, like the curl below, still passes: the board is public by design (ADR-0014), and this
@@ -366,8 +362,8 @@ Before it ships anything, the script can refuse:
   `origin/main` after a fresh fetch.** Untracked files are fine. A feature branch or worktree is
   refused even at the same commit. `--skip-git-gate` deploys anyway, for a hotfix or when offline.
   CI skips this check, because it checks out a detached HEAD of the commit it is deploying.
-- **When the api exists and lacks the key `MODEL_PROVIDER` needs.** `auto` needs `GROQ_API_KEY` or
-  `GOOGLE_GENERATIVE_AI_API_KEY`, and would otherwise serve the scripted mock. A new api only gets a
+- **When the api exists and lacks the key `MODEL_PROVIDER` needs.** `auto` needs `GROQ_API_KEY`, and
+  would otherwise serve the scripted mock. A new api only gets a
   warning, because a Worker that does not exist cannot hold secrets yet.
 - **When `MODEL_PROVIDER` is not one the api knows,** whether the api exists or not, because no
   secret can fix that.
@@ -386,13 +382,12 @@ Push to `main` runs the same script in CI once the checks and e2e jobs pass. Loc
 to the step that runs the script. `pnpm smoke` re-runs the read-only checks at any time.
 
 The deployed values live in `wrangler.jsonc` `vars`. `MODEL_PROVIDER` is `auto`, so the live demo
-runs Groq `openai/gpt-oss-120b` with a Gemini fallback
-([ADR-0021](../../docs/adr/0021-a-live-model-on-the-demo.md)). The provider keys are Worker
-secrets:
+runs Groq `openai/gpt-oss-120b`
+([ADR-0026](../../docs/adr/0026-groq-only-on-the-public-demo.md)). The provider key is a Worker
+secret:
 
 ```sh
 pnpm --filter @devsprint/api exec wrangler secret put GROQ_API_KEY
-pnpm --filter @devsprint/api exec wrangler secret put GOOGLE_GENERATIVE_AI_API_KEY
 ```
 
 Setting `MODEL_PROVIDER` back to `mock` in `wrangler.jsonc` puts the demo on the scripted model,

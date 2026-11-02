@@ -13,8 +13,8 @@ unit test). The suggestions go once the conversation starts; later prompts are t
 is taken by the MCP endpoint, which the same empty state shows with a copy button.
 
 Current repo status: Phases 0–14 are implemented and deployed (ADR-0019). The live site runs a
-real model (`MODEL_PROVIDER=auto`: Groq `openai/gpt-oss-120b`, Gemini `gemini-3.8-flash` fallback,
-ADR-0021), so a reviewer there sees each scenario's meaning but not always the exact trajectory
+real model (`MODEL_PROVIDER=auto`: Groq `openai/gpt-oss-120b`,
+ADR-0021, ADR-0026), so a reviewer there sees each scenario's meaning but not always the exact trajectory
 below. The step tables describe the scripted mock, which CI uses, and ADR-0021's two eval tiers say
 which parts every model must meet. Every scenario
 runs end to end against the scripted mock model in two suites that transcribe its "Eval
