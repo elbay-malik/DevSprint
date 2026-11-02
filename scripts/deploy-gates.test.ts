@@ -19,7 +19,7 @@ import {
   rollbackHints,
   type GitState,
 } from './deploy-gates.ts'
-import { expectedModelProvider } from './smoke.ts'
+import { expectedModelProvider, providerFromConfig } from './smoke.ts'
 
 const SCRIPTS = import.meta.dirname
 
@@ -78,6 +78,13 @@ void test('every provider the api accepts is known', () => {
   for (const provider of ['auto', 'groq', 'gemini', 'mock']) {
     assert.equal(unknownProvider(provider), undefined)
   }
+})
+
+void test('the provider is read the way the api reads it, so a blank one is not refused', () => {
+  assert.equal(providerFromConfig(undefined), 'auto')
+  assert.equal(providerFromConfig(''), 'auto')
+  assert.equal(providerFromConfig('   '), 'auto')
+  assert.equal(providerFromConfig('groq '), 'groq')
 })
 
 void test('the provider checked is the one the committed config deploys', () => {

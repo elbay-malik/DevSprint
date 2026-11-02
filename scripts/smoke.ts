@@ -20,12 +20,17 @@ export const URLS = {
   mcp: `https://devsprint-mcp-issues.${SUBDOMAIN}`,
 }
 
+/** Reads MODEL_PROVIDER as apps/api/src/agent/model.ts does: blank means auto. */
+export function providerFromConfig(value: string | undefined): string {
+  return value?.trim() || 'auto'
+}
+
 /** MODEL_PROVIDER as apps/api/wrangler.jsonc deploys it. */
 export function expectedModelProvider(): string {
   const path = join(import.meta.dirname, '../apps/api/wrangler.jsonc')
   const parsed = ts.parseConfigFileTextToJson(path, readFileSync(path, 'utf8'))
   const vars = (parsed.config as { vars?: Record<string, string> } | undefined)?.vars
-  return vars?.MODEL_PROVIDER ?? 'auto'
+  return providerFromConfig(vars?.MODEL_PROVIDER)
 }
 
 let failures = 0
