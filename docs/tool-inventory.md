@@ -61,8 +61,8 @@ returns it once a day has added 40 issues to the seed. Text a write stores may n
 characters other than tab, newline and carriage return, or unpaired surrogates
 ([ADR-0024](./adr/0024-harden-the-shared-board.md)). Resetting the board clears both limits.
 
-The five issue tools can also return `INTERNAL` over MCP, when the workspace call fails in a way
-nothing expected. The detail goes to the server's log rather than to the caller
+The five issue tools can also return `INTERNAL` over MCP, when the workspace call fails
+unexpectedly. The detail goes to the server's log rather than to the caller
 ([domain-model.md](./domain-model.md) §4). A write may have landed with only its reply lost, so the
 message and the chat both say to read the board before trying again.
 

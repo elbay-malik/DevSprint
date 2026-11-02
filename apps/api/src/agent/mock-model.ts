@@ -561,11 +561,15 @@ function summarizeToolResultPart(
   }
   const output = unwrapOutput(part.output)
   const input = inputByToolCallId.get(part.toolCallId)
-  if (WRITE_TOOLS.has(part.toolName) && isEnvelope(output) && !output.ok) {
-    // Not a refusal: the write may have landed with only its reply lost.
-    if (output.error.code === 'INTERNAL') {
-      return 'The board couldn’t be reached, so this may not have saved. Check the board before trying again.'
-    }
+  const write = WRITE_TOOLS.has(part.toolName)
+  if (isEnvelope(output) && !output.ok && output.error.code === 'INTERNAL') {
+    // Not a refusal: a write may have landed with only its reply lost, and a
+    // read changed nothing, so only the read is safe to try again as it is.
+    return write
+      ? 'The board couldn’t be reached, so this may not have saved. Check the board before trying again.'
+      : 'The board couldn’t be reached. Try again in a moment.'
+  }
+  if (write && isEnvelope(output) && !output.ok) {
     return output.error.code === 'ISSUE_NOT_FOUND'
       ? `${target()} isn’t on the board, so nothing changed.`
       : `${describeFailure(part.toolName, output.error.code, input)} Nothing changed.`
