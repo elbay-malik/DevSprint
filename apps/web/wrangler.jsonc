@@ -6,6 +6,7 @@
   "compatibility_date": "2026-07-01",
   // PR previews upload a version with `--preview-alias pr-<n>`, served at
   // pr-<n>-devsprint-web.<subdomain> against the production api (ADR-0019).
+  "routes": [{ "pattern": "devsprint.elbaymalik.com", "custom_domain": true }],
   "workers_dev": true,
   "preview_urls": true,
   "assets": {

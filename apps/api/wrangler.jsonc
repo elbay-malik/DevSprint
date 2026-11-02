@@ -20,7 +20,7 @@
     // The SPA and its PR preview aliases — see src/cors.ts for the matching. The
     // `pr-` keeps out the hash-named URL every uploaded version gets. These
     // origins may also POST: index.ts refuses a browser write from any other.
-    "CORS_ORIGIN": "https://devsprint-web.eleo-666.workers.dev,https://pr-*-devsprint-web.eleo-666.workers.dev",
+    "CORS_ORIGIN": "https://devsprint.elbaymalik.com,https://devsprint-web.eleo-666.workers.dev,https://pr-*-devsprint-web.eleo-666.workers.dev",
     // Groq first, Gemini when Groq fails or rate-limits (ADR-0005, ADR-0021).
     // The keys are Worker secrets. `mock` puts the demo back on the scripted
     // model, which spends nothing.
