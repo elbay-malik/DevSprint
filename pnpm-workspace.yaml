@@ -8,6 +8,11 @@ allowBuilds:
   vue-demi: true
   workerd: true
 
+# Nothing here writes Stylus, but pnpm resolves vite's optional peer anyway, and
+# stylus 0.57.0 brings the only production advisories `pnpm audit` reports.
+overrides:
+  stylus: '-'
+
 # Default catalog: single source of truth for toolchain + shared dependency
 # versions. Exact pins only — bump versions here, never in package.json files.
 catalog:
