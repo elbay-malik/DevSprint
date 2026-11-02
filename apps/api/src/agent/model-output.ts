@@ -14,7 +14,9 @@ import type { JSONValue } from 'ai'
  * the output on the UI stream alone. The cards still get every character, and
  * ADR-0016's objection to rewriting the output contract does not apply. It also
  * runs on the tool results a request carries in its history, so that JSON comes
- * from the client and its shape can't be assumed.
+ * from the client and its shape can't be assumed. No shape gets past the limit:
+ * what compacting can't shrink goes to the model as cut-off text, which nothing
+ * a real tool returns ever needs.
  */
 export const MODEL_ISSUE_LIST_CHARS = 12_000
 
@@ -33,28 +35,29 @@ type ModelOutput = { type: 'text'; value: string } | { type: 'json'; value: JSON
 
 /** `toModelOutput` for the two issue-list tools. Anything under the limit passes unchanged. */
 export function compactIssueListForModel({ output }: { output: unknown }): ModelOutput {
-  // What the SDK does for a tool with no `toModelOutput`.
-  if (typeof output === 'string') return { type: 'text', value: output }
+  // What the SDK does for a tool with no `toModelOutput`, under the same limit.
+  if (typeof output === 'string') {
+    return { type: 'text', value: clip(output, MODEL_ISSUE_LIST_CHARS - 1) }
+  }
   const unchanged = (output ?? null) as JSONValue
   if (fits(unchanged)) return { type: 'json', value: unchanged }
 
   const found = findList(output)
-  if (!found) return { type: 'json', value: unchanged }
-
-  const { envelope, field, list } = found
-  let compacted = unchanged
-  for (const step of COMPACT_STEPS) {
-    compacted = {
-      ...envelope,
-      data: {
-        ...envelope.data,
-        [field]: list.map((row) => compactRow(row, step)),
-        truncated: true,
-      },
-    } as JSONValue
-    if (fits(compacted)) break
+  if (found) {
+    const { envelope, field, list } = found
+    for (const step of COMPACT_STEPS) {
+      const compacted = {
+        ...envelope,
+        data: {
+          ...envelope.data,
+          [field]: list.map((row) => compactRow(row, step)),
+          truncated: true,
+        },
+      } as JSONValue
+      if (fits(compacted)) return { type: 'json', value: compacted }
+    }
   }
-  return { type: 'json', value: compacted }
+  return { type: 'text', value: clip(JSON.stringify(unchanged), MODEL_ISSUE_LIST_CHARS - 1) }
 }
 
 function fits(value: JSONValue): boolean {
