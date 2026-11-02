@@ -49,8 +49,8 @@ Go/no-go rules condensed from the planning brief's recommendations:
 - Skip the public MCP server if Phase 6 slips past 2 weeks — keep the internal MCP refactor,
   drop the externally exposed issues server.
 - Model limits: a global daily token cap is the kill-switch. The Gemini fallback was removed
-  ([ADR-0026](./adr/0026-groq-only-on-the-public-demo.md)), so a Groq rate limit ends the turn with
-  a message.
+  ([ADR-0026](./adr/0026-groq-only-on-the-public-demo.md)), so a Groq rate limit is waited out for up
+  to about 14 seconds, and after that ends the turn with a message.
 - Drop Langfuse if OTLP export from workerd proves flaky — keep the `onStepFinish` audit log as
   the observability floor.
 - MCP App (rich UI inside external MCP hosts) is stretch-only; it never blocks any phase.
@@ -68,7 +68,7 @@ Condensed from the planning brief's risk register — top 5, one line each:
 2. MCP transport/spec churn on Workers (Phase 6): vendored tool definitions and the
    skip-public-server threshold above cap the blast radius.
 3. Free-tier model quota exhaustion: Groq allows 8K tokens/minute for `openai/gpt-oss-120b`
-   (about four agent turns), with no fallback since ADR-0026. Mitigated by the global daily token
+   (about four agent turns) and 200K tokens/day, with no fallback since ADR-0026. Mitigated by the global daily token
    cap, and a graceful "demo budget reached" state; the real
    remedy is billing or a larger free quota.
 4. OTLP export instability on workerd (Phase 10): observability degrades to the `onStepFinish`
