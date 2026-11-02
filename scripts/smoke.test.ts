@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { limitOnTurn, readShell } from './smoke.ts'
+import { chatTurnChecks, readShell, spendLimitOn } from './smoke.ts'
 
 const WEB = 'https://web.test'
 const shell = (entry: string) =>
@@ -38,11 +38,34 @@ void test('does not wait on a shell that names no entry', async (t) => {
   assert.equal(stub.mock.callCount(), 1)
 })
 
-void test('names a spend limit, and only a known one', () => {
-  const on = (limit: string) => limitOnTurn(new Headers({ 'x-devsprint-limit': limit }))
-  assert.equal(on('budget'), 'budget')
-  assert.equal(on('client-budget'), 'client-budget')
-  assert.equal(on('rate'), 'rate')
-  assert.equal(on('something-else'), undefined)
-  assert.equal(limitOnTurn(new Headers()), undefined)
+const turn = (status: number, headers: Record<string, string> = {}) =>
+  new Response(null, { status, headers })
+
+void test('names a spend limit only on a good response with a known value', () => {
+  assert.equal(spendLimitOn(turn(200, { 'x-devsprint-limit': 'budget' })), 'budget')
+  assert.equal(spendLimitOn(turn(200, { 'x-devsprint-limit': 'client-budget' })), 'client-budget')
+  assert.equal(spendLimitOn(turn(200, { 'x-devsprint-limit': 'rate' })), undefined)
+  assert.equal(spendLimitOn(turn(200, { 'x-devsprint-limit': 'other' })), undefined)
+  assert.equal(spendLimitOn(turn(500, { 'x-devsprint-limit': 'budget' })), undefined)
+  assert.equal(spendLimitOn(turn(200)), undefined)
+})
+
+void test('skips the turn checks at a spend limit, and says why', () => {
+  const chat = chatTurnChecks(turn(200, { 'x-devsprint-limit': 'budget' }), 'the fixed message')
+  assert.match(chat.skip ?? '', /budget limit/)
+})
+
+void test('still fails a turn that broke, with or without the header', () => {
+  for (const broken of [turn(200), turn(500, { 'x-devsprint-limit': 'budget' })]) {
+    const chat = chatTurnChecks(broken, 'no tool call')
+    assert.equal(chat.skip, undefined)
+    assert.equal(chat.grounded, false)
+    assert.equal(chat.binding, false)
+  }
+})
+
+void test('passes a real turn', () => {
+  const chat = chatTurnChecks(turn(200, { 'x-devsprint-tools': 'mcp' }), '"tool-input-available"')
+  assert.equal(chat.grounded, true)
+  assert.equal(chat.binding, true)
 })
