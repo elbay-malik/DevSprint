@@ -70,6 +70,29 @@ async function apiIssueKeys(): Promise<string[]> {
   return workspace.issues.map((issue) => issue.key).sort()
 }
 
+/**
+ * Reads the shell and its entry script once the two agree. Right after a deploy
+ * an edge can still serve the previous shell, whose entry the new version no
+ * longer has, and the Worker answers that path with index.html. That passes
+ * within seconds, so it is waited out. A shell naming no entry is returned at
+ * once, and after the last try whatever came back goes to the checks, so a
+ * broken build still fails them.
+ */
+export async function readShell(url: string, tries = 20, pauseMs = 3000) {
+  for (let attempt = 1; ; attempt += 1) {
+    const page = await fetch(url)
+    const html = await page.text()
+    const entry = /src="(\/assets\/index-[^"]+\.js)"/.exec(html)?.[1] ?? ''
+    const script = entry ? await fetch(`${url}${entry}`) : undefined
+    const entrySource = script ? await script.text() : ''
+    const isScript = script?.headers.get('content-type')?.includes('javascript') ?? false
+    if (!entry || isScript || attempt >= tries) {
+      return { ok: page.ok, html, entry, entrySource }
+    }
+    await new Promise((resolve) => setTimeout(resolve, pauseMs))
+  }
+}
+
 export async function smoke(options: { proveSharedBoard: boolean } = { proveSharedBoard: false }) {
   failures = 0
   console.log(`\nSmoke checks against ${SUBDOMAIN}`)
@@ -77,13 +100,10 @@ export async function smoke(options: { proveSharedBoard: boolean } = { proveShar
   // The SPA, and that its build points at the deployed api: a build without
   // VITE_API_URL calls relative /api paths, which this Worker answers with
   // index.html, and the board quietly falls back to seed data.
-  const page = await fetch(URLS.web)
-  const html = await page.text()
-  check('SPA serves its shell', page.ok && html.includes('<div id="app">'))
+  const { ok, html, entry, entrySource } = await readShell(URLS.web)
+  check('SPA serves its shell', ok && html.includes('<div id="app">'))
   // The api URL lives in whichever chunk imports lib/api.ts (today the lazily
   // loaded HomeView), so the entry and every chunk it references are searched.
-  const entry = /src="(\/assets\/index-[^"]+\.js)"/.exec(html)?.[1] ?? ''
-  const entrySource = entry ? await (await fetch(`${URLS.web}${entry}`)).text() : ''
   const chunks = [...new Set(entrySource.match(/assets\/[\w-]+\.js/g) ?? [])]
   const sources = [
     entrySource,
