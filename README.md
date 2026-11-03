@@ -8,7 +8,7 @@ An AI copilot for a sprint board, built to show how an agent can be **useful wit
 - every write waits for a human to approve it
 - the same issue tools are served to outside AI assistants over MCP, writing to the same live board
 
-**Live demo:** https://devsprint-web.eleo-666.workers.dev
+**Live demo:** https://devsprint.elbaymalik.com
 **Public MCP server:** `https://devsprint-mcp-issues.eleo-666.workers.dev/mcp` (Streamable HTTP)
 **Demo video:** _coming with the v1.0.0 release_
 
