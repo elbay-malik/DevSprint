@@ -231,7 +231,7 @@ each one actually found.
 
 ## Acknowledgements
 
-Claude, Anthropic's AI model, was also used for building DevSprint. Claude worked some commits in this repository,
+Claude, Anthropic's AI model, was also used for building DevSprint. Claude worked some commits in this repository.
 
 ## License
 
