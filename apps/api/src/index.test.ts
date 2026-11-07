@@ -90,11 +90,21 @@ describe('POST /api/workspace/reset — cooldown and write limit', () => {
     )
 
     expect(second.status).toBe(429)
+    // Nothing has moved the clock since the first reset, so all of it is left.
     expect(second.headers.get('retry-after')).toBe('30')
     const body: { ok: boolean; error: { code: string } } = await second.json()
-    expect(body.error.code).toBe('RESET_COOLDOWN')
+    expect(body).toEqual({
+      ok: false,
+      error: { code: 'RESET_COOLDOWN', message: expect.any(String) },
+    })
     // The write it would have wiped is still there.
     expect(workspace.store.get().issues.find((i) => i.key === 'DS-7')?.status).toBe('done')
+
+    // Part way through, the header carries what is left of the cooldown, not a fixed value.
+    vi.mocked(Date.now).mockReturnValue(now + 20_500)
+    const partway = await app.request('/api/workspace/reset', { method: 'POST' }, cooled)
+    expect(partway.status).toBe(429)
+    expect(partway.headers.get('retry-after')).toBe('10')
 
     // Once the cooldown has passed, the next reset goes through.
     vi.mocked(Date.now).mockReturnValue(now + 30_000)

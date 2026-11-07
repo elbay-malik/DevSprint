@@ -92,9 +92,6 @@ export function resolveResetCooldownMs(configured: string | undefined): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed * 1000 : 0
 }
 
-/** What a refused reset tells the client to wait, whatever is left of the cooldown. */
-export const RESET_RETRY_AFTER_SECONDS = 30
-
 /**
  * The client this request should be rate-limited as.
  *

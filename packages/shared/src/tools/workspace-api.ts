@@ -11,6 +11,7 @@ import type {
   DeploymentStatus,
   StageName,
   StageStatus,
+  ToolError,
   ToolResult,
   Workspace,
 } from '../workspace/types'
@@ -43,6 +44,15 @@ import type {
   UpdateIssueStatusData,
 } from './types'
 
+/**
+ * `requestReset`'s answer. Still a `ToolResult<Workspace>`, so a caller that
+ * only reads the envelope is unaffected; a refusal also says how much of the
+ * cooldown is left, in whole seconds (at least 1), for the route's
+ * `Retry-After`.
+ */
+export type RequestResetResult =
+  { ok: true; data: Workspace } | { ok: false; error: ToolError; retryAfterSeconds: number }
+
 export interface WorkspaceApi {
   /** The whole board, for the SPA's workspace pane. */
   snapshot(): Promise<Workspace>
@@ -59,7 +69,7 @@ export interface WorkspaceApi {
    * client at once — a loop of resets would otherwise keep the board at its
    * seed and wipe every visitor's writes as they land (ADR-0024).
    */
-  requestReset(input: { cooldownMs: number }): Promise<ToolResult<Workspace>>
+  requestReset(input: { cooldownMs: number }): Promise<RequestResetResult>
 
   /**
    * Spends each id in `ids`, returning whichever were already spent — by an

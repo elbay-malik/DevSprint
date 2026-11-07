@@ -139,12 +139,14 @@ export function createLocalWorkspaceApi(store: WorkspaceStore): WorkspaceApi {
     requestReset: ({ cooldownMs }) => {
       const wait = store.lastResetAt() + cooldownMs - Date.now()
       if (cooldownMs > 0 && wait > 0) {
+        const retryAfterSeconds = Math.max(1, Math.ceil(wait / 1000))
         return Promise.resolve({
           ok: false as const,
           error: {
             code: 'RESET_COOLDOWN' as const,
-            message: `The board was reset moments ago. Try again in ${Math.ceil(wait / 1000)} seconds.`,
+            message: `The board was reset moments ago. Try again in ${retryAfterSeconds} seconds.`,
           },
+          retryAfterSeconds,
         })
       }
       store.reset()
