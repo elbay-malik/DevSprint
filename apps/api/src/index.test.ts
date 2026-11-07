@@ -3,7 +3,11 @@ import { MAX_HISTORY_MESSAGES, MAX_USER_MESSAGE_CHARS, type Workspace } from '@d
 import type { WorkspaceApi } from '@devsprint/shared/tools'
 import app from './index'
 import { BUDGET_REACHED_MESSAGE, CLIENT_BUDGET_REACHED_MESSAGE } from './agent/limits'
-import { MAX_CHAT_BODY_BYTES } from './agent/request-bounds'
+import {
+  MAX_BOARD_WRITE_BODY_BYTES,
+  MAX_BOARD_WRITE_ID_LENGTH,
+  MAX_CHAT_BODY_BYTES,
+} from './agent/request-bounds'
 import { fakeWorkspaceBinding } from '../test/workspace-binding'
 
 const workspace = fakeWorkspaceBinding()
@@ -397,6 +401,118 @@ describe('POST /api/deployments/:id/cancel', () => {
 
     expect(res.status).toBe(400)
     expect(workspace.store.get().deployments.find((d) => d.id === id)?.status).toBe('running')
+  })
+})
+
+describe('undo and cancel — body bounds', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const api = workspace.binding.get() as unknown as WorkspaceApi
+  const routes = [
+    { path: '/api/workspace/undo', field: 'changeId', rpc: 'undoChange' },
+    { path: '/api/deployments/dep-1/cancel', field: 'cancelToken', rpc: 'cancelDeployment' },
+  ] as const
+
+  for (const { path, field, rpc } of routes) {
+    it(`${path} refuses a body over the limit with a 413 in its envelope`, async () => {
+      const limit = vi.fn().mockResolvedValue({ success: true })
+      const reached = vi.spyOn(api, rpc)
+      const res = await app.request(
+        path,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.9' },
+          body: JSON.stringify({ [field]: 'x', padding: 'x'.repeat(MAX_BOARD_WRITE_BODY_BYTES) }),
+        },
+        { ...env, WRITE_RATE_LIMIT: { limit } },
+      )
+
+      expect(res.status).toBe(413)
+      await expect(res.json()).resolves.toEqual({
+        ok: false,
+        error: { code: 'INVALID_INPUT', message: 'The request is too large.' },
+      })
+      // The write limit runs first, so an oversized request still counts.
+      expect(limit).toHaveBeenCalledWith({ key: '203.0.113.9' })
+      expect(reached).not.toHaveBeenCalled()
+    })
+
+    it(`${path} refuses a chunked body over the limit, which has no Content-Length`, async () => {
+      const chunk = new TextEncoder().encode('x'.repeat(1024))
+      const sent = { count: 0 }
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          sent.count += 1
+          controller.enqueue(chunk)
+        },
+      })
+      const request = new Request(`http://localhost${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        duplex: 'half',
+      } as RequestInit)
+      expect(request.headers.get('content-length')).toBeNull()
+
+      const res = await app.fetch(request, env)
+
+      expect(res.status).toBe(413)
+      await expect(res.json()).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'INVALID_INPUT' },
+      })
+      // It stopped reading at the limit, not at the end of a body that never ends.
+      expect(sent.count).toBeLessThan(10)
+    })
+
+    it(`${path} refuses an id longer than any it mints, before the workspace sees it`, async () => {
+      const reached = vi.spyOn(api, rpc)
+      const res = await app.request(
+        path,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [field]: 'a'.repeat(MAX_BOARD_WRITE_ID_LENGTH + 1) }),
+        },
+        env,
+      )
+
+      expect(res.status).toBe(400)
+      await expect(res.json()).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'INVALID_INPUT' },
+      })
+      expect(reached).not.toHaveBeenCalled()
+    })
+  }
+
+  it('refuses a deployment id longer than any it mints, before the workspace sees it', async () => {
+    const reached = vi.spyOn(api, 'cancelDeployment')
+    const res = await app.request(
+      `/api/deployments/${'d'.repeat(MAX_BOARD_WRITE_ID_LENGTH + 1)}/cancel`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cancelToken: 'x' }),
+      },
+      env,
+    )
+
+    expect(res.status).toBe(400)
+    expect(reached).not.toHaveBeenCalled()
+  })
+
+  it('leaves room for the bodies the SPA sends', () => {
+    // The SPA's undo and cancel each send one server-minted id.
+    const id = crypto.randomUUID()
+    for (const body of [{ changeId: id }, { cancelToken: id }]) {
+      expect(new TextEncoder().encode(JSON.stringify(body)).length).toBeLessThan(
+        MAX_BOARD_WRITE_BODY_BYTES / 10,
+      )
+    }
+    expect(id.length).toBeLessThanOrEqual(MAX_BOARD_WRITE_ID_LENGTH)
   })
 })
 

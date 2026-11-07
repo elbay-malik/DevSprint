@@ -31,6 +31,8 @@ import {
 } from './agent/approvals'
 import {
   chatRequestRefusal,
+  MAX_BOARD_WRITE_BODY_BYTES,
+  MAX_BOARD_WRITE_ID_LENGTH,
   MAX_CHAT_BODY_BYTES,
   stripProviderMetadata,
 } from './agent/request-bounds'
@@ -195,6 +197,24 @@ const writeLimit = createMiddleware<{ Bindings: AppEnv }>(async (c, next) => {
   await next()
 })
 
+/**
+ * Bounds an undo or cancel body the way `chatBodyLimit` bounds a chat one,
+ * declared or chunked, but at a size fit for one id. Mounted after
+ * `writeLimit`, so an oversized request still spends its rate-limit token, and
+ * it answers in the same envelope as the routes' other refusals.
+ */
+const boardWriteBodyLimit = bodyLimit({
+  maxSize: MAX_BOARD_WRITE_BODY_BYTES,
+  onError: (c) =>
+    c.json(
+      {
+        ok: false as const,
+        error: { code: 'INVALID_INPUT', message: 'The request is too large.' },
+      },
+      413,
+    ),
+})
+
 app.get('/api/health', (c) => c.json({ ok: true }))
 
 app.get(API_ROUTES.workspace, async (c) => c.json(await workspaceOf(c.env).snapshot()))
@@ -232,7 +252,7 @@ app.post(API_ROUTES.workspaceReset, async (c) => {
  * The copilot's transcript never hears about it. That is fine, because the
  * agent re-reads the board through its tools before it answers.
  */
-app.post(API_ROUTES.workspaceUndo, writeLimit, async (c) => {
+app.post(API_ROUTES.workspaceUndo, writeLimit, boardWriteBodyLimit, async (c) => {
   let body: unknown
   try {
     body = await c.req.json()
@@ -242,6 +262,7 @@ app.post(API_ROUTES.workspaceUndo, writeLimit, async (c) => {
   const changeId =
     typeof body === 'object' && body !== null && 'changeId' in body ? body.changeId : undefined
   if (typeof changeId !== 'string') return undoInvalid(c, '`changeId` must be a string.')
+  if (changeId.length > MAX_BOARD_WRITE_ID_LENGTH) return undoInvalid(c, 'That is not a change id.')
 
   const result = await workspaceOf(c.env).undoChange({ changeId })
   if (!result.ok) {
@@ -273,10 +294,10 @@ app.post(API_ROUTES.workspaceUndo, writeLimit, async (c) => {
  *
  * The body is `{ cancelToken }`, the token the run's own stream frames carry.
  * The board lists every deployment's id, so an id alone let anyone stop
- * anyone's run (ADR-0024); a wrong or missing token is
- * answered like an unknown id.
+ * anyone's run (ADR-0024); a wrong token is answered like an unknown id. An
+ * id or token longer than any the server mints is refused as malformed first.
  */
-app.post(API_ROUTES.deploymentCancel, writeLimit, async (c) => {
+app.post(API_ROUTES.deploymentCancel, writeLimit, boardWriteBodyLimit, async (c) => {
   let body: unknown
   try {
     body = await c.req.json()
@@ -288,11 +309,15 @@ app.post(API_ROUTES.deploymentCancel, writeLimit, async (c) => {
       ? body.cancelToken
       : undefined
   if (typeof cancelToken !== 'string') return undoInvalid(c, '`cancelToken` must be a string.')
+  const deploymentId = c.req.param('id')
+  if (
+    cancelToken.length > MAX_BOARD_WRITE_ID_LENGTH ||
+    deploymentId.length > MAX_BOARD_WRITE_ID_LENGTH
+  ) {
+    return undoInvalid(c, `An id can be at most ${MAX_BOARD_WRITE_ID_LENGTH} characters.`)
+  }
 
-  const result = await workspaceOf(c.env).cancelDeployment({
-    deploymentId: c.req.param('id'),
-    cancelToken,
-  })
+  const result = await workspaceOf(c.env).cancelDeployment({ deploymentId, cancelToken })
   if (result.ok) return c.json(result)
   // A run that already finished is a conflict, not a missing one — saying 200
   // here would tell the user their cancel landed when the release had shipped.

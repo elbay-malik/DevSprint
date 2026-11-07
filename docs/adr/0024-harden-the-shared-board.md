@@ -111,3 +111,12 @@ holds until the board resets, which can happen more than once a day. The `WORKSP
 the comment on `MAX_CREATED_ISSUES`, docs/tool-inventory.md and docs/domain-model.md now say so.
 The slots are also shared by every path that creates issues, the in-app agent included, so while
 the board is full the agent cannot create one either until a reset.
+
+Undo and cancel now bound their bodies too, as the 2026-11-01 note did for the MCP batch check.
+Each body carries one id, so the limit is 4 KB (`MAX_BOARD_WRITE_BODY_BYTES`), not chat's 256 KiB.
+Past it, either route answers 413 in its `{ ok: false, error }` envelope, for a declared
+`Content-Length` and for a chunked body alike. The limit runs after `WRITE_RATE_LIMIT`, so an
+oversized request still spends its token. A change id, cancel token or deployment id longer than 64
+characters (`MAX_BOARD_WRITE_ID_LENGTH`) is refused as `INVALID_INPUT` before the request reaches the
+Durable Object. Every id these routes take is server-minted and shorter than that, so the SPA's
+requests, a few dozen bytes each, are unaffected.
