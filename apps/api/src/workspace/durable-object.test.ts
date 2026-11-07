@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { WorkspaceDO } from './durable-object'
+import { STALE_RUN_MS, WorkspaceDO } from './durable-object'
 import type { BoardChange } from './changes'
 import {
   addClientTokens,
@@ -759,5 +759,126 @@ describe('WorkspaceDO — shared-board hardening (ADR-0024)', () => {
       cancelToken: before.data.cancelToken,
     })
     expect(stale.ok).toBe(false)
+  })
+})
+
+describe('WorkspaceDO — abandoned deployments', () => {
+  // A run is driven by the request that started it. These model that request
+  // going away with the run parked between stages: nothing writes to it again.
+  const staging = { environment: 'staging' as const, version: 'v9.9.9', skipTests: false }
+  const next = { environment: 'staging' as const, version: 'v9.9.10', skipTests: false }
+  const t0 = Date.parse('2026-07-01T09:00:00Z')
+
+  async function startedRun(stub: WorkspaceDO, input = staging) {
+    const started = await stub.startDeployment(input)
+    if (!started.ok) throw new Error('did not start')
+    return started.data.deployment.id
+  }
+
+  async function statusOf(stub: WorkspaceDO, id: string) {
+    return (await stub.snapshot()).deployments.find((deployment) => deployment.id === id)?.status
+  }
+
+  it('settles a run nothing has written to for STALE_RUN_MS, and lets the next one start', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(t0)
+    const { stub } = await freshDO()
+    const abandoned = await startedRun(stub)
+
+    vi.setSystemTime(t0 + STALE_RUN_MS + 1)
+    const started = await stub.startDeployment(next)
+
+    expect(started.ok).toBe(true)
+    expect(await statusOf(stub, abandoned)).toBe('failed')
+    // Settled through the usual path, so no stage is left reading `running`.
+    const stages = (await stub.snapshot()).deployments.find(
+      (deployment) => deployment.id === abandoned,
+    )?.stages
+    expect(stages?.every((stage) => stage.status === 'skipped')).toBe(true)
+  })
+
+  it('still refuses a second start while the first run is writing', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(t0)
+    const { stub } = await freshDO()
+    const running = await startedRun(stub)
+
+    vi.setSystemTime(t0 + STALE_RUN_MS - 1)
+    const refused = await stub.startDeployment(next)
+
+    expect(refused.ok === false && refused.error.code).toBe('DEPLOY_IN_PROGRESS')
+    expect(await statusOf(stub, running)).toBe('running')
+  })
+
+  it('counts from the last stage write, not from the start', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(t0)
+    const { stub } = await freshDO()
+    const running = await startedRun(stub)
+
+    vi.setSystemTime(t0 + 20_000)
+    await stub.setDeploymentStage({ deploymentId: running, stage: 'build', status: 'running' })
+    vi.setSystemTime(t0 + STALE_RUN_MS + 1)
+    const refused = await stub.startDeployment(next)
+    expect(refused.ok === false && refused.error.code).toBe('DEPLOY_IN_PROGRESS')
+
+    vi.setSystemTime(t0 + 20_000 + STALE_RUN_MS + 1)
+    expect((await stub.startDeployment(next)).ok).toBe(true)
+    expect(await statusOf(stub, running)).toBe('failed')
+  })
+
+  it('stops a run that turns out to be alive, at its next write', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(t0)
+    const { stub } = await freshDO()
+    const late = await startedRun(stub)
+    vi.setSystemTime(t0 + STALE_RUN_MS + 1)
+    await stub.startDeployment(next)
+
+    const resumed = await stub.setDeploymentStage({
+      deploymentId: late,
+      stage: 'build',
+      status: 'running',
+    })
+
+    // The settled outcome stands; the late write does not reopen a stage.
+    expect(resumed.ok && resumed.data.deployment.status).toBe('failed')
+    expect(resumed.ok && resumed.data.deployment.stages[0]?.status).toBe('skipped')
+  })
+
+  it('gives a run with no heartbeat one on first sight, rather than settling it at once', async () => {
+    // A run stored before heartbeats existed. The board's timestamps are the
+    // frozen demo clock, so they cannot say how old it is.
+    vi.useFakeTimers()
+    vi.setSystemTime(t0)
+    const fake = fakeDurableObjectState()
+    const first = new WorkspaceDO(fake.ctx, {} as Cloudflare.Env)
+    await fake.ready()
+    const legacy = await startedRun(first)
+    fake.raw.delete('deployment-heartbeats')
+
+    const woken = new WorkspaceDO(fake.ctx, {} as Cloudflare.Env)
+    await fake.ready()
+    vi.setSystemTime(t0 + 60_000)
+    const refused = await woken.startDeployment(next)
+    expect(refused.ok === false && refused.error.code).toBe('DEPLOY_IN_PROGRESS')
+
+    vi.setSystemTime(t0 + 60_000 + STALE_RUN_MS + 1)
+    expect((await woken.startDeployment(next)).ok).toBe(true)
+    expect(await statusOf(woken, legacy)).toBe('failed')
+  })
+
+  it('forgets the heartbeat once the run settles, and on reset', async () => {
+    const { fake, stub } = await freshDO()
+    const finished = await startedRun(stub)
+    expect(Object.keys(fake.raw.get('deployment-heartbeats') as object)).toEqual([finished])
+
+    await stub.finishDeployment({ deploymentId: finished, status: 'succeeded' })
+    expect(fake.raw.get('deployment-heartbeats')).toEqual({})
+
+    const second = await startedRun(stub, next)
+    expect(Object.keys(fake.raw.get('deployment-heartbeats') as object)).toEqual([second])
+    await stub.reset()
+    expect(fake.raw.get('deployment-heartbeats')).toEqual({})
   })
 })
