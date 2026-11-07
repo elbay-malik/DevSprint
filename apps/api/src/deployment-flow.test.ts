@@ -173,6 +173,14 @@ describe('runDeployment', () => {
     // unhandled the workspace goes on saying `running`, and startDeployment then
     // refuses every later deploy to that environment with DEPLOY_IN_PROGRESS —
     // one abandoned turn would brick deploys until someone reset the demo.
+    //
+    // This models the consumer calling `.return()`, which runs the `finally`
+    // backstop. It does not model the request being torn down with the
+    // generator parked mid-stage: then nothing resumes or closes it, and
+    // neither the backstop nor the abort listener runs. That case is settled
+    // by the workspace instead, on the next start, once the run has gone
+    // STALE_RUN_MS without a write (durable-object.test.ts, "abandoned
+    // deployments").
     const generator = runDeployment({
       workspace: workspace.api,
       input: { environment: 'staging', version: 'v1.5.0-rc.1', skipTests: false },

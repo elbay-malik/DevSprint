@@ -351,7 +351,10 @@ a tool — see section 4 and [ADR-0013](./adr/0013-deployment-cancel-as-an-api-r
 `{ cancelToken }`: every frame of the run carries `data.cancelToken`, which the board never shows,
 so only the visitor who started the run can cancel it
 ([ADR-0024](./adr/0024-harden-the-shared-board.md)). A cancelled
-run finishes with deployment status `'cancelled'` and its unreached stages marked `'skipped'`.
+run finishes with deployment status `'cancelled'` and its unreached stages marked `'skipped'`. A
+run that has gone 30 seconds without a write, because the request driving it went away, is settled
+as `'failed'` by the next start to that environment
+([ADR-0013](./adr/0013-deployment-cancel-as-an-api-route.md), status note of 2026-11-07).
 
 **Final output**
 

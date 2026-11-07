@@ -85,3 +85,28 @@ is torn down, and it costs one listener.
 - [docs/demo-scenarios.md](../demo-scenarios.md) — scenario S-C and variant C2
 - [docs/roadmap.md](../roadmap.md) — Phase 8
 - [ADR-0011](0011-workspace-state-in-a-durable-object.md) — the workspace this cancel writes to
+
+## Status note — 2026-11-07
+
+The abort-signal path and the generator's `finally` both assume the runtime either aborts the
+request's signal or closes the generator when a client goes away. When it does neither, the request
+is torn down with the run parked between stages, nothing writes its terminal status, and the
+deployment stays `running`. `startDeployment` then refuses every later deploy to that environment
+until a reset.
+
+The "future timeout" above is now built, in the Durable Object rather than on a timer. Each running
+deployment keeps a heartbeat in real wall-clock time under its own storage key, set when it starts
+and refreshed on every stage write. The next start to the same environment settles a run whose
+heartbeat is older than 30 seconds as `failed`, through the usual `finishDeployment`, and then goes
+ahead. The longest gap between a live run's writes is one four-second stage, so the margin is wide.
+If a run settled this way turns out to be alive, its next write sees a settled deployment and stops,
+by the same immutability rule a cancel relies on.
+
+- It is checked on the next start, not on an alarm, because the object's one alarm is the daily reset
+  ([ADR-0014](0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)) and a stuck run only
+  matters to whoever deploys next. Until then the board shows the run as `running`.
+- A run with no heartbeat, such as one stored before this change, gets one the first time a start
+  sees it. The board's own timestamps use the frozen demo clock and cannot say how old it is.
+- `failed` rather than `cancelled`: nobody asked for it to stop.
+- The cancel tokens keep their shape, so tokens already in storage still work.
+- Each stage write costs one more small storage write.

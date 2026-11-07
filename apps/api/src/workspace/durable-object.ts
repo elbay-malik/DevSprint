@@ -2,6 +2,7 @@ import { DurableObject } from 'cloudflare:workers'
 import {
   createWorkspaceSeed,
   WORKSPACE_DO_NAME,
+  type DeploymentStatus,
   type ToolResult,
   type Workspace,
 } from '@devsprint/shared'
@@ -111,6 +112,26 @@ const LAST_RESET_KEY = 'last-reset-at'
  * approved deployment, which a person had to click for.
  */
 const CANCEL_TOKENS_KEY = 'deployment-cancel-tokens'
+/**
+ * When each running deployment last wrote, by id, in real wall-clock ms. Its
+ * own key rather than a field on the cancel-token record, so the tokens keep
+ * the plain shape they were stored in.
+ *
+ * A run is driven by the request that started it. If that request goes away
+ * with the run parked between stages, nothing writes its terminal status, and
+ * the board would go on saying `running` and refuse every later deploy to that
+ * environment until a reset. The heartbeat is how the next start tells a run
+ * that is still going from one that nothing is driving any more.
+ */
+const HEARTBEATS_KEY = 'deployment-heartbeats'
+/**
+ * How long a running deployment may go without a write before the next start
+ * to its environment settles it as `failed`. The longest gap between writes in
+ * a real run is one stage's sleep (4 s for `test`, agent/deployment.ts), so
+ * this leaves a wide margin before a live run could be mistaken for one that
+ * stopped.
+ */
+export const STALE_RUN_MS = 30_000
 
 /**
  * The one copy of the workspace.
@@ -143,6 +164,8 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
   private changes: BoardChange[] | undefined
   /** Cached between calls, same as the workspace above. */
   private cancelTokens: Record<string, string> | undefined
+  /** Cached between calls, same as the workspace above. */
+  private heartbeats: Record<string, number> | undefined
 
   constructor(ctx: DurableObjectState, env: Cloudflare.Env) {
     super(ctx, env)
@@ -285,11 +308,13 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
       [STORAGE_KEY]: seeded,
       [CHANGES_KEY]: [],
       [CANCEL_TOKENS_KEY]: {},
+      [HEARTBEATS_KEY]: {},
       [LAST_RESET_KEY]: Date.now(),
     })
     this.workspace = seeded
     this.changes = []
     this.cancelTokens = {}
+    this.heartbeats = {}
     this.ledger = new Set()
     await this.saveLedger()
     return seeded
@@ -502,22 +527,95 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
   // interrupted leaves the board showing exactly how far it got.
 
   async startDeployment(input: RunDeploymentInput) {
+    await this.settleStaleRun(input.environment)
     const started = await this.mutate((draft) => startDeployment(draft, input))
     if (!started.ok) return started
+    const deploymentId = started.data.deployment.id
     const cancelToken = crypto.randomUUID()
-    await this.saveCancelTokens({
-      ...(await this.loadCancelTokens()),
-      [started.data.deployment.id]: cancelToken,
-    })
+    const cancelTokens = { ...(await this.loadCancelTokens()), [deploymentId]: cancelToken }
+    const heartbeats = { ...(await this.loadHeartbeats()), [deploymentId]: Date.now() }
+    await this.ctx.storage.put({ [CANCEL_TOKENS_KEY]: cancelTokens, [HEARTBEATS_KEY]: heartbeats })
+    this.cancelTokens = cancelTokens
+    this.heartbeats = heartbeats
     return { ok: true as const, data: { ...started.data, cancelToken } }
   }
 
   async setDeploymentStage(input: SetDeploymentStageInput) {
-    return this.mutate((draft) => setDeploymentStage(draft, input))
+    const result = await this.mutate((draft) => setDeploymentStage(draft, input))
+    if (result.ok) {
+      const { deployment } = result.data
+      await (isUnsettled(deployment.status)
+        ? this.beat(deployment.id)
+        : this.dropHeartbeat(deployment.id))
+    }
+    return result
   }
 
   async finishDeployment(input: FinishDeploymentInput) {
-    return this.mutate((draft) => finishDeployment(draft, input))
+    const result = await this.mutate((draft) => finishDeployment(draft, input))
+    // Dropped whether this write settled the run or found it already settled,
+    // but not when the write itself was refused (a full board, say): the run is
+    // still unsettled then, and keeping its heartbeat is what lets a later
+    // start settle it.
+    const deployment = (await this.load()).deployments.find(
+      (candidate) => candidate.id === input.deploymentId,
+    )
+    if (deployment === undefined || !isUnsettled(deployment.status)) {
+      await this.dropHeartbeat(input.deploymentId)
+    }
+    return result
+  }
+
+  /**
+   * Settles the environment's running deployment as `failed` when nothing has
+   * written to it for `STALE_RUN_MS`, so the start that follows is not refused
+   * on account of a run no request is driving any more.
+   *
+   * Lazy, on the next start, rather than on a timer: the object's one alarm is
+   * the daily reset (ADR-0014), and a stuck run only matters to whoever tries
+   * to deploy next. It goes through `finishDeployment` like any other ending,
+   * so a run that turns out to be alive after all sees a settled deployment on
+   * its next write and stops there, by the same rule a cancel relies on.
+   *
+   * A run with no heartbeat was started before heartbeats existed, or under a
+   * cache that lost it. The board's own timestamps use the frozen demo clock
+   * and cannot say how old it is, so it is given one now and treated like any
+   * other run from here.
+   */
+  private async settleStaleRun(environment: RunDeploymentInput['environment']): Promise<void> {
+    const running = (await this.load()).deployments.find(
+      (deployment) => deployment.environment === environment && isUnsettled(deployment.status),
+    )
+    if (running === undefined) return
+    const lastBeat = (await this.loadHeartbeats())[running.id]
+    if (lastBeat === undefined) {
+      await this.beat(running.id)
+      return
+    }
+    if (Date.now() - lastBeat < STALE_RUN_MS) return
+    await this.finishDeployment({ deploymentId: running.id, status: 'failed' })
+  }
+
+  private async loadHeartbeats(): Promise<Record<string, number>> {
+    this.heartbeats ??= (await this.ctx.storage.get<Record<string, number>>(HEARTBEATS_KEY)) ?? {}
+    return this.heartbeats
+  }
+
+  private async saveHeartbeats(heartbeats: Record<string, number>): Promise<void> {
+    await this.ctx.storage.put(HEARTBEATS_KEY, heartbeats)
+    this.heartbeats = heartbeats
+  }
+
+  private async beat(deploymentId: string): Promise<void> {
+    await this.saveHeartbeats({ ...(await this.loadHeartbeats()), [deploymentId]: Date.now() })
+  }
+
+  private async dropHeartbeat(deploymentId: string): Promise<void> {
+    const heartbeats = await this.loadHeartbeats()
+    if (!(deploymentId in heartbeats)) return
+    const rest = { ...heartbeats }
+    delete rest[deploymentId]
+    await this.saveHeartbeats(rest)
   }
 
   async cancelDeployment(input: CancelDeploymentInput) {
@@ -538,11 +636,11 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
       (await this.ctx.storage.get<Record<string, string>>(CANCEL_TOKENS_KEY)) ?? {}
     return this.cancelTokens
   }
+}
 
-  private async saveCancelTokens(tokens: Record<string, string>): Promise<void> {
-    await this.ctx.storage.put(CANCEL_TOKENS_KEY, tokens)
-    this.cancelTokens = tokens
-  }
+/** Whether a deployment still counts as in flight, the same test `startDeployment` refuses on. */
+function isUnsettled(status: DeploymentStatus): boolean {
+  return status === 'running' || status === 'queued'
 }
 
 /**
