@@ -53,25 +53,39 @@ export function chatRequestRefusal(messages: unknown[]): string | undefined {
 }
 
 /**
- * The transcript with client-supplied provider options removed from user text,
- * where the conversion would otherwise pass them straight to the provider.
+ * The keys a UI part carries provider metadata under: `providerMetadata` on text,
+ * reasoning, file and source parts, and `callProviderMetadata` and
+ * `resultProviderMetadata` on tool parts.
+ */
+const PROVIDER_METADATA_KEYS = [
+  'providerMetadata',
+  'callProviderMetadata',
+  'resultProviderMetadata',
+] as const
+
+/**
+ * The transcript with provider metadata removed from every part of every role.
  *
- * User parts only. On assistant parts this metadata is what the provider itself
- * wrote on an earlier step, and an approval resume sends it back as it came.
+ * The transcript is client-held, so this metadata is whatever the client sent,
+ * whichever role it sits under. The conversion copies it into the prompt's
+ * provider options, where it would be counted towards the turn's spend though
+ * the provider never reads it. Groq, the only provider (ADR-0026), writes none,
+ * so the SPA loses nothing. An approval does not depend on it either: its
+ * signature is on `part.approval`.
  *
  * Returns a copy of the messages it changes, and leaves the rest as they are.
  */
-export function stripUserProviderMetadata<MESSAGE extends UIMessage>(
-  messages: MESSAGE[],
-): MESSAGE[] {
+export function stripProviderMetadata<MESSAGE extends UIMessage>(messages: MESSAGE[]): MESSAGE[] {
+  const hasMetadata = (part: object) => PROVIDER_METADATA_KEYS.some((key) => key in part)
   return messages.map((message) =>
-    message.role === 'user' && message.parts.some((part) => 'providerMetadata' in part)
+    message.parts.some(hasMetadata)
       ? {
           ...message,
           parts: message.parts.map((part) => {
-            const stripped = { ...part }
-            delete (stripped as { providerMetadata?: unknown }).providerMetadata
-            return stripped
+            if (!hasMetadata(part)) return part
+            const stripped: Record<string, unknown> = { ...part }
+            for (const key of PROVIDER_METADATA_KEYS) delete stripped[key]
+            return stripped as typeof part
           }),
         }
       : message,

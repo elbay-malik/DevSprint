@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { MAX_USER_MESSAGE_CHARS } from '@devsprint/shared'
 import type { UIMessage } from 'ai'
-import { chatRequestRefusal, stripUserProviderMetadata } from './request-bounds'
+import { chatRequestRefusal, stripProviderMetadata } from './request-bounds'
 
 function user(...parts: unknown[]) {
   return { id: 'u1', role: 'user', parts }
@@ -69,7 +69,6 @@ describe('chatRequestRefusal', () => {
           state: 'approval-responded',
           input: { issueKey: 'DS-7', status: 'done' },
           approval: { id: 'ap1', approved: true, signature: 'sig' },
-          callProviderMetadata: { google: { thoughtSignature: 'abc' } },
         },
       ],
     }
@@ -81,34 +80,57 @@ describe('chatRequestRefusal', () => {
   })
 })
 
-describe('stripUserProviderMetadata', () => {
+describe('stripProviderMetadata', () => {
   const metadata = { openai: { reasoningEffort: 'high' } }
 
   it('removes provider options from user text', () => {
     const message = user({ ...text('hi'), providerMetadata: metadata }) as unknown as UIMessage
 
-    const [stripped] = stripUserProviderMetadata([message])
+    const [stripped] = stripProviderMetadata([message])
 
     expect(stripped?.parts).toEqual([text('hi')])
   })
 
-  it('leaves assistant parts alone, which the provider wrote itself', () => {
+  it('removes it from every part of an assistant message too', () => {
+    const approval = { id: 'ap1', approved: true, signature: 'sig' }
     const assistant = {
       id: 'a1',
       role: 'assistant',
       parts: [
-        { ...text('answer'), providerMetadata: { google: { thoughtSignature: 'abc' } } },
+        { type: 'step-start' },
+        { ...text('answer'), providerMetadata: metadata },
+        { type: 'reasoning', text: 'thinking', state: 'done', providerMetadata: metadata },
         {
           type: 'tool-update_issue_status',
           toolCallId: 'c1',
           state: 'approval-responded',
           input: {},
-          approval: { id: 'ap1', approved: true },
-          callProviderMetadata: { google: { thoughtSignature: 'def' } },
+          approval,
+          callProviderMetadata: metadata,
+        },
+        {
+          type: 'tool-get_sprint_status',
+          toolCallId: 'c2',
+          state: 'output-available',
+          input: {},
+          output: { ok: true },
+          callProviderMetadata: metadata,
+          resultProviderMetadata: metadata,
         },
       ],
     } as unknown as UIMessage
 
-    expect(stripUserProviderMetadata([assistant])[0]).toBe(assistant)
+    const [stripped] = stripProviderMetadata([assistant])
+
+    expect(JSON.stringify(stripped)).not.toContain('reasoningEffort')
+    expect(stripped?.parts).toHaveLength(5)
+    // The approval and its signature stay, since nothing about it is metadata.
+    expect(stripped?.parts[3]).toMatchObject({ state: 'approval-responded', approval })
+  })
+
+  it('returns a message with no metadata as it was', () => {
+    const message = user(text('hi')) as unknown as UIMessage
+
+    expect(stripProviderMetadata([message])[0]).toBe(message)
   })
 })

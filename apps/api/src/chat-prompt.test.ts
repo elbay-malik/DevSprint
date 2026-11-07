@@ -124,9 +124,37 @@ describe('the prompt a chat request becomes', () => {
     expect(JSON.stringify(prompt)).not.toContain('by-the-client')
   })
 
-  it('keeps provider metadata on assistant parts, which the provider wrote itself', async () => {
+  it('carries no provider metadata a client put on an assistant part', async () => {
     const prompt = await promptFor([
       { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'first' }] },
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          { type: 'step-start' },
+          { type: 'text', text: 'checking', providerMetadata: { test: { note: 'drop-me' } } },
+          {
+            type: 'tool-get_sprint_status',
+            toolCallId: 'c1',
+            state: 'output-available',
+            input: {},
+            output: { ok: true, data: {} },
+            callProviderMetadata: { test: { note: 'drop-me' } },
+            resultProviderMetadata: { test: { note: 'drop-me' } },
+          },
+        ],
+      },
+      { id: 'u2', role: 'user', parts: [{ type: 'text', text: 'second' }] },
+    ])
+
+    expect(JSON.stringify(prompt)).toContain('c1')
+    expect(JSON.stringify(prompt)).not.toContain('drop-me')
+  })
+
+  it('keeps a large tool part metadata out of the prompt the spend estimate is read from', async () => {
+    // After the latest user message, where history trimming never reaches.
+    const prompt = await promptFor([
+      { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hello' }] },
       {
         id: 'a1',
         role: 'assistant',
@@ -138,14 +166,14 @@ describe('the prompt a chat request becomes', () => {
             state: 'output-available',
             input: {},
             output: { ok: true, data: {} },
-            callProviderMetadata: { google: { thoughtSignature: 'keep-me' } },
+            callProviderMetadata: { test: { padding: 'p'.repeat(200_000) } },
           },
         ],
       },
-      { id: 'u2', role: 'user', parts: [{ type: 'text', text: 'second' }] },
     ])
 
-    expect(JSON.stringify(prompt)).toContain('keep-me')
+    expect(JSON.stringify(prompt)).toContain('c1')
+    expect(JSON.stringify(prompt).length).toBeLessThan(5_000)
   })
 
   describe('with a board full of the longest issues the schemas allow', () => {

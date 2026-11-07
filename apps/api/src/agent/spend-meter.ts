@@ -11,6 +11,14 @@ const CHARS_PER_TOKEN = 4
  */
 const OUTPUT_CHARGE_CHARS = 2000
 
+/**
+ * The most a call is charged as it starts: about what one call can really cost,
+ * Groq's 8,000 input tokens a minute (ADR-0021) plus `MAX_OUTPUT_TOKENS`. Counting
+ * characters overstates a request the provider would turn down for its size, and
+ * a call cut off before it reports keeps this charge. Revisit with the tier.
+ */
+export const MAX_CALL_ESTIMATE_TOKENS = 12_000
+
 const toTokens = (chars: number) => Math.ceil(chars / CHARS_PER_TOKEN)
 
 export interface SpendMeterOptions {
@@ -54,7 +62,10 @@ export function createSpendMeter({ charge, refund }: SpendMeterOptions): SpendMe
       // `ToolLoopAgent.stream` never calls this, and a finished call has a real figure.
       doGenerate: (options) => model.doGenerate(options),
       doStream: async (options) => {
-        const estimate = toTokens(JSON.stringify([options.prompt, options.tools]).length)
+        const estimate = Math.min(
+          toTokens(JSON.stringify([options.prompt, options.tools]).length),
+          MAX_CALL_ESTIMATE_TOKENS,
+        )
         add(estimate)
         let result
         try {
