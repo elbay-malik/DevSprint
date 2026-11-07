@@ -57,7 +57,7 @@ those `.max()` calls.
 
 Every write (tools 7–11) can also return `WORKSPACE_FULL` when the persisted board would exceed its
 512 KB cap ([ADR-0020](./adr/0020-rate-limit-the-public-mcp-endpoint.md)), and `create_issue`
-returns it once a day has added 40 issues to the seed. Text a write stores may not contain control
+returns it once the board holds 40 issues on top of the seed. Text a write stores may not contain control
 characters other than tab, newline and carriage return, or unpaired surrogates
 ([ADR-0024](./adr/0024-harden-the-shared-board.md)). Resetting the board clears both limits.
 
@@ -437,7 +437,9 @@ always auto-execute; ALL writes are gated — no exceptions.**
    history that carries the approval response is client-controlled and cannot be trusted: a
    forged or replayed "approved" message must never be sufficient to execute a write. Forgery is
    covered by signing each approval request (`experimental_toolApprovalSecret`); replay is **not**
-   covered by the SDK and needs the server's own one-time-use ledger. The policy
+   covered by the SDK and needs the server's own one-time-use ledger, which refuses a replay while
+   the id is still recorded; [ADR-0014](./adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)'s
+   2026-11-01 status note names the exceptions it accepts. The policy
    vs. mechanism split (policy is stable; the SDK API has churned) is recorded in
    [ADR-0003](./adr/0003-hitl-approval-gates-on-write-tools.md).
 5. **Denials.** A denied call never mutates state. The denial (with optional reason) is returned

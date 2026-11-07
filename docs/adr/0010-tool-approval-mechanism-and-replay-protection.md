@@ -81,3 +81,13 @@ conversation.
 "Keyless local dev and CI are the only ways this demo runs" no longer holds. Production has run
 since 2026-10-21, and `scripts/deploy.ts` sets `TOOL_APPROVAL_SECRET` on the first deploy, so the
 random per-isolate fallback is reached only locally (ADR-0019).
+
+## Status note — 2026-11-07
+
+"ADR-0003's requirement is met in full rather than half" overstates it. Forgery is refused by the
+SDK's signature. Replay is refused only while the approval id is still in the ledger, and
+[ADR-0014](0014-daily-reset-alarm-and-a-persisted-approval-ledger.md) names three exceptions: a
+board reset clears the ledger, the ledger evicts its oldest ids once full, and unsigned ids count
+towards that limit because ids are recorded before the signature is checked. ADR-0014's 2026-11-01
+status note accepts all three for a shared demo board. The header of `apps/api/src/agent/approvals.ts`
+now says the same.

@@ -28,8 +28,8 @@ export interface RateLimitBinding {
 /**
  * How much the demo may spend in a UTC day before it stops answering.
  *
- * Defaults to Groq's free-tier 100K tokens/day (ADR-0005), so the cap and the
- * quota it is protecting are the same number unless someone says otherwise.
+ * The default sits below Groq's free-tier daily quota for `openai/gpt-oss-120b`
+ * (200K tokens a day, ADR-0026), so the demo stops before the provider does.
  * `0` disables the cap, which is what local dev and CI want.
  */
 export const DEFAULT_DAILY_TOKEN_CAP = 100_000
@@ -64,11 +64,12 @@ export function resolveClientTokenShare(configured: string | undefined): number 
  * Which spend limit, if any, this usage has reached. The day's cap comes first:
  * once it is gone no client can be served, so that is the true thing to say.
  *
- * This is check-then-record, for the cap and the share alike. A turn is checked,
- * then spends, then records, so concurrent turns can each pass the check and
- * overshoot by about a step per turn. Reserving tokens up front was rejected
- * (ADR-0016) because it means guessing them. The estimate in spend-meter.ts is
- * not that: it only stays for a step that never reports a real figure.
+ * This is check-then-record, for the cap and the share alike. A turn is checked
+ * against what has been spent so far, not against what its next call will cost,
+ * and the charge lands in a separate call afterwards. So concurrent turns can
+ * each pass the check, and a turn can end past the limit it was checked against.
+ * spend-meter.ts does charge an estimate as each model call starts (ADR-0016's
+ * 2026-11-02 status note), but that charge comes after this check, not with it.
  */
 export function spendLimitReached(
   usage: DailyModelUsage,

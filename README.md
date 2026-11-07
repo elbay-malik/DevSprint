@@ -5,8 +5,9 @@
 An AI copilot for a sprint board, built to show how an agent can be **useful without being trusted**:
 
 - every answer is grounded in real tool calls
-- every write waits for a human to approve it
+- every write the copilot proposes waits for a human to approve it
 - the same issue tools are served to outside AI assistants over MCP, writing to the same live board
+  behind their own host's permission prompt
 
 **Live demo:** https://devsprint.elbaymalik.com
 **Public MCP server:** `https://devsprint-mcp-issues.eleo-666.workers.dev/mcp` (Streamable HTTP)
@@ -39,7 +40,7 @@ information.
 ```mermaid
 flowchart LR
   Browser["Vue 3 SPA<br/>(Workers Static Assets)"] -->|"UI message stream"| Api["api Worker<br/>Hono + AI SDK v6 ToolLoopAgent"]
-  Api -->|"service binding, MCP client"| Mcp["mcp-issues Worker<br/>4 issue tools"]
+  Api -->|"service binding, MCP client"| Mcp["mcp-issues Worker<br/>5 issue tools"]
   Host["External MCP host<br/>Claude Desktop, Cursor"] -->|"Streamable HTTP"| Mcp
   Api --> DO[("WorkspaceDO<br/>board, approval ledger,<br/>token budget, reset alarm")]
   Mcp --> DO
@@ -104,9 +105,15 @@ tests are checked as well as run:
 
 - **Per-visitor workspaces.** Multi-tenancy is a non-goal, so everyone shares one board, reset
   daily ([ADR-0014](docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
+- **An approval card for outside assistants.** The public MCP server takes writes from any MCP
+  client without the copilot's approval card. The host's own permission prompt is the gate there,
+  and the server bounds writes by rate, request size and 40 new issues until the board resets
+  ([ADR-0020](docs/adr/0020-rate-limit-the-public-mcp-endpoint.md),
+  [ADR-0024](docs/adr/0024-harden-the-shared-board.md)).
 - **Unlimited use of the live model.** It runs on free tiers. A per-IP rate limit, a daily token
-  share per client and a daily token cap keep one visitor from spending it for everyone, and once
-  a limit is reached the demo says so instead of failing.
+  share per client and a daily token cap stop one visitor spending it for everyone, and once one
+  of those is reached the copilot says so instead of failing. They cover model spend only: if the
+  hosting platform's own request quota runs out, the demo shows as offline until it refills.
 - **Full markdown in chat.** Answers render bold, lists, tables and code, but never links, and
   never through `v-html`. A model repeating planted board text can't produce markup or a clickable
   URL ([ADR-0022](docs/adr/0022-a-safe-markdown-subset-in-chat.md)).
@@ -145,8 +152,11 @@ Google's terms allow only its paid services for an app open to users in the EEA,
 the UK ([ADR-0026](docs/adr/0026-groq-only-on-the-public-demo.md)). `MODEL_PROVIDER` takes `auto`,
 `groq` or `mock`. `wrangler.jsonc` sets `auto`, which falls back to the mock when no key is set, so a
 fresh clone still runs without any. Each response reports the resolved route in the `X-DevSprint-Model` header.
-Three spend controls bound a live model: 60 chat requests a minute per IP, a 25,000-token daily
-share per client, and a 100,000-token daily cap. The mock never counts against the share or the cap.
+Three spend controls limit a live model: 60 chat requests a minute per IP, a 25,000-token daily
+share per client, and a 100,000-token daily cap. The share is per client address, so a few
+addresses can still use up the cap between them
+([ADR-0016](docs/adr/0016-two-spend-controls-and-an-honest-injection-posture.md)). The mock never
+counts against the share or the cap.
 
 ### Scripts
 

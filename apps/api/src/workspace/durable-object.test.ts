@@ -259,8 +259,8 @@ describe('WorkspaceDO — approval ledger', () => {
   })
 
   it('evicts the oldest ids once the ledger grows past its cap', async () => {
-    // Guards against `saveLedger` throwing once the serialized ledger nears
-    // Durable Object storage's 128 KiB per-value limit on a very busy day.
+    // Keeps the stored ledger bounded on a very busy day, so `saveLedger`
+    // never has to refuse new ids.
     const { stub } = await freshDO()
 
     const ids = Array.from({ length: 2001 }, (_, index) => `a${index}`)

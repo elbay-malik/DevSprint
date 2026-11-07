@@ -101,3 +101,13 @@ has one now, on the spend path only: `modelUsage` and `recordModelUsage` take a 
 hashed (ADR-0016's status note of this date). That reversal is for model spend, where one client could
 take the whole day from everyone. Board writes still carry no key and the create quota stays unbuilt,
 because the board resets daily and 40 new issues a day already bounds a flood.
+
+## Status note — 2026-11-07
+
+"A day can add at most 40 issues" and "40 new issues a day" describe the limit loosely. The check
+counts the issues on the board above the seed, not creates in a day: undoing a create frees its
+slot, and a reset, by the midnight alarm or by anyone pressing Reset, clears all 40. So the limit
+holds until the board resets, which can happen more than once a day. The `WORKSPACE_FULL` message,
+the comment on `MAX_CREATED_ISSUES`, docs/tool-inventory.md and docs/domain-model.md now say so.
+The slots are also shared by every path that creates issues, the in-app agent included, so while
+the board is full the agent cannot create one either until a reset.

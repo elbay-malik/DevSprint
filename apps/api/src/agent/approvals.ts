@@ -12,10 +12,16 @@
  *
  * REPLAY — not handled by the SDK. The signed payload carries no nonce and no
  * expiry, so one captured approval verifies forever; replaying a single valid
- * approval was measured executing the same write three times. ADR-0003 requires
+ * approval was measured executing the same write three times. ADR-0003 asks
  * that a forged *or replayed* approval never suffice, so every approval id is
  * spent the first time it is acted on — via `workspace.spendApprovals`, the
  * one piece of durable, serialising state this Worker has (ADR-0014).
+ *
+ * Single use holds while the id is still in the ledger, which is not forever.
+ * The ledger is cleared by a board reset (daily, or on request) and evicts its
+ * oldest ids once it is full, and ids are recorded before the SDK checks their
+ * signatures, so unsigned ids also take up room. ADR-0014's 2026-11-01 status
+ * note names these exceptions and accepts them for a demo board.
  */
 import { isToolUIPart, type UIMessage } from 'ai'
 import { WRITE_TOOL_NAMES, type WorkspaceApi } from '@devsprint/shared/tools'

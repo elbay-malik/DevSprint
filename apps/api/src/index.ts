@@ -68,7 +68,7 @@ function workspaceOf(env: AppEnv): WorkspaceApi {
 let warnedLocalTools = false
 
 /**
- * The agent's tools. The four issue tools come from the issues MCP server — the
+ * The agent's tools. The five issue tools come from the issues MCP server — the
  * same endpoint an external host talks to, so both clients exercise one
  * implementation (ADR-0002); the rest are still defined locally until the
  * deploys and analytics servers exist.

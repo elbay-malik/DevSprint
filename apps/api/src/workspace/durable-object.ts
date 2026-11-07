@@ -60,17 +60,18 @@ const LEDGER_KEY = 'spent-approvals'
 /**
  * Caps the ledger's *count*, which only bounds its serialized size because
  * `approvals.ts`'s `MAX_APPROVAL_ID_LENGTH` bounds each entry's length first —
- * a count cap alone does not protect a 128 KiB per-value limit against a
- * caller that controls how long an id is. Worst case, every one of `LEDGER_MAX`
- * ids is at that 64-character ceiling: `1500 * (64 + 4 bytes of JSON overhead)
- * ≈ 102 KB`, comfortably under the 128 KiB Durable Object storage allows for
- * one value. Real ids are `crypto.randomUUID()`s (36 characters), so this
- * margin is never close in practice — it only matters against a client trying
- * to make it close.
+ * a count cap alone does not bound the stored value against a caller that
+ * controls how long an id is. Worst case, every one of `LEDGER_MAX` ids is at
+ * that 64-character ceiling: `1500 * (64 + 4 bytes of JSON overhead) ≈ 102 KB`.
+ * The class is SQLite-backed (see `MAX_WORKSPACE_BYTES`), so the per-value
+ * limit is ~2 MiB and this is far below it. Real ids are `crypto.randomUUID()`s
+ * (36 characters).
  *
- * The ledger clears daily anyway, so evicting the oldest entries once it is
- * this large costs nothing in the case that matters (a quiet day never gets
- * close) and avoids `saveLedger` throwing on a very busy one instead.
+ * The ledger clears daily, and a quiet day never gets close to this. Past it the
+ * oldest entries are evicted rather than `saveLedger` refusing new ones, so a
+ * busy day keeps approvals working. The cost is that an evicted id is no longer
+ * refused: ADR-0014's 2026-11-01 status note names that as an accepted
+ * exception to single use.
  */
 const LEDGER_MAX = 1500
 /**
