@@ -32,7 +32,7 @@ import {
 import {
   chatRequestRefusal,
   MAX_CHAT_BODY_BYTES,
-  stripUserProviderMetadata,
+  stripProviderMetadata,
 } from './agent/request-bounds'
 import { createTurnTracer, resolveTracingConfig } from './agent/tracing'
 import {
@@ -389,7 +389,7 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
     return invalidInput(c, 'Invalid UI messages.')
   }
   // Before settling, so what gets spent is read from the array the model will see.
-  uiMessages = stripUserProviderMetadata(trimChatHistory(uiMessages))
+  uiMessages = stripProviderMetadata(trimChatHistory(uiMessages))
   if (hasTooManyApprovals(uiMessages)) {
     return invalidInput(c, 'Too many approvals in one request.')
   }

@@ -232,3 +232,23 @@ so for a once-a-day event on the cap, and the share makes it reachable by any cl
 session. A turn a limit ends between steps now closes with that limit's message, in a step of its own
 for the reason a refused turn has one. It leaves out the line about an approval not being applied,
 because an approval the request carried has already run by then.
+
+## Status note — 2026-11-07
+
+"Provider options are removed from user parts, and left on assistant parts because Gemini reads its
+thought signature back from there" is out of date. ADR-0026 removed Gemini, and Groq writes no
+part-level metadata, so the reason for keeping it has gone. Provider metadata is now removed from
+every part of every role: `providerMetadata` on text, reasoning, file and source parts, and
+`callProviderMetadata` and `resultProviderMetadata` on tool parts. The transcript is client-held, so
+whatever sat there came from the client, and the conversion would have copied it into the prompt,
+where the call's estimate counts it though the provider never reads it. Approvals are unaffected:
+their signature is on the approval itself, not in any metadata. If a provider that reads its own
+metadata back is ever added, this needs an allowlist by provider key.
+
+The estimate a call is charged as it starts is now capped at 12,000 tokens
+(`MAX_CALL_ESTIMATE_TOKENS`), about what one call can cost on Groq's free tier: 8,000 input tokens
+a minute (ADR-0021) plus the 4,096 a call may write. Counting characters overstated a large request
+the provider would turn down anyway, and a call cut off before it reports keeps that charge. Output
+is still charged as it is written, and a step that finishes still settles on the provider's figure.
+A call larger than the cap that gets cut off is undercharged by the difference, which can only
+happen on a tier with a higher per-minute limit, so the figure follows the tier.

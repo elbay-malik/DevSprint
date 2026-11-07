@@ -190,8 +190,8 @@ describe('approval gates (scenario S-B)', () => {
     expect(replay.body).not.toContain('"type":"error"')
   })
 
-  it('still resumes with call metadata on the tool parts', async () => {
-    // A provider may read its own metadata back from here, so nothing may strip it.
+  it('still resumes when the tool parts carry call metadata', async () => {
+    // The server drops that metadata, and the approval's signature is not part of it.
     const first = await post([userMessage(CLOSE_OUT)])
     const assistant = answeredAssistantMessage(first.chunks, () => ({ approved: true }))
     const withMetadata = {

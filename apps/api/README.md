@@ -243,7 +243,8 @@ Several visitors behind one NAT share one share.
 Usage is recorded per step, so a turn someone stopped still counts the steps it took. A model call
 is also charged as it starts and as it writes, from an estimate, because the SDK reports nothing for
 a step that never finishes and a client could otherwise leave mid-call every turn without being
-charged (`src/agent/spend-meter.ts`). A step that finishes settles on the provider's figure, and a
+charged (`src/agent/spend-meter.ts`). The estimate for one call is at most 12,000 tokens, about what
+one call can cost on Groq's free tier. A step that finishes settles on the provider's figure, and a
 call the provider turns down is refunded.
 
 A turn re-reads both limits between steps and ends once one has been reached, closing with that
@@ -258,8 +259,8 @@ A transcript with a system message, a user message holding anything but text, or
 `providerExecuted` is a 400. The SPA sends none of them. The second would have the Worker fetch a
 file from a URL the client chose, and the third would put a forged result where the SDK does not
 look for one.
-Provider options on a user part are removed before conversion, and the ones on assistant parts stay,
-because the provider wrote them itself and an approval resume sends them back as they came.
+Provider metadata is removed from every part of every role before conversion. The transcript is
+client-held, Groq writes none, and an approval's signature does not live there.
 
 The scripted mock is exempt, so local dev, CI and e2e spend nothing and are never rationed. Set
 `DAILY_TOKEN_CAP=0` to turn the cap off entirely, or `CLIENT_DAILY_TOKEN_SHARE=0` for the share; one

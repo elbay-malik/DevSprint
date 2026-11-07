@@ -4,7 +4,7 @@ import type {
   LanguageModelV3CallOptions,
   LanguageModelV3StreamPart,
 } from './provider-types'
-import { createSpendMeter } from './spend-meter'
+import { createSpendMeter, MAX_CALL_ESTIMATE_TOKENS } from './spend-meter'
 
 const CALL = {
   prompt: [{ role: 'user', content: [{ type: 'text', text: 'x'.repeat(400) }] }],
@@ -74,6 +74,39 @@ describe('createSpendMeter', () => {
       .doStream({ ...CALL, tools: [{ description: 'y'.repeat(4000) }] } as never)
 
     expect(withTools.total() - bare.total()).toBeGreaterThanOrEqual(1000)
+  })
+
+  it('charges a call no more than one call can cost as it starts', async () => {
+    const { charge, refund, total, spend } = meter()
+    const huge = {
+      prompt: [{ role: 'user', content: [{ type: 'text', text: 'x'.repeat(256 * 1024) }] }],
+    } as unknown as LanguageModelV3CallOptions
+    const left = new AbortController()
+    left.abort()
+    const model = spend.wrap(modelThat(() => Promise.reject(new Error('aborted'))))
+
+    await expect(model.doStream({ ...huge, abortSignal: left.signal })).rejects.toThrow()
+
+    expect(charge).toHaveBeenCalledWith(MAX_CALL_ESTIMATE_TOKENS)
+    expect(refund).not.toHaveBeenCalled()
+    expect(total()).toBe(MAX_CALL_ESTIMATE_TOKENS)
+  })
+
+  it('still charges output on top of a capped estimate', async () => {
+    const { total, spend } = meter()
+    const huge = {
+      prompt: [{ role: 'user', content: [{ type: 'text', text: 'x'.repeat(256 * 1024) }] }],
+    } as unknown as LanguageModelV3CallOptions
+    const model = spend.wrap(
+      modelThat(() =>
+        Promise.resolve(streamOf([{ type: 'text-delta', id: '1', delta: 'a'.repeat(4000) }])),
+      ),
+    )
+
+    const { stream } = await model.doStream(huge)
+    await drain(stream)
+
+    expect(total()).toBe(MAX_CALL_ESTIMATE_TOKENS + 1000)
   })
 
   it('charges long output as it is written, so a step cut off late still counts', async () => {
