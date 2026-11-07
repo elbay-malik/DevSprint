@@ -40,10 +40,11 @@ Success, from `docs/product-brief.md`:
 
 ## Positioning
 
-- **Every write is a proposal until a person approves it.** An approval is a signed, single-use
-  card, kept in the transcript as the record of who allowed what.
+- **Every write the copilot proposes waits until a person approves it.** An approval is a signed,
+  single-use card, kept in the transcript as the record of who allowed what.
 - **The issue tools are served twice from one implementation:** to the in-app agent, and over a
-  public MCP server to any outside AI assistant. Both write to the same live board.
+  public MCP server to any outside AI assistant. Both write to the same live board, and an outside
+  assistant's writes are gated by its own host's permission prompt.
 - **The quality claims are tested, not asserted.** Tests check the page, the stream and the
   stored board for each scenario. A mutation pass proved the tests can fail, and live-model runs
   surfaced what the scripted model hid.

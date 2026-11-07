@@ -118,7 +118,7 @@ watch(
     <header class="px-4 py-3 lg:px-6">
       <h2 class="text-sm font-semibold">Copilot</h2>
       <p data-testid="chat-subtitle" class="text-muted-foreground text-xs text-pretty">
-        Answers come straight from the board. Nothing changes until you approve it.
+        Answers come straight from the board. The copilot changes nothing until you approve it.
       </p>
     </header>
     <Separator />

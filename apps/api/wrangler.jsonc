@@ -47,7 +47,7 @@
   "observability": {
     "enabled": true,
   },
-  // The agent sources its four issue tools from the public MCP server, the same
+  // The agent sources its five issue tools from the public MCP server, the same
   // way an external host does (ADR-0002). A service binding keeps that call
   // inside Cloudflare's network rather than going out over the internet.
   // The `Internal` entrypoint, so the agent's MCP calls never share the public

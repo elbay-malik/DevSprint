@@ -66,7 +66,9 @@ function nextIssueKey(workspace: Workspace): string {
 // --- 7. create_issue ----------------------------------------------------------
 
 /**
- * How many issues a day on the demo board can add to the seed.
+ * How many issues the demo board can hold on top of the seed until it resets.
+ * This counts the issues on the board, not creates in a day: undoing a create
+ * frees its slot, and a reset (daily, or on request) clears them all.
  *
  * `create_issue` is public and ungated over MCP (ADR-0020), so the board's
  * byte cap alone let one client fill it in a few minutes, and from then on
@@ -86,7 +88,7 @@ export function createIssue(
   if (workspace.issues.length >= SEED_ISSUE_COUNT + MAX_CREATED_ISSUES) {
     return fail(
       'WORKSPACE_FULL',
-      `The demo board already holds ${MAX_CREATED_ISSUES} new issues, which is as many as it takes in a day. Reset it to add more.`,
+      `The demo board already holds ${MAX_CREATED_ISSUES} new issues, which is as many as it takes until it resets. Reset it to add more.`,
     )
   }
   if (
