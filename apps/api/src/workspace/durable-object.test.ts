@@ -710,10 +710,15 @@ describe('WorkspaceDO — shared-board hardening (ADR-0024)', () => {
     expect((await stub.requestReset({ cooldownMs: 30_000 })).ok).toBe(true)
     vi.setSystemTime(new Date('2026-07-01T09:00:10Z'))
     const early = await stub.requestReset({ cooldownMs: 30_000 })
+    vi.setSystemTime(new Date('2026-07-01T09:00:29.900Z'))
+    const lastMoment = await stub.requestReset({ cooldownMs: 30_000 })
     vi.setSystemTime(new Date('2026-07-01T09:00:31Z'))
     const later = await stub.requestReset({ cooldownMs: 30_000 })
 
     expect(early.ok === false && early.error.code).toBe('RESET_COOLDOWN')
+    // The refusal says what is left, in whole seconds rounded up, never 0.
+    expect(early.ok === false && early.retryAfterSeconds).toBe(20)
+    expect(lastMoment.ok === false && lastMoment.retryAfterSeconds).toBe(1)
     expect(later.ok).toBe(true)
   })
 

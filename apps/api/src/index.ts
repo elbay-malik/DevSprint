@@ -44,7 +44,6 @@ import {
   messageOnlyResponse,
   RATE_LIMITED_MESSAGE,
   rateLimitKey,
-  RESET_RETRY_AFTER_SECONDS,
   resolveClientTokenShare,
   resolveDailyTokenCap,
   resolveResetCooldownMs,
@@ -235,7 +234,10 @@ app.post(API_ROUTES.workspaceReset, async (c) => {
     cooldownMs: resolveResetCooldownMs(c.env.RESET_COOLDOWN_SECONDS),
   })
   if (result.ok) return c.json(result.data)
-  return c.json(result, 429, { 'Retry-After': String(RESET_RETRY_AFTER_SECONDS) })
+  // The body stays the plain error envelope; how long is left goes in the header.
+  return c.json({ ok: false as const, error: result.error }, 429, {
+    'Retry-After': String(result.retryAfterSeconds),
+  })
 })
 
 /**

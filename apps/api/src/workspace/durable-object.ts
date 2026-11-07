@@ -24,6 +24,7 @@ import type {
   FinishDeploymentInput,
   CancelDeploymentInput,
   UndoChangeInput,
+  RequestResetResult,
 } from '@devsprint/shared/tools'
 import {
   diffReleaseNotes,
@@ -320,16 +321,18 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
     return seeded
   }
 
-  async requestReset(input: { cooldownMs: number }): Promise<ToolResult<Workspace>> {
+  async requestReset(input: { cooldownMs: number }): Promise<RequestResetResult> {
     const last = (await this.ctx.storage.get<number>(LAST_RESET_KEY)) ?? 0
     const wait = last + input.cooldownMs - Date.now()
     if (input.cooldownMs > 0 && wait > 0) {
+      const retryAfterSeconds = Math.max(1, Math.ceil(wait / 1000))
       return {
         ok: false,
         error: {
           code: 'RESET_COOLDOWN',
-          message: `The board was reset moments ago. Try again in ${Math.ceil(wait / 1000)} seconds.`,
+          message: `The board was reset moments ago. Try again in ${retryAfterSeconds} seconds.`,
         },
+        retryAfterSeconds,
       }
     }
     return { ok: true, data: await this.reset() }
