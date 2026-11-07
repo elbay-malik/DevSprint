@@ -5,6 +5,8 @@
  * ahead of the rate limit, and refuse what the SPA can never send. Anything the
  * SPA can reach gets trimmed instead (`trimChatHistory`), because a refusal it
  * can run into would come back on every later turn and strand the conversation.
+ *
+ * The undo and cancel routes have their own, much smaller bounds below.
  */
 import type { UIMessage } from 'ai'
 import { MAX_USER_MESSAGE_CHARS } from '@devsprint/shared'
@@ -16,6 +18,21 @@ import { MAX_USER_MESSAGE_CHARS } from '@devsprint/shared'
  * carries a card per issue.
  */
 export const MAX_CHAT_BODY_BYTES = 256 * 1024
+
+/**
+ * The whole body of an undo or a cancel, in bytes. Each carries one id, so the
+ * SPA sends a few dozen bytes, and anything near this is not from it.
+ */
+export const MAX_BOARD_WRITE_BODY_BYTES = 4 * 1024
+
+/**
+ * The longest id an undo or a cancel may name, checked before the request goes
+ * on to the workspace. Every id these routes take is minted by the server: a
+ * `crypto.randomUUID()` (36 characters) for a change id or a cancel token, and
+ * `dep-<n>` for a deployment. The ceiling matches the one on change and
+ * approval ids.
+ */
+export const MAX_BOARD_WRITE_ID_LENGTH = 64
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
