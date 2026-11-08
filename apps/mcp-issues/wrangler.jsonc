@@ -7,7 +7,7 @@
   // zone's rate-limiting rule covers it (ADR-0019's 2026-11-08 note). A preview version of
   // this Worker would write to the production board, so it has none.
   "routes": [{ "pattern": "mcp.devsprint.elbaymalik.com", "custom_domain": true }],
-  "workers_dev": true,
+  "workers_dev": false,
   "preview_urls": false,
   "compatibility_flags": ["nodejs_compat"],
   "dev": {

@@ -224,8 +224,9 @@ refuses a request before it runs the Worker, but zone rules only apply to the zo
 never to `*.workers.dev`. So the two Workers that run code move onto the zone, and the zone's rule
 covers them.
 
-- `workers_dev` stays on for one deploy, so nothing breaks while the new hostnames get their
-  certificates. A follow-up turns it off for both, after which the old URLs stop answering.
+- `workers_dev` stayed on for one deploy, so nothing broke while the new hostnames got their
+  certificates. Once they answered, a follow-up turned it off for both, so the old
+  `devsprint-api` and `devsprint-mcp-issues` workers.dev URLs no longer answer.
 - The SPA keeps its `workers.dev` host: PR previews are aliases of it, and an assets-only Worker's
   requests are served as static assets, which do not count against the quota.
 - The smoke script retries its first request to each new host for up to two minutes, because a
