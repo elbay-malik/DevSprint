@@ -3,12 +3,14 @@ import { MAX_HISTORY_MESSAGES, MAX_USER_MESSAGE_CHARS, type Workspace } from '@d
 import type { WorkspaceApi } from '@devsprint/shared/tools'
 import app from './index'
 import { BUDGET_REACHED_MESSAGE, CLIENT_BUDGET_REACHED_MESSAGE } from './agent/limits'
+import { MAX_CALL_ESTIMATE_TOKENS } from './agent/spend-meter'
 import {
   MAX_BOARD_WRITE_BODY_BYTES,
   MAX_BOARD_WRITE_ID_LENGTH,
   MAX_CHAT_BODY_BYTES,
 } from './agent/request-bounds'
 import { fakeWorkspaceBinding } from '../test/workspace-binding'
+import { createWorkspaceStore } from './workspace/store'
 
 const workspace = fakeWorkspaceBinding()
 const env = {
@@ -923,8 +925,8 @@ describe('POST /api/chat — spend controls', () => {
   })
 
   it('stops a running turn once its spend has used up the budget', async () => {
-    // Every concurrent turn passes the check at the door before any has recorded
-    // spend, so a turn has to look again between steps or the cap does not hold.
+    // A turn that has used up the cap ends between steps, rather than making a
+    // call only for the admission to refuse it.
     const chunk = (extra: Record<string, unknown>) =>
       `data: ${JSON.stringify({ id: '1', object: 'chat.completion.chunk', created: 1, model: 'm', ...extra })}\n\n`
     const provider = vi.fn(() =>
@@ -1134,8 +1136,8 @@ describe('POST /api/chat — spend controls', () => {
     })
 
     it('stops a running turn once its spend has used up the share', async () => {
-      // The same reason as the cap: concurrent turns from one client all pass the
-      // door, so each has to look again between steps.
+      // The same as the cap: a turn that has used up the share ends between
+      // steps rather than making a call only to be refused.
       const chunk = (extra: Record<string, unknown>) =>
         `data: ${JSON.stringify({ id: '1', object: 'chat.completion.chunk', created: 1, model: 'm', ...extra })}\n\n`
       const provider = vi.fn(() =>
@@ -1320,6 +1322,131 @@ describe('POST /api/chat — spend controls', () => {
 
         expect(fresh.store.modelUsage().tokens).toBeGreaterThan(0)
       })
+    })
+
+    describe('a burst of simultaneous turns', () => {
+      const BURST = 8
+
+      it("passes a client's share by one call at most", async () => {
+        const provider = stubProvider()
+        const fresh = fakeWorkspaceBinding()
+        const on = { ...SHARE, WORKSPACE: fresh.binding }
+
+        const turns = await Promise.all(Array.from({ length: BURST }, () => askAs(ME, on)))
+        await landed(() => fresh.store.modelUsage(ME).clientTokens ?? 0)
+
+        // The door reads before any of them is charged, so it lets them all in.
+        // The first call's admission is what turns the rest away.
+        expect(provider).toHaveBeenCalledTimes(1)
+        expect(turns.filter((turn) => turn.limit === null)).toHaveLength(1)
+        const refused = turns.filter((turn) => turn.limit === 'client-budget')
+        expect(refused).toHaveLength(BURST - 1)
+        for (const turn of refused) {
+          expect(textOf(parseChunks(turn.answer))).toBe(CLIENT_BUDGET_REACHED_MESSAGE)
+        }
+        expect(fresh.store.modelUsage(ME).clientTokens).toBeLessThanOrEqual(
+          1_000 + MAX_CALL_ESTIMATE_TOKENS,
+        )
+      })
+
+      it("passes the day's cap by one call at most, with no client key", async () => {
+        const provider = stubProvider()
+        const fresh = fakeWorkspaceBinding()
+        const on = { ...SHARE, DAILY_TOKEN_CAP: '1000', WORKSPACE: fresh.binding }
+
+        const turns = await Promise.all(Array.from({ length: BURST }, () => askAs(undefined, on)))
+        await landed(() => fresh.store.modelUsage().tokens)
+
+        expect(provider).toHaveBeenCalledTimes(1)
+        expect(turns.filter((turn) => turn.limit === 'budget')).toHaveLength(BURST - 1)
+        expect(fresh.store.modelUsage().tokens).toBeLessThanOrEqual(
+          1_000 + MAX_CALL_ESTIMATE_TOKENS,
+        )
+      })
+    })
+
+    it('answers a first call the admission refuses as the door would, without the model', async () => {
+      const provider = stubProvider()
+      const store = createWorkspaceStore()
+      const refusing = fakeWorkspaceBinding(store, {
+        admitModelCall: () =>
+          Promise.resolve({
+            admitted: false,
+            limit: 'client-budget',
+            usage: store.modelUsage(ME),
+          }),
+      })
+
+      const { limit, answer } = await askAs(ME, { ...SHARE, WORKSPACE: refusing.binding })
+
+      expect(limit).toBe('client-budget')
+      expect(textOf(parseChunks(answer))).toBe(CLIENT_BUDGET_REACHED_MESSAGE)
+      expect(provider).not.toHaveBeenCalled()
+      expect(store.modelUsage(ME)).toMatchObject({ tokens: 0, clientTokens: 0 })
+    })
+
+    it('ends a turn whose later call is refused with the closing message', async () => {
+      // A tool step, then a refused call: the turn keeps the tool's result and
+      // says why it stopped, as it does when the check between steps ends it.
+      const chunk = (extra: Record<string, unknown>) =>
+        `data: ${JSON.stringify({ id: '1', object: 'chat.completion.chunk', created: 1, model: 'm', ...extra })}\n\n`
+      const provider = vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            chunk({
+              choices: [
+                {
+                  index: 0,
+                  delta: {
+                    role: 'assistant',
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: 'call-1',
+                        type: 'function',
+                        function: { name: 'get_sprint_status', arguments: '{}' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }) +
+              chunk({
+                choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+                x_groq: { usage: { prompt_tokens: 10, completion_tokens: 5 } },
+              }) +
+              'data: [DONE]\n\n',
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+        ),
+      )
+      vi.stubGlobal('fetch', provider)
+      const store = createWorkspaceStore()
+      let admissions = 0
+      const binding = fakeWorkspaceBinding(store, {
+        admitModelCall: (tokens, clientKey, limits) => {
+          admissions += 1
+          if (admissions === 1)
+            return Promise.resolve(store.admitModelCall(tokens, clientKey, limits))
+          return Promise.resolve({
+            admitted: false,
+            limit: 'budget',
+            usage: store.modelUsage(clientKey),
+          })
+        },
+      })
+
+      const { limit, answer } = await askAs(ME, { ...SHARE, WORKSPACE: binding.binding })
+
+      expect(limit).toBeNull()
+      expect(provider).toHaveBeenCalledTimes(1)
+      expect(admissions).toBe(2)
+      const chunks = parseChunks(answer)
+      expect(textOf(chunks)).toBe(BUDGET_REACHED_MESSAGE)
+      const types = chunks.map((part) => part.type)
+      expect(types.indexOf('tool-output-available')).toBeLessThan(types.indexOf('text-delta'))
+      expect(types.filter((type) => type === 'error')).toEqual([])
+      expect(types.at(-1)).toBe('finish')
     })
 
     it('charges nothing for a call the provider turned down', async () => {

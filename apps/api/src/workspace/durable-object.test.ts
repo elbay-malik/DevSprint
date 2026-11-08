@@ -585,6 +585,208 @@ describe('WorkspaceDO — per-client share of the budget', () => {
   })
 })
 
+describe('WorkspaceDO — admitting a model call', () => {
+  const ME = '203.0.113.7'
+  const held = (fake: ReturnType<typeof fakeDurableObjectState>) =>
+    fake.raw.get('daily-client-usage') as ClientUsage | undefined
+
+  it('charges an admitted call to the day and the client', async () => {
+    const { stub } = await freshDO()
+
+    const admission = await stub.admitModelCall(1_000, ME, { dailyCap: 5_000, clientShare: 2_000 })
+
+    expect(admission).toMatchObject({
+      admitted: true,
+      usage: { tokens: 1_000, clientTokens: 1_000 },
+    })
+    expect(await stub.modelUsage(ME)).toMatchObject({ tokens: 1_000, clientTokens: 1_000 })
+  })
+
+  it('refuses at the cap and records nothing', async () => {
+    const { stub } = await freshDO()
+    await stub.recordModelUsage(5_000)
+
+    const admission = await stub.admitModelCall(1_000, ME, { dailyCap: 5_000, clientShare: 2_000 })
+
+    expect(admission).toMatchObject({ admitted: false, limit: 'budget' })
+    expect(await stub.modelUsage(ME)).toMatchObject({ tokens: 5_000, clientTokens: 0 })
+  })
+
+  it("refuses at the client's share, and still admits another client", async () => {
+    const { stub } = await freshDO()
+    await stub.recordModelUsage(2_000, ME)
+    const limits = { dailyCap: 100_000, clientShare: 2_000 }
+
+    expect(await stub.admitModelCall(1_000, ME, limits)).toMatchObject({
+      admitted: false,
+      limit: 'client-budget',
+    })
+    expect(await stub.admitModelCall(1_000, '198.51.100.4', limits)).toMatchObject({
+      admitted: true,
+    })
+    expect((await stub.modelUsage(ME)).clientTokens).toBe(2_000)
+  })
+
+  it("names the cap when both are gone, since it is the day's that ran out", async () => {
+    const { stub } = await freshDO()
+    await stub.recordModelUsage(5_000, ME)
+
+    const admission = await stub.admitModelCall(1, ME, { dailyCap: 5_000, clientShare: 1_000 })
+
+    expect(admission).toMatchObject({ admitted: false, limit: 'budget' })
+  })
+
+  it('holds no share for a call with no client, and still holds the cap', async () => {
+    const { fake, stub } = await freshDO()
+
+    expect(
+      await stub.admitModelCall(3_000, undefined, { dailyCap: 5_000, clientShare: 1 }),
+    ).toMatchObject({ admitted: true, usage: { tokens: 3_000 } })
+    expect(held(fake)).toBeUndefined()
+    await stub.admitModelCall(3_000, undefined, { dailyCap: 5_000, clientShare: 1 })
+    expect(await stub.admitModelCall(1, undefined, { dailyCap: 5_000 })).toMatchObject({
+      admitted: false,
+      limit: 'budget',
+    })
+  })
+
+  it('treats a limit that is not a positive number as off', async () => {
+    const { stub } = await freshDO()
+    await stub.recordModelUsage(9_000, ME)
+
+    const admission = await stub.admitModelCall(1_000, ME, {
+      dailyCap: 0,
+      clientShare: Number.NaN,
+    })
+
+    expect(admission).toMatchObject({ admitted: true, usage: { tokens: 10_000 } })
+  })
+
+  it('reads usage stored before admissions existed', async () => {
+    // The storage format is the one recordModelUsage has always written, so a
+    // deployed object picks up the day's count where it was.
+    const { fake, stub } = await freshDO()
+    await stub.recordModelUsage(1_500, ME)
+    const day = (fake.raw.get('daily-model-usage') as { day: string }).day
+    fake.raw.set('daily-model-usage', { day, tokens: 4_800 })
+
+    expect(await stub.admitModelCall(500, ME, { dailyCap: 5_000 })).toMatchObject({
+      admitted: true,
+      usage: { tokens: 5_300, clientTokens: 2_000 },
+    })
+    expect(await stub.admitModelCall(500, ME, { dailyCap: 5_000 })).toMatchObject({
+      admitted: false,
+    })
+  })
+
+  it('hashes before it reads, as recording does', async () => {
+    const { fake, stub } = await freshDO()
+    const digest = vi.spyOn(crypto.subtle, 'digest')
+    const read = vi.spyOn(fake.ctx.storage, 'get')
+
+    await stub.admitModelCall(100, ME, { dailyCap: 5_000 })
+
+    expect(digest.mock.invocationCallOrder[0]).toBeLessThan(read.mock.invocationCallOrder[0]!)
+    digest.mockRestore()
+  })
+
+  describe('a burst of concurrent calls', () => {
+    const ESTIMATE = 1_000
+    const BURST = 20
+
+    it('passes the cap by one call at most', async () => {
+      const { stub } = await freshDO()
+      const cap = 4_500
+
+      const admissions = await Promise.all(
+        Array.from({ length: BURST }, () => stub.admitModelCall(ESTIMATE, ME, { dailyCap: cap })),
+      )
+
+      // Admitted at 0, 1,000 … 4,000 spent, then every later call is refused.
+      expect(admissions.filter((admission) => admission.admitted)).toHaveLength(5)
+      const spent = (await stub.modelUsage()).tokens
+      expect(spent).toBe(5_000)
+      expect(spent).toBeLessThanOrEqual(cap + ESTIMATE)
+    })
+
+    it("passes one client's share by one call at most", async () => {
+      const { stub } = await freshDO()
+      const share = 2_500
+
+      await Promise.all(
+        Array.from({ length: BURST }, () =>
+          stub.admitModelCall(ESTIMATE, ME, { dailyCap: 100_000, clientShare: share }),
+        ),
+      )
+
+      const { clientTokens } = await stub.modelUsage(ME)
+      expect(clientTokens).toBe(3_000)
+      expect(clientTokens).toBeLessThanOrEqual(share + ESTIMATE)
+    })
+
+    it('holds even when every read yields to the other calls', async () => {
+      // The object's own queue, not the platform's timing, is what holds this:
+      // here each read waits a macrotask, so without the queue every call in the
+      // burst would read the same total.
+      const { fake, stub } = await freshDO()
+      const read = fake.ctx.storage.get.bind(fake.ctx.storage)
+      vi.spyOn(fake.ctx.storage, 'get').mockImplementation(
+        ((key: string) =>
+          new Promise((resolve) => setTimeout(() => resolve(read(key)), 0))) as never,
+      )
+      const cap = 4_500
+
+      await Promise.all(
+        Array.from({ length: BURST }, () => stub.admitModelCall(ESTIMATE, ME, { dailyCap: cap })),
+      )
+
+      expect((await stub.modelUsage()).tokens).toBe(5_000)
+    })
+
+    it('is a real test: a separate check and charge let the whole burst through', async () => {
+      // The pattern admission replaces, on the same fake storage. If this ever
+      // stops overshooting, the burst tests above no longer show anything.
+      const { stub } = await freshDO()
+      const cap = 4_500
+
+      await Promise.all(
+        Array.from({ length: BURST }, async () => {
+          const usage = await stub.modelUsage(ME)
+          if (usage.tokens < cap) await stub.recordModelUsage(ESTIMATE, ME)
+        }),
+      )
+
+      expect((await stub.modelUsage()).tokens).toBeGreaterThan(cap + ESTIMATE)
+    })
+
+    it('loses no charge when output, refunds and admissions land together', async () => {
+      const { stub } = await freshDO()
+
+      await Promise.all([
+        ...Array.from({ length: 10 }, () => stub.recordModelUsage(100, ME)),
+        ...Array.from({ length: 10 }, () => stub.admitModelCall(100, ME, { dailyCap: 100_000 })),
+        ...Array.from({ length: 5 }, () => stub.refundModelUsage(100, ME)),
+      ])
+
+      expect(await stub.modelUsage(ME)).toMatchObject({ tokens: 1_500, clientTokens: 1_500 })
+    })
+
+    it('keeps going after a write fails', async () => {
+      const { fake, stub } = await freshDO()
+      fake.failNextPut()
+
+      const [failed, next] = await Promise.allSettled([
+        stub.admitModelCall(ESTIMATE, ME, { dailyCap: 5_000 }),
+        stub.admitModelCall(ESTIMATE, ME, { dailyCap: 5_000 }),
+      ])
+
+      expect(failed.status).toBe('rejected')
+      expect(next).toMatchObject({ status: 'fulfilled', value: { admitted: true } })
+      expect((await stub.modelUsage()).tokens).toBe(ESTIMATE)
+    })
+  })
+})
+
 describe('refundModelUsage', () => {
   const held = (fake: ReturnType<typeof fakeDurableObjectState>) =>
     fake.raw.get('daily-client-usage') as ClientUsage | undefined
