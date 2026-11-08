@@ -296,6 +296,10 @@ burst can now pass a limit by one call's estimate at most, which is at most
   call, so their results stay in the stream, and the turn closes with the limit's message, without the
   line about an approval not being applied and without the header. A later call that is refused
   closes the same way.
+- **The route's wait for that first decision cannot hang.** It reads the turn's stream while it
+  waits and holds what it read, so a turn that ends or fails before any model call ends the wait,
+  as does the client leaving. After 10 seconds the stream goes out anyway, and a refusal that comes
+  later closes the turn in the stream, like a refused later call.
 - **The two reads stay, but neither holds a limit any more.** The read at the door keeps a client
   already over a limit from spending the approvals it carries. The read between steps keeps a turn
   from making a call only to be refused.
