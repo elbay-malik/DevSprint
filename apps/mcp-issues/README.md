@@ -77,7 +77,7 @@ curl -s -H 'Content-Type: application/json' \
 
 ## Deployed
 
-The public endpoint is `https://devsprint-mcp-issues.eleo-666.workers.dev/mcp` (Streamable HTTP,
+The public endpoint is `https://mcp.devsprint.elbaymalik.com/mcp` (Streamable HTTP,
 stateless). Add it to any MCP host as a remote server. This is scenario S-F's first precondition.
 It deploys with the rest of the topology (`pnpm deploy:all`, see `apps/api/README.md`). The
 deploy's smoke checks confirm it lists exactly the five issue tools and reads the same board as

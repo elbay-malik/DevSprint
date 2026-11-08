@@ -51,9 +51,9 @@ Success, from `docs/product-brief.md`:
 
 ## Operating Context
 
-- **Live demo:** https://devsprint-web.eleo-666.workers.dev
-- **API:** https://devsprint-api.eleo-666.workers.dev
-- **Public MCP endpoint:** `https://devsprint-mcp-issues.eleo-666.workers.dev/mcp`
+- **Live demo:** https://devsprint.elbaymalik.com
+- **API:** https://api.devsprint.elbaymalik.com
+- **Public MCP endpoint:** `https://mcp.devsprint.elbaymalik.com/mcp`
 
 All three run on Cloudflare Workers. The demo model is Groq `openai/gpt-oss-120b` (ADR-0026).
 

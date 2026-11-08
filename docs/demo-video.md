@@ -114,7 +114,7 @@ agent asks: _Did you mean DS-7 "Billing export CSV download"?_
 ### 7. Another AI client, the same board: S-F (3:00–3:25)
 
 **Setup, before recording.** In Claude Desktop, add the server
-`https://devsprint-mcp-issues.eleo-666.workers.dev/mcp` as a custom connector (Settings →
+`https://mcp.devsprint.elbaymalik.com/mcp` as a custom connector (Settings →
 Connectors), if your plan offers remote connectors. Otherwise add it through `mcp-remote` in
 `claude_desktop_config.json`:
 
@@ -123,7 +123,7 @@ Connectors), if your plan offers remote connectors. Otherwise add it through `mc
   "mcpServers": {
     "devsprint": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "https://devsprint-mcp-issues.eleo-666.workers.dev/mcp"]
+      "args": ["-y", "mcp-remote", "https://mcp.devsprint.elbaymalik.com/mcp"]
     }
   }
 }

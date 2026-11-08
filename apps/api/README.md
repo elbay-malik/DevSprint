@@ -347,7 +347,7 @@ the diff before committing — it must not bake local secret names into `worker-
 
 ## Deploying
 
-Live at `https://devsprint-api.eleo-666.workers.dev` (ADR-0019). The whole topology deploys with one
+Live at `https://api.devsprint.elbaymalik.com` (ADR-0019). The whole topology deploys with one
 command from the repo root, first time or any time after:
 
 ```sh
