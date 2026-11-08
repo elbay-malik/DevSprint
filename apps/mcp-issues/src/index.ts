@@ -1,4 +1,5 @@
 import { WorkerEntrypoint } from 'cloudflare:workers'
+import type { IssueSource } from '@devsprint/shared'
 import { refuseBatch, refuseForeignOrigin, refuseNonPost } from './batch'
 import { refuseIfThrottled } from './limit'
 import { handleMcpRequest } from './mcp'
@@ -19,7 +20,12 @@ import { workspaceOf } from './workspace'
  * those two ideas apart is what stops this server growing session state it does
  * not need.
  */
-async function serve(request: Request, env: Env, parsedBody?: unknown): Promise<Response> {
+async function serve(
+  request: Request,
+  env: Env,
+  source: IssueSource,
+  parsedBody?: unknown,
+): Promise<Response> {
   const url = new URL(request.url)
 
   if (url.pathname === '/health') {
@@ -31,13 +37,17 @@ async function serve(request: Request, env: Env, parsedBody?: unknown): Promise<
   const refused = refuseNonPost(request)
   if (refused) return refused
 
-  return await handleMcpRequest(request, workspaceOf(env.WORKSPACE), parsedBody)
+  return await handleMcpRequest(request, workspaceOf(env.WORKSPACE), source, parsedBody)
 }
 
-/** The public endpoint: external MCP hosts, throttled per client IP (ADR-0020). */
+/**
+ * The public endpoint: external MCP hosts, throttled per client IP (ADR-0020).
+ * Issues they create are marked `mcp` and count against their own share of the
+ * board, so they cannot use up the slots the in-app copilot needs (ADR-0024).
+ */
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    if (new URL(request.url).pathname !== '/mcp') return await serve(request, env)
+    if (new URL(request.url).pathname !== '/mcp') return await serve(request, env, 'mcp')
 
     const foreign = refuseForeignOrigin(request)
     if (foreign) return foreign
@@ -45,7 +55,7 @@ export default {
     if (refused) return refused
     const body = await refuseBatch(request)
     if ('refused' in body) return body.refused
-    return await serve(request, env, body.parsedBody)
+    return await serve(request, env, 'mcp', body.parsedBody)
   },
 } satisfies ExportedHandler<Env>
 
@@ -54,10 +64,11 @@ export default {
  * so its traffic never shares the public limit: a binding request carries no
  * client IP, and lumping every visitor's turns into one bucket would let the
  * demo throttle itself. It is not reachable from the internet — only a binding
- * in this account can name it.
+ * in this account can name it. Its issues are the copilot's, made through an
+ * approval card, so they are not marked as MCP ones.
  */
 export class Internal extends WorkerEntrypoint<Env> {
   override async fetch(request: Request): Promise<Response> {
-    return await serve(request, this.env)
+    return await serve(request, this.env, 'app')
   }
 }

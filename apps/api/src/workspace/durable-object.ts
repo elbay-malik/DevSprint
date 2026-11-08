@@ -3,6 +3,7 @@ import {
   createWorkspaceSeed,
   WORKSPACE_DO_NAME,
   type DeploymentStatus,
+  type IssueSource,
   type ToolResult,
   type Workspace,
 } from '@devsprint/shared'
@@ -494,9 +495,12 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
   // The three issue writes also record what they changed as they land, whichever
   // client made them, so an approved card can offer an undo (changes.ts).
 
-  async createIssue(input: CreateIssueInput) {
+  /** `source` is set by the caller's entrypoint, never by the tool input (WorkspaceApi). */
+  async createIssue(input: CreateIssueInput, source: IssueSource = 'app') {
     const stamp = this.stamp()
-    return this.commit((draft, changes) => createIssueTracked(draft, input, { changes, ...stamp }))
+    return this.commit((draft, changes) =>
+      createIssueTracked(draft, input, { changes, ...stamp }, source),
+    )
   }
 
   async updateIssueStatus(input: UpdateIssueStatusInput) {

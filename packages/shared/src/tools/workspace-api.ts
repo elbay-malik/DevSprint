@@ -9,6 +9,7 @@
  */
 import type {
   DeploymentStatus,
+  IssueSource,
   StageName,
   StageStatus,
   ToolError,
@@ -112,7 +113,12 @@ export interface WorkspaceApi {
   getBurndown(input: GetBurndownInput): Promise<ToolResult<BurndownData>>
   diffReleaseNotes(input: DiffReleaseNotesInput): Promise<ToolResult<ReleaseNotesDiffData>>
 
-  createIssue(input: CreateIssueInput): Promise<ToolResult<CreateIssueData>>
+  /**
+   * `source` says which client is creating the issue, and defaults to `app`.
+   * It is never part of the tool's input: only the public entrypoint of
+   * `apps/mcp-issues` passes `mcp`, so a client cannot choose its own.
+   */
+  createIssue(input: CreateIssueInput, source?: IssueSource): Promise<ToolResult<CreateIssueData>>
   updateIssueStatus(input: UpdateIssueStatusInput): Promise<ToolResult<UpdateIssueStatusData>>
   assignIssue(input: AssignIssueInput): Promise<ToolResult<AssignIssueData>>
   createReleaseNotes(input: CreateReleaseNotesInput): Promise<ToolResult<CreateReleaseNotesData>>

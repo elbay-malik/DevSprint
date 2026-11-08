@@ -152,7 +152,8 @@ export function createLocalWorkspaceApi(store: WorkspaceStore): WorkspaceApi {
     getDeploymentHistory: (input) => Promise.resolve(getDeploymentHistory(store.get(), input)),
     getBurndown: (input) => Promise.resolve(getBurndown(store.get(), input)),
     diffReleaseNotes: (input) => Promise.resolve(diffReleaseNotes(store.get(), input)),
-    createIssue: (input) => tracked(createIssueTracked(store.get(), input, stamp())),
+    createIssue: (input, source) =>
+      tracked(createIssueTracked(store.get(), input, stamp(), source)),
     updateIssueStatus: (input) => tracked(updateIssueStatusTracked(store.get(), input, stamp())),
     assignIssue: (input) => tracked(assignIssueTracked(store.get(), input, stamp())),
     undoChange: (input) => {

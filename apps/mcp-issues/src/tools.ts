@@ -1,4 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { IssueSource } from '@devsprint/shared'
 import {
   type AssignIssueInput,
   type CreateIssueInput,
@@ -45,7 +46,8 @@ const ISSUE_TOOLS = [
   {
     name: 'create_issue',
     schema: createIssueInputSchema,
-    invoke: (workspace: WorkspaceApi, input: CreateIssueInput) => workspace.createIssue(input),
+    invoke: (workspace: WorkspaceApi, input: CreateIssueInput, source: IssueSource) =>
+      workspace.createIssue(input, source),
   },
   {
     name: 'update_issue_status',
@@ -66,7 +68,18 @@ function envelope(value: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] }
 }
 
-export function registerIssueTools(server: McpServer, workspace: WorkspaceApi): void {
+/**
+ * `source` is which entrypoint the request came in on, never anything the
+ * caller sent: `mcp` for the public endpoint, `app` for the in-app agent's
+ * `Internal` one. Only `create_issue` uses it, to mark the issue and count it
+ * against the MCP share of the board (MAX_MCP_CREATED_ISSUES in apps/api).
+ * It is required so that a new entrypoint has to say which it is.
+ */
+export function registerIssueTools(
+  server: McpServer,
+  workspace: WorkspaceApi,
+  source: IssueSource,
+): void {
   for (const tool of ISSUE_TOOLS) {
     server.registerTool(
       tool.name,
@@ -90,9 +103,13 @@ export function registerIssueTools(server: McpServer, workspace: WorkspaceApi): 
         // The shared `{ ok, data | error }` envelope travels as the text
         // content, so a domain failure stays a value the caller can read
         // instead of becoming a protocol error (docs/domain-model.md §4).
-        const invoke = tool.invoke as (workspace: WorkspaceApi, input: unknown) => Promise<unknown>
+        const invoke = tool.invoke as (
+          workspace: WorkspaceApi,
+          input: unknown,
+          source: IssueSource,
+        ) => Promise<unknown>
         try {
-          return envelope(await invoke(workspace, parsed.data))
+          return envelope(await invoke(workspace, parsed.data, source))
         } catch (error) {
           // Only the unexpected lands here. Left to the SDK, its message would go
           // to anyone on the internet as the tool's text, so the detail stays in
