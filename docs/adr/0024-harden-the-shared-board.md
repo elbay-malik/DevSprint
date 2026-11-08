@@ -145,3 +145,21 @@ request quota: a request the Worker refuses still runs the Worker and counts as 
 rate-limiting rule at the edge, on a zone in front of the Worker, refuses a request before that.
 The api is served on workers.dev (ADR-0019), so that would also mean moving it to a custom domain.
 Both are account-level decisions outside this repository.
+
+The 2026-11-07 note's last point is now narrower. MCP clients alone could take all 40 slots, and
+then the in-app copilot could not create an issue until a reset. So the 40 now has a share for the
+public MCP endpoint:
+
+- **Issues carry where they came from.** An issue created through the public entrypoint of
+  `apps/mcp-issues` is stored with `source: 'mcp'`. The entrypoint sets it, not the tool's
+  arguments, which the schema strips of unknown fields anyway. The in-app agent's `Internal`
+  entrypoint and the local fallback store no `source`, and an issue without one reads as in-app,
+  so boards stored before this change read the same. The SPA shows a "via MCP" badge on those
+  cards, in words, so it reads without colour.
+- **At most 20 of the 40 may be marked `mcp`** (`MAX_MCP_CREATED_ISSUES`). Past that, an MCP
+  `create_issue` gets `WORKSPACE_FULL` with a message that names the MCP share and says reads,
+  moves and reassignments still work. The copilot keeps the other 20. The share counts the issues
+  on the board, as the main cap does, so a reset or an undo frees it too.
+
+This is a per-path quota, not the per-client one rejected above. It still needs no client key, and
+one MCP client can still use the whole MCP share for every other MCP client until a reset.

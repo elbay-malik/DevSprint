@@ -57,9 +57,12 @@ those `.max()` calls.
 
 Every write (tools 7–11) can also return `WORKSPACE_FULL` when the persisted board would exceed its
 512 KB cap ([ADR-0020](./adr/0020-rate-limit-the-public-mcp-endpoint.md)), and `create_issue`
-returns it once the board holds 40 issues on top of the seed. Text a write stores may not contain control
-characters other than tab, newline and carriage return, or unpaired surrogates
-([ADR-0024](./adr/0024-harden-the-shared-board.md)). Resetting the board clears both limits.
+returns it once the board holds 40 issues on top of the seed. At most 20 of those may come from the
+public MCP endpoint: past that, a `create_issue` from an MCP client gets `WORKSPACE_FULL` with a
+message naming the MCP share, while the in-app copilot can still create up to the 40. Text a write
+stores may not contain control characters other than tab, newline and carriage return, or unpaired
+surrogates ([ADR-0024](./adr/0024-harden-the-shared-board.md)). Resetting the board clears both
+limits.
 
 The five issue tools can also return `INTERNAL` over MCP, when the workspace call fails
 unexpectedly. The detail goes to the server's log rather than to the caller

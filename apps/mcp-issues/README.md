@@ -36,6 +36,14 @@ host can read `ISSUE_NOT_FOUND` and recover instead of seeing the call blow up. 
 such as the Durable Object being unreachable, comes back in the same envelope as `INTERNAL` with a
 fixed message. The detail goes to the Worker's log as a `tool-failed` event, without the arguments.
 
+An issue created through the public entrypoint is stored with `source: 'mcp'`, and the SPA marks its
+card "via MCP". The mark comes from the entrypoint, never from the arguments. The in-app agent comes
+in through `Internal`, so its issues carry no mark. At most 20 issues with the mark may be on the board
+at once, inside the board's 40, so MCP clients can't use up the copilot's slots. Past that,
+`create_issue` answers `WORKSPACE_FULL` with a message that names the MCP share. Reads, moves and
+reassignments still work, and a reset or an undo frees the slots
+([ADR-0024](../../docs/adr/0024-harden-the-shared-board.md)).
+
 ## State
 
 This server owns none. It reaches the workspace Durable Object defined in `apps/api` through a

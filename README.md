@@ -107,7 +107,9 @@ tests are checked as well as run:
   daily ([ADR-0014](docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
 - **An approval card for outside assistants.** The public MCP server takes writes from any MCP
   client without the copilot's approval card. The host's own permission prompt is the gate there,
-  and the server bounds writes by rate, request size and 40 new issues until the board resets
+  and the server bounds writes by rate, request size and 40 new issues until the board resets.
+  At most 20 of those 40 may come from MCP clients, so they can't use up the copilot's, and their
+  cards say "via MCP"
   ([ADR-0020](docs/adr/0020-rate-limit-the-public-mcp-endpoint.md),
   [ADR-0024](docs/adr/0024-harden-the-shared-board.md)).
 - **Unlimited use of the live model.** It runs on free tiers. A per-IP rate limit, a daily token
