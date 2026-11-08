@@ -129,6 +129,20 @@ const DRAFT_NEEDED =
   'To compare release notes I need the draft markdown — paste the draft and I will diff it against the last published version.'
 
 /**
+ * Requests plainly outside the workspace: writing that is not about the board,
+ * and code. Consulted only when no tool matched, so "write release notes" or
+ * "list the issues" never reaches it. A keyword list, like every other rule
+ * here — it scripts the decline the system prompt's scope rule asks for, it
+ * does not detect off-topic text in general.
+ */
+const OFF_TOPIC =
+  /\b(poem|essay|haiku|song|lyrics|joke|story|recipe|cover letter|homework|translate)\b|\b(python|javascript|typescript|java|rust|sql|regex)\b.*\b(function|script|code|class|query)\b/i
+
+/** One sentence that declines and steers back, as the scope rule asks. */
+export const OUT_OF_SCOPE =
+  'I can only help with this demo’s sprint workspace — its issues, sprint progress, release notes and deployments — so would you like a summary of the current sprint instead?'
+
+/**
  * Every tool the question calls for, in the order a person would gather them.
  * A compound question ("summarize the sprint and draft release notes") yields
  * several entries, which is what drives the multi-step loop; a plain question
@@ -277,6 +291,7 @@ export function planUserText(text: string, availableTools: ReadonlySet<string>):
   if (calls.length === 0) {
     const firstText = usable.find((candidate) => candidate.kind === 'text')
     if (firstText) return [firstText]
+    if (OFF_TOPIC.test(text)) return [{ kind: 'text', text: OUT_OF_SCOPE }]
     return availableTools.has('get_sprint_status')
       ? [{ kind: 'tool-call', toolName: 'get_sprint_status', input: {} }]
       : [

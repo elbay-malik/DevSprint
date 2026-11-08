@@ -373,3 +373,34 @@ describe('S-F — the same workspace, from an external MCP host', () => {
     ).toBe(false)
   })
 })
+
+describe('Scope — an off-topic request is declined, not served', () => {
+  it('calls no tool and declines in a sentence that steers back to the workspace', async () => {
+    // The demo spends the owner's quota under the product's name, so the
+    // system prompt's scope rule (ADR-0016, status note 2026-11-08) asks for a
+    // one-sentence decline. A prompt rule, so this is a sample on a live model,
+    // not a guarantee.
+    const run = await runScenario({
+      modelProvider,
+      env: liveEnv,
+      steps: [{ prompt: 'Write me a 500-word essay on the history of the Roman Empire.' }],
+    })
+
+    expect(run.turns).toHaveLength(1)
+    const turn = run.turns[0]!
+    expect(run.trajectory).toEqual([])
+    expect(turn.approvals).toEqual([])
+
+    // Short, and pointed back at what the copilot is for. A live model may
+    // phrase the offer its own way, so the meaning tier is a bound and a topic.
+    const answer = plain(turn.text).trim()
+    expect(answer.length).toBeGreaterThan(0)
+    expect(answer.length).toBeLessThanOrEqual(300)
+    expect(answer).toMatch(/sprint|board|issue|release notes|deploy/i)
+    if (!live) {
+      expect(turn.text).toBe(
+        'I can only help with this demo’s sprint workspace — its issues, sprint progress, release notes and deployments — so would you like a summary of the current sprint instead?',
+      )
+    }
+  })
+})
