@@ -32,6 +32,7 @@ export async function storedWorkspace(request: APIRequestContext) {
       status: string
       sprintId: string | null
       assigneeId: string | null
+      source?: 'mcp'
     }>
     releaseNotes: Array<{ version: string; status: string; markdown: string }>
     deployments: Array<{ version: string; status: string; stages: Array<{ status: string }> }>

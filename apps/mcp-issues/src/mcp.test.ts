@@ -50,7 +50,7 @@ async function handleAfterRefuseBatch(body: string, api: WorkspaceApi) {
   const read = await refuseBatch(request)
   if (!('parsedBody' in read)) throw new Error('the body was refused')
   expect(request.bodyUsed).toBe(true)
-  return await handleMcpRequest(request, api, read.parsedBody)
+  return await handleMcpRequest(request, api, 'mcp', read.parsedBody)
 }
 
 describe('handleMcpRequest', () => {
@@ -58,7 +58,9 @@ describe('handleMcpRequest', () => {
     const { api, createIssue } = fakeWorkspace()
     const labels = Array.from({ length: MAX_TOOL_INPUT_ELEMENTS + 50 }, (_, i) => `l${i}`)
 
-    const result = await resultOf(await handleMcpRequest(post(createIssueCall({ labels })), api))
+    const result = await resultOf(
+      await handleMcpRequest(post(createIssueCall({ labels })), api, 'mcp'),
+    )
 
     expect(result.isError).toBe(true)
     expect(result.content[0]!.text).toContain(
@@ -82,7 +84,9 @@ describe('handleMcpRequest', () => {
     const { api, createIssue } = fakeWorkspace()
     const labels = Array.from({ length: 10 }, (_, i) => `l${i}`)
 
-    const result = await resultOf(await handleMcpRequest(post(createIssueCall({ labels })), api))
+    const result = await resultOf(
+      await handleMcpRequest(post(createIssueCall({ labels })), api, 'mcp'),
+    )
 
     expect(result.isError).toBeUndefined()
     expect(createIssue).toHaveBeenCalledOnce()
@@ -92,7 +96,7 @@ describe('handleMcpRequest', () => {
     const { api, createIssue } = fakeWorkspace()
     const description = 'x'.repeat(MAX_BODY_BYTES)
 
-    const response = await handleMcpRequest(post(createIssueCall({ description })), api)
+    const response = await handleMcpRequest(post(createIssueCall({ description })), api, 'mcp')
 
     expect(response.status).toBe(413)
     expect(createIssue).not.toHaveBeenCalled()
@@ -124,7 +128,7 @@ describe('handleMcpRequest', () => {
     const { api, createIssue } = fakeWorkspace()
     createIssue.mockRejectedValueOnce(new Error('secret internals'))
 
-    const result = await resultOf(await handleMcpRequest(post(createIssueCall({})), api))
+    const result = await resultOf(await handleMcpRequest(post(createIssueCall({})), api, 'mcp'))
     log.mockRestore()
 
     expect(result.isError).toBeUndefined()

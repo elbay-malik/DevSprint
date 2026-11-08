@@ -164,6 +164,15 @@ describe('the public fetch handler', () => {
     expect(createIssue).toHaveBeenCalledOnce()
   })
 
+  it('marks what it creates as coming from MCP', async () => {
+    const { env, createIssue } = fakeEnv()
+
+    const response = await worker.fetch(post(JSON.stringify(call(1))), env)
+    await response.text()
+
+    expect(createIssue).toHaveBeenCalledWith(expect.objectContaining({ title: 't1' }), 'mcp')
+  })
+
   it('still answers a GET on /health', async () => {
     const { env } = fakeEnv()
 
@@ -226,5 +235,14 @@ describe('the Internal entrypoint', () => {
     expect(createIssue).toHaveBeenCalledOnce()
     expect(answers).toContainEqual({ method: 'GET', status: 405 })
     expect(onerror).not.toHaveBeenCalled()
+  })
+
+  it('creates as the in-app copilot, not as an MCP client', async () => {
+    const { env, createIssue } = fakeEnv()
+
+    const response = await internal(env).fetch(post(JSON.stringify(call(1))))
+    await response.text()
+
+    expect(createIssue).toHaveBeenCalledWith(expect.objectContaining({ title: 't1' }), 'app')
   })
 })

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { createWorkspaceSeed, WORKSPACE_NOW, type Workspace } from '@devsprint/shared'
+import { createWorkspaceSeed, issueSource, WORKSPACE_NOW, type Workspace } from '@devsprint/shared'
 import {
   assignIssue,
   createIssue,
   MAX_CREATED_ISSUES,
+  MAX_MCP_CREATED_ISSUES,
   createReleaseNotes,
   finishDeployment,
   setDeploymentStage,
@@ -134,6 +135,96 @@ describe('createIssue — the day cap', () => {
 
     expect(refused).toMatchObject({ ok: false, error: { code: 'WORKSPACE_FULL' } })
     expect(workspace.issues).toHaveLength(13 + MAX_CREATED_ISSUES)
+  })
+})
+
+describe('createIssue — where an issue came from', () => {
+  const input = {
+    title: 'filler',
+    type: 'chore' as const,
+    priority: 'medium' as const,
+    sprintId: null,
+  }
+
+  it('marks an issue an MCP client created, and leaves an in-app one unmarked', () => {
+    const workspace = seed()
+
+    const { issue: viaMcp } = expectOk(createIssue(workspace, input, 'mcp'))
+    const { issue: inApp } = expectOk(createIssue(workspace, input))
+
+    expect(viaMcp.source).toBe('mcp')
+    // Stored as before, so a board saved before the field existed reads the same.
+    expect(inApp).not.toHaveProperty('source')
+    expect(issueSource(inApp)).toBe('app')
+    expect(issueSource(viaMcp)).toBe('mcp')
+  })
+
+  it('reads every seed issue, and any issue with no mark, as in-app', () => {
+    for (const issue of seed().issues) expect(issueSource(issue)).toBe('app')
+  })
+})
+
+describe('createIssue — the MCP share of the cap', () => {
+  const input = {
+    title: 'filler',
+    type: 'chore' as const,
+    priority: 'medium' as const,
+    sprintId: null,
+  }
+
+  it('is a part of the main cap, not added to it', () => {
+    expect(MAX_MCP_CREATED_ISSUES).toBeLessThan(MAX_CREATED_ISSUES)
+  })
+
+  it('refuses an MCP create past its share, with a message that names it', () => {
+    const workspace = seed()
+    for (let i = 0; i < MAX_MCP_CREATED_ISSUES; i += 1) {
+      expectOk(createIssue(workspace, input, 'mcp'))
+    }
+
+    const refused = expectError(createIssue(workspace, input, 'mcp'))
+
+    expect(refused.code).toBe('WORKSPACE_FULL')
+    expect(refused.message).toContain(`${MAX_MCP_CREATED_ISSUES} issues created over MCP`)
+    expect(workspace.issues).toHaveLength(13 + MAX_MCP_CREATED_ISSUES)
+  })
+
+  it('leaves the in-app copilot the rest of the board once MCP clients are full', () => {
+    const workspace = seed()
+    for (let i = 0; i < MAX_MCP_CREATED_ISSUES; i += 1) {
+      expectOk(createIssue(workspace, input, 'mcp'))
+    }
+    expect(createIssue(workspace, input, 'mcp').ok).toBe(false)
+
+    for (let i = MAX_MCP_CREATED_ISSUES; i < MAX_CREATED_ISSUES; i += 1) {
+      expectOk(createIssue(workspace, input))
+    }
+
+    // The main cap still holds for everyone, the copilot included.
+    expect(expectError(createIssue(workspace, input)).message).toContain(
+      `${MAX_CREATED_ISSUES} new issues`,
+    )
+    expect(workspace.issues).toHaveLength(13 + MAX_CREATED_ISSUES)
+  })
+
+  it('does not count in-app issues against the MCP share', () => {
+    const workspace = seed()
+    for (let i = 0; i < MAX_CREATED_ISSUES - MAX_MCP_CREATED_ISSUES; i += 1) {
+      expectOk(createIssue(workspace, input))
+    }
+
+    for (let i = 0; i < MAX_MCP_CREATED_ISSUES; i += 1) {
+      expectOk(createIssue(workspace, input, 'mcp'))
+    }
+  })
+
+  it('gives MCP clients the main message when the whole board is full', () => {
+    const workspace = seed()
+    for (let i = 0; i < MAX_CREATED_ISSUES; i += 1) expectOk(createIssue(workspace, input))
+
+    expect(expectError(createIssue(workspace, input, 'mcp')).message).toContain(
+      `${MAX_CREATED_ISSUES} new issues`,
+    )
   })
 })
 

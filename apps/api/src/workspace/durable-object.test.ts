@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { STALE_RUN_MS, WorkspaceDO } from './durable-object'
+import { MAX_MCP_CREATED_ISSUES } from './mutations'
 import type { BoardChange } from './changes'
 import {
   addClientTokens,
@@ -700,6 +701,66 @@ describe('WorkspaceDO — shared-board hardening (ADR-0024)', () => {
     // Everything else still works for everyone else.
     const moved = await stub.updateIssueStatus({ issueKey: 'DS-7', status: 'done' })
     expect(moved.ok).toBe(true)
+  })
+
+  it('keeps MCP creates to their share, so the copilot can still file issues', async () => {
+    const { fake, stub } = await freshDO()
+    const input = {
+      title: 'filler',
+      type: 'chore' as const,
+      priority: 'medium' as const,
+      sprintId: null,
+    }
+
+    for (let i = 0; i < MAX_MCP_CREATED_ISSUES; i += 1) {
+      expect((await stub.createIssue(input, 'mcp')).ok).toBe(true)
+    }
+    const refused = await stub.createIssue(input, 'mcp')
+    const fromApp = await stub.createIssue(input)
+
+    expect(refused.ok === false && refused.error.code).toBe('WORKSPACE_FULL')
+    expect(fromApp.ok).toBe(true)
+    // The mark is persisted with the board, not just held in the cache: a
+    // second object on the same storage reads it, and refuses the same way.
+    const second = new WorkspaceDO(fake.ctx, {} as Cloudflare.Env)
+    await fake.ready()
+    const issues = (await second.snapshot()).issues
+    expect(issues.filter((issue) => issue.source === 'mcp')).toHaveLength(MAX_MCP_CREATED_ISSUES)
+    expect((await second.createIssue(input, 'mcp')).ok).toBe(false)
+  })
+
+  it('frees the MCP share on a reset, the same as the main cap', async () => {
+    const { stub } = await freshDO()
+    const input = {
+      title: 'filler',
+      type: 'chore' as const,
+      priority: 'medium' as const,
+      sprintId: null,
+    }
+    for (let i = 0; i < MAX_MCP_CREATED_ISSUES; i += 1) await stub.createIssue(input, 'mcp')
+    expect((await stub.createIssue(input, 'mcp')).ok).toBe(false)
+
+    await stub.alarm()
+
+    expect((await stub.createIssue(input, 'mcp')).ok).toBe(true)
+  })
+
+  it('frees an MCP slot when that create is undone', async () => {
+    const { stub } = await freshDO()
+    const input = {
+      title: 'filler',
+      type: 'chore' as const,
+      priority: 'medium' as const,
+      sprintId: null,
+    }
+    let last: Awaited<ReturnType<typeof stub.createIssue>> | undefined
+    for (let i = 0; i < MAX_MCP_CREATED_ISSUES; i += 1) last = await stub.createIssue(input, 'mcp')
+    const changeId = last?.ok ? last.data.changeId : undefined
+    if (changeId === undefined) throw new Error('expected the last create to land')
+
+    expect((await stub.undoChange({ changeId })).ok).toBe(true)
+
+    expect((await stub.createIssue(input, 'mcp')).ok).toBe(true)
   })
 
   it('refuses a visitor reset inside the cooldown, and allows it after', async () => {

@@ -496,6 +496,8 @@ test.describe('S-F — an external MCP host operates the same workspace', () => 
       // Workers ever stop sharing one Durable Object.
       const stored = (await storedWorkspace(request)).issues.find((issue) => issue.key === 'DS-14')
       expect(stored?.sprintId).toBeNull()
+      // Marked as the public endpoint's, so it counts against the MCP share.
+      expect(stored?.source).toBe('mcp')
 
       // The SPA does not poll (ADR-0014's status note); the operator's switch
       // back to it is what re-reads the board, with no reload.
@@ -504,6 +506,7 @@ test.describe('S-F — an external MCP host operates the same workspace', () => 
       const backlogCard = page.getByTestId('board-backlog').locator('[data-issue-key="DS-14"]')
       await expect(backlogCard).toContainText('Add CSV export progress indicator')
       await expect(backlogCard.getByTestId('issue-status')).toHaveText('Todo')
+      await expect(backlogCard.getByTestId('issue-source')).toHaveText('Created via MCP')
 
       // Step 7: the follow-up move, visible on the backlog card.
       const moved = envelope(
