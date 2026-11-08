@@ -10,7 +10,12 @@
   "preview_urls": false,
   // Not needed for the echo route, but standard for the AI SDK providers
   // arriving in Phase 3 — avoids a config change later.
-  "compatibility_flags": ["nodejs_compat"],
+  // enable_request_signal makes a client that disconnects abort the request's
+  // signal, so a dropped chat turn stops its agent loop and a deployment it was
+  // running settles as cancelled (ADR-0013). It becomes the default with the
+  // 2026-11-17 compatibility date; it is set here so this does not wait for a
+  // date bump.
+  "compatibility_flags": ["nodejs_compat", "enable_request_signal"],
   "dev": {
     "port": 8787,
   },
