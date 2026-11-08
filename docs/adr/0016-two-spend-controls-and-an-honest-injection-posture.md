@@ -279,3 +279,42 @@ sentence, and only when no tool rule matched, so a board request that says "stor
 its tool. That makes the case run offline in CI. It proves the app passes a decline through with no
 tool call. Whether a live model follows the rule is a separate question, and only a live eval run
 answers it.
+
+"It is check-then-record" (2026-11-02) is out of date for model calls. The check and the charge are
+now one call to the object. `admitModelCall` reads the day's cap and the client's share and, only if
+neither has been reached, records the call's opening estimate, the one spend-meter.ts already
+charged. The object runs its usage writes one at a time through a queue of its own, so concurrent
+turns are admitted one call at a time, and once a limit is reached every later call is refused. A
+burst can now pass a limit by one call's estimate at most, which is at most
+`MAX_CALL_ESTIMATE_TOKENS`, rather than by a step for each turn in the burst.
+
+- **The meter waits for the admission before it calls the provider.** A refused call never reaches
+  the provider and records nothing. It answers with an empty step that asks for no tool, so the turn
+  ends there without an error.
+- **A refused first call reads like a refusal at the door,** in that limit's words and with
+  `X-DevSprint-Limit`. An approval resume is the exception. Its approved writes run before the first
+  call, so their results stay in the stream, and the turn closes with the limit's message, without the
+  line about an approval not being applied and without the header. A later call that is refused
+  closes the same way.
+- **The two reads stay, but neither holds a limit any more.** The read at the door keeps a client
+  already over a limit from spending the approvals it carries. The read between steps keeps a turn
+  from making a call only to be refused.
+- **Unchanged:** a step settles on the provider's figure, a call the provider turns down is refunded
+  unless the client had already left, the mock is not metered, and both limits switch off as before.
+  The storage keys and their format are the same, so a deployed object carries on with the day's
+  counts.
+- **An admission that fails fails the call.** The opening charge used to go out on `waitUntil`, so a
+  workspace error left the call uncharged. It now ends the call before the provider, which is the
+  safer way for a spend control to fail.
+
+What remains accepted:
+
+- **Several addresses, each within its share, can still reach the cap between them.** The share
+  bounds one key, not one person, as the 2026-11-02 note says, and only the cap bounds them together.
+  At the defaults four shares make a day.
+- **What an admitted call writes is still charged as it goes, without a check,** since the call is
+  already paid for by then, and so is a step's settlement to the provider's figure. Calls admitted
+  just before a limit was reached can each end above their estimate, by what they write (at most
+  `MAX_OUTPUT_TOKENS`) and by what settling adds.
+- **This is still not the reservation rejected above.** The estimate is the opening charge it already
+  was, and a step that finishes still ends on the real number.

@@ -247,9 +247,14 @@ charged (`src/agent/spend-meter.ts`). The estimate for one call is at most 12,00
 one call can cost on Groq's free tier. A step that finishes settles on the provider's figure, and a
 call the provider turns down is refunded.
 
-A turn re-reads both limits between steps and ends once one has been reached, closing with that
-limit's message. It has no `X-DevSprint-Limit` header, which only marks a turn refused at the door.
-This is check-then-record, so concurrent turns can overshoot the cap or a share by about a step each.
+Each model call is admitted by the Durable Object before the provider sees it: `admitModelCall`
+checks the cap and the share and charges the call's estimate in one step, so concurrent turns are let
+through one call at a time and a burst can pass a limit by one call's estimate at most. A refused
+first call is answered like a refusal at the door, with `X-DevSprint-Limit`. A turn also re-reads
+both limits between steps and ends once one has been reached, closing with that limit's message, and
+a later call that is refused closes the same way. Neither of those has the header, because the
+headers have gone by then. Several clients each within their share can still reach the cap between
+them.
 
 Each request is bounded as well: a 256 KB body (413), 4,000 characters in a user message (400), and
 4,096 output tokens per model call. Older history is dropped rather than refused, keeping the latest
