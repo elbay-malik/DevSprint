@@ -110,3 +110,17 @@ by the same immutability rule a cancel relies on.
 - `failed` rather than `cancelled`: nobody asked for it to stop.
 - The cancel tokens keep their shape, so tokens already in storage still work.
 - Each stage write costs one more small storage write.
+
+## Status note — 2026-11-08
+
+The api Worker now sets the `enable_request_signal` compatibility flag. Without it, at the
+`2026-07-01` compatibility date, the runtime never aborts the request's signal when a client
+disconnects, which is why the run above could be left parked. With it, a dropped connection aborts
+the signal, the agent loop stops, and a deployment it was running settles as `cancelled` through the
+abort-signal path, in seconds rather than on the next start. The heartbeat check stays as the
+backstop for a request torn down without either.
+
+A chat turn cut off this way keeps the estimate it was charged as each call started
+([ADR-0016](0016-two-spend-controls-and-an-honest-injection-posture.md)), so stopping early does not
+spend less than it should. The flag becomes the default at the `2026-11-17` compatibility date, so
+it can be dropped from the config when that date is adopted.
