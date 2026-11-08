@@ -252,3 +252,30 @@ the provider would turn down anyway, and a call cut off before it reports keeps 
 is still charged as it is written, and a step that finishes still settles on the provider's figure.
 A call larger than the cap that gets cut off is undercharged by the difference, which can only
 happen on a tier with a higher per-minute limit, so the figure follows the tier.
+
+## Status note — 2026-11-08
+
+The 2026-11-01 note said "a text-only message can still ask for an essay, so using the demo as a free
+model is made smaller rather than impossible." Until now nothing made it smaller on the prompt side:
+the rules covered grounding and injected text, not scope, so the copilot would write an essay or a
+function under the product's name and on the owner's Groq key.
+
+The system prompt now opens its rules with a scope rule. The copilot helps with this demo sprint
+workspace only: its board and issues, sprint progress, release notes, deployments, and how the demo
+works. For anything else it calls no tool, does no part of the request, declines in one sentence and
+offers what it can do. Two lines guard against over-refusal, which a scope rule invites. Greetings
+and "what can you do?" are in scope, and a request that could be about the workspace is treated as
+in scope. It adds about 100 tokens to every call.
+
+This is a prompt rule, not a guarantee, on the same terms as the injection rule above. A model can
+ignore it, and a request dressed up as a board question can get past it. The controls that bound
+spend are still the per-client share, the daily cap and the per-call output limit. The rule lowers
+how often the demo serves unrelated work. It does not stop it.
+
+The eval suite has a scope case: an essay request must call no tool, raise no approval and get a
+short answer that points back at the workspace. The scripted mock now declines a short keyword list
+of plainly off-topic requests (essays, poems, jokes, code in a named language) with one fixed
+sentence, and only when no tool rule matched, so a board request that says "story" still reaches
+its tool. That makes the case run offline in CI. It proves the app passes a decline through with no
+tool call. Whether a live model follows the rule is a separate question, and only a live eval run
+answers it.
