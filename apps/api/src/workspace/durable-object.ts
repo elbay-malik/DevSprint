@@ -49,6 +49,7 @@ import {
   type Tracked,
 } from './changes'
 import { nextUtcMidnightAfter } from './reset-schedule'
+import { resetCooldownRefusal } from './reset-gate'
 import {
   addClientTokens,
   hashClientKey,
@@ -326,14 +327,7 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
     const wait = last + input.cooldownMs - Date.now()
     if (input.cooldownMs > 0 && wait > 0) {
       const retryAfterSeconds = Math.max(1, Math.ceil(wait / 1000))
-      return {
-        ok: false,
-        error: {
-          code: 'RESET_COOLDOWN',
-          message: `The board was reset moments ago. Try again in ${retryAfterSeconds} seconds.`,
-        },
-        retryAfterSeconds,
-      }
+      return resetCooldownRefusal(retryAfterSeconds)
     }
     return { ok: true, data: await this.reset() }
   }

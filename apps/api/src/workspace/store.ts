@@ -15,6 +15,7 @@ import {
   startDeployment,
 } from './mutations'
 import { addClientTokens, refundClientTokens, type ClientUsage } from './client-usage'
+import { resetCooldownRefusal } from './reset-gate'
 import {
   assignIssueTracked,
   createIssueTracked,
@@ -140,14 +141,7 @@ export function createLocalWorkspaceApi(store: WorkspaceStore): WorkspaceApi {
       const wait = store.lastResetAt() + cooldownMs - Date.now()
       if (cooldownMs > 0 && wait > 0) {
         const retryAfterSeconds = Math.max(1, Math.ceil(wait / 1000))
-        return Promise.resolve({
-          ok: false as const,
-          error: {
-            code: 'RESET_COOLDOWN' as const,
-            message: `The board was reset moments ago. Try again in ${retryAfterSeconds} seconds.`,
-          },
-          retryAfterSeconds,
-        })
+        return Promise.resolve(resetCooldownRefusal(retryAfterSeconds))
       }
       store.reset()
       return Promise.resolve({ ok: true as const, data: store.get() })
