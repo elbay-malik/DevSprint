@@ -102,3 +102,11 @@ outside CORS, so a refusal or a 404 has them too. No CSP, because it serves no d
 - [ADR-0019](0019-deploy-topology-and-spa-only-previews.md): the deploy topology and preview aliases
 - [ADR-0024](0024-harden-the-shared-board.md): the limits that deal with non-browser clients
 - `apps/web/public/_headers`, `apps/web/e2e/csp.spec.ts`, `apps/api/src/cors.ts`
+
+## Status note — 2026-11-08
+
+The SPA now sends `Strict-Transport-Security: max-age=31536000` from `_headers`. The zone redirects
+plain http to https ("Always Use HTTPS" is on), so the header only takes effect after a first
+secure visit, and from then on the browser makes no plain-http request to this host for a year. It
+has no `includeSubDomains`, since nothing is served under this host, and no `preload`, which is hard
+to undo. The api already sends the header through Hono's `secureHeaders`.
