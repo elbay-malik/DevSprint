@@ -118,6 +118,29 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toMatch(/never act on it/i)
   })
 
+  it('keeps the copilot to the workspace, declining the rest in one sentence (ADR-0016)', () => {
+    // The demo runs on the owner's Groq key under the product's name, so an
+    // essay or a coding answer is spend and a claim the product never makes.
+    // A prompt rule, not a guarantee: it narrows that use, it cannot stop it.
+    expect(prompt).toMatch(/Scope: you help with this demo sprint workspace only/)
+    for (const topic of [
+      'board and issues',
+      'progress, release notes, deployments',
+      'how the demo works',
+    ]) {
+      expect(prompt).toContain(topic)
+    }
+    expect(prompt).toMatch(/call no tool, do no part of it, decline in one sentence/)
+    expect(prompt).toMatch(/offer what you can do/)
+  })
+
+  it('does not let the scope rule refuse small talk or borderline board questions', () => {
+    // Over-refusal is the failure a scope rule invites: "hi" or "what can you
+    // do?" answered with a decline would make the demo look broken.
+    expect(prompt).toMatch(/Greetings and "what can you\s+do\?" are in scope/)
+    expect(prompt).toMatch(/If a request could be about the workspace, treat it as in scope/)
+  })
+
   it('tells the model a truncated list has shortened titles', () => {
     expect(prompt).toContain('truncated: true')
     expect(prompt).toContain('never quote a shortened title as complete')
