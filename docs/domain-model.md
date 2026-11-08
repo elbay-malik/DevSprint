@@ -81,7 +81,10 @@ interface Issue {
   createdAt: string
   updatedAt: string
   completedAt: string | null
+  /** Absent means 'app'. */
+  source?: 'mcp'
 }
+type IssueSource = 'app' | 'mcp'
 interface DeploymentStage {
   name: StageName
   status: StageStatus
@@ -147,6 +150,11 @@ These values are computed by tools, never persisted on entities:
   sprint-12 at `WORKSPACE_NOW`; 0 for the completed sprint-11), never negative.
 - `triggeredById` (Deployment), `authorId` (ReleaseNote) and `reporterId` (Issue) may be a user id
   **or** the literal string `'agent'` when the copilot performed the action.
+- `source: 'mcp'` marks an issue an external host created through the public MCP endpoint. The
+  in-app copilot's issues, the seed and every issue stored before the field existed have no
+  `source`, and read as `'app'`. The mark is set from the endpoint the call came in on, never from
+  the tool's arguments. Such an issue's `reporterId` is still `'agent'`, and the board shows it
+  with a "via MCP" badge.
 - An issue the copilot files with no estimate gets `points: 0`, so an unestimated issue cannot
   inflate a sprint's committed total or distort the burndown.
 
@@ -343,7 +351,7 @@ Canonical error codes:
 | DEPLOY_ALREADY_SETTLED | Cancel was requested for a deployment that already finished (cancel route, HTTP 409)                                                   |
 | STAGE_FAILED           | Reserved: a deployment stage failed. The simulation has no failure path, so it is never raised                                         |
 | INVALID_INPUT          | Input failed schema or domain validation (catch-all; also a status or assignee the issue already has)                                  |
-| WORKSPACE_FULL         | A write would push the persisted board past its size cap, or `create_issue` past 40 new issues; reset the board                        |
+| WORKSPACE_FULL         | A write would push the persisted board past its size cap, or `create_issue` past 40 new issues (20 for MCP clients); reset the board   |
 | UNDO_CONFLICT          | Undo route only (HTTP 409): the issue changed since the write, it was already undone, or no record of it remains (a reset clears them) |
 | RESET_COOLDOWN         | Reset route only (HTTP 429): the board was reset less than 30 seconds ago, by anyone                                                   |
 | INTERNAL               | Issues MCP server only: the workspace call failed unexpectedly, so a write may or may not have landed. The detail goes to the log      |
