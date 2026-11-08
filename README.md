@@ -10,7 +10,7 @@ An AI copilot for a sprint board, built to show how an agent can be **useful wit
   behind their own host's permission prompt
 
 **Live demo:** https://devsprint.elbaymalik.com
-**Public MCP server:** `https://devsprint-mcp-issues.eleo-666.workers.dev/mcp` (Streamable HTTP)
+**Public MCP server:** `https://mcp.devsprint.elbaymalik.com/mcp` (Streamable HTTP)
 **Demo video:** _coming with the v1.0.0 release_
 
 ## Try it

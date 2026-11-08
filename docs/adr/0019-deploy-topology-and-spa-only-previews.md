@@ -211,3 +211,24 @@ Changes to `.github/workflows/ci.yml`:
   PRs get no preview, because they get no secrets.
 
 CI still has not deployed, so none of the workflow changes have run on GitHub yet.
+
+## Status note — 2026-11-08 (custom domains for the api and MCP)
+
+The api and the MCP Worker now also answer on custom domains, `api.devsprint.elbaymalik.com` and
+`mcp.devsprint.elbaymalik.com` (`routes` with `custom_domain: true`). The SPA's production build,
+its CSP `connect-src`, the smoke script and the docs use them.
+
+The reason is the account's request quota. Every request that reaches a Worker counts, including
+one the Worker's own rate limits refuse (ADR-0024's 2026-11-08 note). A zone rate-limiting rule
+refuses a request before it runs the Worker, but zone rules only apply to the zone's own hostnames,
+never to `*.workers.dev`. So the two Workers that run code move onto the zone, and the zone's rule
+covers them.
+
+- `workers_dev` stays on for one deploy, so nothing breaks while the new hostnames get their
+  certificates. A follow-up turns it off for both, after which the old URLs stop answering.
+- The SPA keeps its `workers.dev` host: PR previews are aliases of it, and an assets-only Worker's
+  requests are served as static assets, which do not count against the quota.
+- The smoke script retries its first request to each new host for up to two minutes, because a
+  just-added custom domain can take that long to serve its certificate.
+- The rate-limiting rule itself is a dashboard setting on the `elbaymalik.com` zone, shared with the
+  other demos on the account, so it is not in this repository.

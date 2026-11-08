@@ -2,7 +2,7 @@
 
 Current status: Phases 0–14 are implemented. The demo is live at
 https://devsprint-web.eleo-666.workers.dev with the public MCP server at
-`https://devsprint-mcp-issues.eleo-666.workers.dev/mcp`, so scenario S-F is runnable as written.
+`https://mcp.devsprint.elbaymalik.com/mcp`, so scenario S-F is runnable as written.
 Every push to `main` redeploys once CI passes (ADR-0019). Phase 15 remains: only the demo video,
 a v1.0.0 release asset, is left.
 

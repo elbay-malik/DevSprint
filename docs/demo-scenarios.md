@@ -23,7 +23,7 @@ browser specs (`apps/web/e2e/scenarios.spec.ts`), which also assert what the pag
 browser was streamed and what the workspace Durable Object stored. S-F is driven in the browser
 suite by the stock MCP SDK client standing in for the external host; the scenario as written also
 needs a real host; its other precondition, the deployed server, is live at
-`https://devsprint-mcp-issues.eleo-666.workers.dev/mcp`.
+`https://mcp.devsprint.elbaymalik.com/mcp`.
 
 Expected-UI details that are **not built**, marked where they appear: the workspace pane's Sprint
 and Deploys tabs, the release-notes badge, full markdown in

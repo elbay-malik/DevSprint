@@ -69,7 +69,7 @@ Annotations:
   Messages go to a third-party AI provider (Groq) and may be logged.
   Don’t enter personal information.
   Any MCP client can work on it too: [Copy]
-  https://devsprint-mcp-issues.eleo-666.workers.dev/mcp
+  https://mcp.devsprint.elbaymalik.com/mcp
   ```
 
 - **Header.** Sprint selector, demo reset, theme toggle. Reset restores the seed workspace for
