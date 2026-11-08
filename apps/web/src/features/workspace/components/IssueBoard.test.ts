@@ -159,5 +159,23 @@ describe('IssueBoard', () => {
     expect(wrapper.find('[data-pending-move]').exists()).toBe(false)
     expect(wrapper.find('[data-pending-assignee]').exists()).toBe(false)
     expect(wrapper.find('[data-board-change]').exists()).toBe(false)
+    // No seed issue came over MCP, so none carries the mark.
+    expect(wrapper.find('[data-testid="issue-source"]').exists()).toBe(false)
+  })
+
+  it('marks an issue an MCP client created, in words, in a column and in the backlog', () => {
+    const viaMcp = (issue: (typeof issues)[number]) =>
+      issue.key === 'DS-9' || issue.key === 'DS-12' ? { ...issue, source: 'mcp' as const } : issue
+    const wrapper = mount(IssueBoard, {
+      props: { issues: issues.map(viaMcp), backlog: backlog.map(viaMcp), users: seed.users },
+    })
+
+    for (const key of ['DS-9', 'DS-12']) {
+      const mark = card(wrapper, key).get('[data-testid="issue-source"]')
+      expect(mark.text()).toBe('Created via MCP')
+      expect(mark.get('.sr-only').text()).toBe('Created')
+    }
+    // An issue with no source is the in-app copilot's (or the seed's): no mark.
+    expect(card(wrapper, 'DS-7').find('[data-testid="issue-source"]').exists()).toBe(false)
   })
 })

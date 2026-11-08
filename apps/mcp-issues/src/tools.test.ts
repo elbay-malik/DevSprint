@@ -74,7 +74,7 @@ function brokenWorkspace(fail: () => Promise<never>) {
 describe('registerIssueTools', () => {
   it('exposes exactly the five issue tools (S-F eval assertion)', () => {
     const { server, registered } = fakeServer()
-    registerIssueTools(server, fakeWorkspace().api)
+    registerIssueTools(server, fakeWorkspace().api, 'mcp')
 
     expect([...registered.keys()]).toEqual([
       'list_issues',
@@ -88,7 +88,7 @@ describe('registerIssueTools', () => {
 
   it('publishes no tool the issues server does not own', () => {
     const { server, registered } = fakeServer()
-    registerIssueTools(server, fakeWorkspace().api)
+    registerIssueTools(server, fakeWorkspace().api, 'mcp')
 
     for (const elsewhere of ['get_burndown', 'run_deployment', 'create_release_notes']) {
       expect(registered.has(elsewhere)).toBe(false)
@@ -97,7 +97,7 @@ describe('registerIssueTools', () => {
 
   it('reuses the same descriptions the in-app agent sees', () => {
     const { server, registered } = fakeServer()
-    registerIssueTools(server, fakeWorkspace().api)
+    registerIssueTools(server, fakeWorkspace().api, 'mcp')
 
     // One source of truth, so the contract cannot drift between the two clients.
     for (const name of ISSUE_TOOL_NAMES) {
@@ -108,7 +108,7 @@ describe('registerIssueTools', () => {
   it('validates arguments even though the host owns the permission prompt', async () => {
     const { server, registered } = fakeServer()
     const workspace = fakeWorkspace()
-    registerIssueTools(server, workspace.api)
+    registerIssueTools(server, workspace.api, 'mcp')
 
     const result = await registered.get('update_issue_status')!.handler({ issueKey: 'DS-7' })
 
@@ -122,7 +122,7 @@ describe('registerIssueTools', () => {
     // few public creates fill the board for everyone (ADR-0024).
     const { server, registered } = fakeServer()
     const workspace = fakeWorkspace()
-    registerIssueTools(server, workspace.api)
+    registerIssueTools(server, workspace.api, 'mcp')
 
     const controls = await registered
       .get('create_issue')!
@@ -144,18 +144,74 @@ describe('registerIssueTools', () => {
   it('applies the schema defaults before the call', async () => {
     const { server, registered } = fakeServer()
     const workspace = fakeWorkspace()
-    registerIssueTools(server, workspace.api)
+    registerIssueTools(server, workspace.api, 'mcp')
 
     await registered.get('create_issue')!.handler({ title: 'New', type: 'chore' })
 
     expect(workspace.calls.createIssue).toHaveBeenCalledWith(
       expect.objectContaining({ priority: 'medium', sprintId: null }),
+      'mcp',
     )
+  })
+
+  it.each(['mcp', 'app'] as const)(
+    'creates with the source the server was built with (%s)',
+    async (source) => {
+      const { server, registered } = fakeServer()
+      const workspace = fakeWorkspace()
+      registerIssueTools(server, workspace.api, source)
+
+      await registered.get('create_issue')!.handler({ title: 'New', type: 'chore' })
+
+      expect(workspace.calls.createIssue).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'New' }),
+        source,
+      )
+    },
+  )
+
+  it('takes the source from the server, never from the arguments', async () => {
+    const { server, registered } = fakeServer()
+    const workspace = fakeWorkspace()
+    registerIssueTools(server, workspace.api, 'mcp')
+
+    await registered
+      .get('create_issue')!
+      .handler({ title: 'New', type: 'chore', source: 'app', reporterId: 'u-alice' })
+
+    const [input, source] = workspace.calls.createIssue.mock.calls[0] as unknown as [
+      Record<string, unknown>,
+      string,
+    ]
+    expect(source).toBe('mcp')
+    // The schema drops what it does not know, so neither reaches the board.
+    expect(input).not.toHaveProperty('source')
+    expect(input).not.toHaveProperty('reporterId')
+  })
+
+  it('passes a sub-cap refusal back as a value the host can read', async () => {
+    const { server, registered } = fakeServer()
+    const workspace = fakeWorkspace()
+    workspace.calls.createIssue.mockImplementationOnce(
+      () =>
+        Promise.resolve({
+          ok: false as const,
+          error: { code: 'WORKSPACE_FULL' as const, message: 'MCP share used up' },
+        }) as never,
+    )
+    registerIssueTools(server, workspace.api, 'mcp')
+
+    const result = await registered.get('create_issue')!.handler({ title: 'x', type: 'bug' })
+
+    expect(parse(result)).toEqual({
+      ok: false,
+      error: { code: 'WORKSPACE_FULL', message: 'MCP share used up' },
+    })
   })
 
   it('carries the shared result envelope, success and failure alike', async () => {
     const { server, registered } = fakeServer()
-    registerIssueTools(server, fakeWorkspace().api)
+    registerIssueTools(server, fakeWorkspace().api, 'mcp')
 
     const created = await registered.get('create_issue')!.handler({ title: 'x', type: 'bug' })
     expect(parse(created).ok).toBe(true)
@@ -171,7 +227,7 @@ describe('registerIssueTools', () => {
   it('passes an assignment through, null included, and returns its refusal as a value', async () => {
     const { server, registered } = fakeServer()
     const workspace = fakeWorkspace()
-    registerIssueTools(server, workspace.api)
+    registerIssueTools(server, workspace.api, 'mcp')
     const assign = registered.get('assign_issue')!
 
     const unknown = await assign.handler({ issueKey: 'DS-12', assigneeId: 'u-zoe' })
@@ -201,6 +257,7 @@ describe('registerIssueTools', () => {
       registerIssueTools(
         server,
         brokenWorkspace(() => Promise.reject(new Error('secret internals'))),
+        'mcp',
       )
 
       const result = await registered.get(name)!.handler(args)
@@ -221,6 +278,7 @@ describe('registerIssueTools', () => {
       registerIssueTools(
         server,
         brokenWorkspace(() => Promise.reject(new Error('secret internals'))),
+        'mcp',
       )
 
       await registered.get('create_issue')!.handler({ title: 'visitor-text', type: 'bug' })
@@ -242,6 +300,7 @@ describe('registerIssueTools', () => {
         brokenWorkspace(() => {
           throw new Error('secret internals')
         }),
+        'mcp',
       )
 
       const result = await registered.get('list_issues')!.handler({})
@@ -255,6 +314,7 @@ describe('registerIssueTools', () => {
         server,
         // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
         brokenWorkspace(() => Promise.reject('plain text')),
+        'mcp',
       )
 
       await registered.get('list_issues')!.handler({})
@@ -266,7 +326,7 @@ describe('registerIssueTools', () => {
 
     it('leaves a domain failure alone, with nothing logged', async () => {
       const { server, registered } = fakeServer()
-      registerIssueTools(server, fakeWorkspace().api)
+      registerIssueTools(server, fakeWorkspace().api, 'mcp')
 
       const missing = await registered
         .get('update_issue_status')!
