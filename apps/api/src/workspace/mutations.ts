@@ -12,7 +12,9 @@ import {
   createWorkspaceSeed,
   type Deployment,
   type DeploymentStage,
+  issueSource,
   type Issue,
+  type IssueSource,
   type ReleaseNote,
   type StageName,
   type ToolErrorCode,
@@ -79,16 +81,35 @@ function nextIssueKey(workspace: Workspace): string {
  * until the reset, and everything else keeps working.
  */
 export const MAX_CREATED_ISSUES = 40
+/**
+ * How many of those 40 may come from external hosts on the public MCP
+ * endpoint (`source: 'mcp'`). Without it, MCP clients alone could take every
+ * slot and leave the in-app copilot unable to file an issue until the reset;
+ * with it, the copilot always keeps the other 20. It counts the same way as
+ * the main cap, so an undo or a reset frees these slots too.
+ */
+export const MAX_MCP_CREATED_ISSUES = 20
 const SEED_ISSUE_COUNT = createWorkspaceSeed().issues.length
 
 export function createIssue(
   workspace: Workspace,
   input: CreateIssueInput,
+  source: IssueSource = 'app',
 ): ToolResult<CreateIssueData> {
   if (workspace.issues.length >= SEED_ISSUE_COUNT + MAX_CREATED_ISSUES) {
     return fail(
       'WORKSPACE_FULL',
       `The demo board already holds ${MAX_CREATED_ISSUES} new issues, which is as many as it takes until it resets. Reset it to add more.`,
+    )
+  }
+  if (
+    source === 'mcp' &&
+    workspace.issues.filter((issue) => issueSource(issue) === 'mcp').length >=
+      MAX_MCP_CREATED_ISSUES
+  ) {
+    return fail(
+      'WORKSPACE_FULL',
+      `The demo board already holds ${MAX_MCP_CREATED_ISSUES} issues created over MCP, which is as many as MCP clients may add until it resets. Reading, moving and reassigning issues still work.`,
     )
   }
   if (
@@ -130,6 +151,8 @@ export function createIssue(
     createdAt: workspace.now,
     updatedAt: workspace.now,
     completedAt: null,
+    // Only the MCP mark is stored; an issue without one is in-app (IssueSource).
+    ...(source === 'mcp' ? { source } : {}),
   }
   workspace.issues.push(issue)
   return ok({ issue })

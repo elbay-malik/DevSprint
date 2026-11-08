@@ -55,6 +55,15 @@ export interface Sprint {
   endDate: string
 }
 
+/**
+ * Which way an issue reached the board. `app` is the in-app copilot, through an
+ * approval card; `mcp` is an external host on the public MCP endpoint, which
+ * has no approval card and no account. Stored only as `mcp`: an issue with no
+ * `source` (the seed, and everything created before the field existed) is
+ * `app`, so older boards read the same as they always did.
+ */
+export type IssueSource = 'app' | 'mcp'
+
 export interface Issue {
   id: string
   key: string
@@ -73,6 +82,13 @@ export interface Issue {
   createdAt: string
   updatedAt: string
   completedAt: string | null
+  /** Absent means `app` (see `IssueSource`). */
+  source?: 'mcp'
+}
+
+/** Where an issue came from, reading an absent `source` as the in-app copilot. */
+export function issueSource(issue: Pick<Issue, 'source'>): IssueSource {
+  return issue.source === 'mcp' ? 'mcp' : 'app'
 }
 
 export interface DeploymentStage {

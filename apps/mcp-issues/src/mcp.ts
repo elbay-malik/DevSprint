@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
+import type { IssueSource } from '@devsprint/shared'
 import type { WorkspaceApi } from '@devsprint/shared/tools'
 import { MAX_BODY_BYTES } from './batch'
 import { registerIssueTools } from './tools'
@@ -16,19 +17,21 @@ export const MAX_TOOL_INPUT_ELEMENTS = 100
  * id generator: stateless, so any request can be served by any isolate without
  * shared session state.
  *
+ * `source` is the entrypoint's, passed on to the tools (see `registerIssueTools`).
  * `parsedBody` is what the public entrypoint already read and bounded. Without
  * it the transport reads the body itself, under the same limit.
  */
 export async function handleMcpRequest(
   request: Request,
   workspace: WorkspaceApi,
+  source: IssueSource,
   parsedBody?: unknown,
 ): Promise<Response> {
   const server = new McpServer(
     { name: 'devsprint-issues', version: '1.0.0' },
     { maxToolInputElements: MAX_TOOL_INPUT_ELEMENTS },
   )
-  registerIssueTools(server, workspace)
+  registerIssueTools(server, workspace, source)
 
   const transport = new WebStandardStreamableHTTPServerTransport({
     maxRequestBodySize: MAX_BODY_BYTES,

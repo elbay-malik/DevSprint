@@ -13,7 +13,7 @@
  * carries the arguments, not the call id. The id travelling in the result is
  * what both paths — and an external MCP host — have in common.
  */
-import type { Issue, ToolResult, Workspace } from '@devsprint/shared'
+import type { Issue, IssueSource, ToolResult, Workspace } from '@devsprint/shared'
 import type {
   AssignIssueData,
   AssignIssueInput,
@@ -118,8 +118,9 @@ export function createIssueTracked(
   workspace: Workspace,
   input: CreateIssueInput,
   { changes, changeId, at }: TrackOptions,
+  source: IssueSource = 'app',
 ): Tracked<CreateIssueData> {
-  const result = createIssue(workspace, input)
+  const result = createIssue(workspace, input, source)
   if (!result.ok) return { result }
   const { issue } = result.data
   return {
