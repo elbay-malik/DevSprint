@@ -13,6 +13,7 @@ import {
 } from 'ai'
 import { API_ROUTES, trimChatHistory } from '@devsprint/shared'
 import type { AppEnv } from './env'
+import type { SpendLimit } from '@devsprint/shared/tools'
 import { corsOriginMatcher } from './cors'
 import { workspaceStub, type WorkspaceApi } from './workspace/durable-object'
 import { createResetGate } from './workspace/reset-gate'
@@ -39,8 +40,7 @@ import {
 } from './agent/request-bounds'
 import { createTurnTracer, resolveTracingConfig } from './agent/tracing'
 import {
-  BUDGET_REACHED_MESSAGE,
-  CLIENT_BUDGET_REACHED_MESSAGE,
+  isApprovalResume,
   limitMessage,
   messageOnlyResponse,
   RATE_LIMITED_MESSAGE,
@@ -375,6 +375,28 @@ function invalidInput(c: Context<{ Bindings: AppEnv }>, message: string) {
 }
 
 /**
+ * The promise's value, or undefined once the signal aborts, whichever is first.
+ * A wait the client has walked away from has nothing left to decide.
+ */
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T | undefined> {
+  if (signal.aborted) return Promise.resolve(undefined)
+  return new Promise((resolve) => {
+    const onAbort = () => resolve(undefined)
+    signal.addEventListener('abort', onAbort, { once: true })
+    void promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(value)
+      },
+      () => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(undefined)
+      },
+    )
+  })
+}
+
+/**
  * Reads a body with no Content-Length as far as the limit and no further, so a
  * chunked request cannot slip past the way it would past a header check.
  */
@@ -483,15 +505,22 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
   const clientShare = resolveClientTokenShare(c.env.CLIENT_DAILY_TOKEN_SHARE)
   const shareKey = clientShare === undefined ? undefined : clientKey
   const metered = label !== 'mock' && (dailyCap !== undefined || shareKey !== undefined)
+  /** A turn a limit refused before the model, in that limit's words. */
+  const refusedTurn = (limit: SpendLimit) =>
+    messageOnlyResponse(limitMessage(SPEND_LIMIT_MESSAGES[limit], messages), {
+      'X-DevSprint-Model': label,
+      'X-DevSprint-Limit': limit,
+    })
+  // A cheap read before anything is spent, so a client already over a limit
+  // doesn't use up the approvals it carries. It is not what holds the limits:
+  // concurrent turns can all pass it, and each model call is admitted on its
+  // own below.
   if (metered) {
     const usage = await workspace.modelUsage(shareKey)
     const reached = spendLimitReached(usage, dailyCap, clientShare)
     if (reached === 'budget') {
       console.warn(JSON.stringify({ event: 'budget-reached', day: usage.day, spent: usage.tokens }))
-      return messageOnlyResponse(limitMessage(BUDGET_REACHED_MESSAGE, messages), {
-        'X-DevSprint-Model': label,
-        'X-DevSprint-Limit': 'budget',
-      })
+      return refusedTurn(reached)
     }
     if (reached === 'client-budget') {
       // Not the key: this log line is no place for an address.
@@ -502,10 +531,7 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
           spent: usage.clientTokens,
         }),
       )
-      return messageOnlyResponse(limitMessage(CLIENT_BUDGET_REACHED_MESSAGE, messages), {
-        'X-DevSprint-Model': label,
-        'X-DevSprint-Limit': 'client-budget',
-      })
+      return refusedTurn(reached)
     }
   }
 
@@ -530,18 +556,38 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
   const tracingConfig = resolveTracingConfig(c.env)
   const turnTracer = tracingConfig ? createTurnTracer(tracingConfig) : undefined
 
-  // Charged as each call starts and writes, and corrected to the real figure as
-  // its step finishes, so a client that leaves mid-call can't spend for nothing.
-  // Everything goes on `waitUntil`, so it survives that client leaving.
+  // Each call is admitted as it starts: the workspace checks the cap and the
+  // share and charges the call's estimate in one step, so concurrent turns are
+  // let through one call at a time (ADR-0016's 2026-11-08 status note). What a
+  // call writes is charged as it goes, and the step is corrected to the real
+  // figure as it finishes, so a client that leaves mid-call can't spend for
+  // nothing. Those later writes go on `waitUntil`, so they survive that client
+  // leaving.
   const meter = metered
     ? createSpendMeter({
+        admit: async (tokens) => {
+          const admission = await workspace.admitModelCall(tokens, shareKey, {
+            ...(dailyCap === undefined ? {} : { dailyCap }),
+            ...(clientShare === undefined ? {} : { clientShare }),
+          })
+          if (admission.admitted) return undefined
+          // Not the key: this log line is no place for an address.
+          console.warn(
+            JSON.stringify({
+              event: 'model-call-refused',
+              limit: admission.limit,
+              day: admission.usage.day,
+            }),
+          )
+          return admission.limit
+        },
         charge: (tokens) => waitUntil(workspace.recordModelUsage(tokens, shareKey)),
         refund: (tokens) => waitUntil(workspace.refundModelUsage(tokens, shareKey)),
       })
     : undefined
 
   // Which limit ended this turn between steps, if one did.
-  let stoppedBy: ReturnType<typeof spendLimitReached>
+  let stoppedBy: SpendLimit | undefined
 
   const agent = createCopilotAgent({
     model: meter ? meter.wrap(model) : model,
@@ -552,9 +598,9 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
     ...(meter
       ? {
           onUsage: meter.settle,
-          // Concurrent turns all pass the check above before any has recorded
-          // spend, so each re-reads it between steps. Each can still overshoot by
-          // about a step, and a read can miss a write `waitUntil` has not landed.
+          // A turn that has used up a limit ends here rather than making a call
+          // only to be refused. The admission is what holds the limit; this
+          // read can miss a write `waitUntil` has not landed.
           shouldStop: async () => {
             const usage = await workspace.modelUsage(shareKey)
             stoppedBy = spendLimitReached(usage, dailyCap, clientShare)
@@ -583,6 +629,17 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
     abortSignal: c.req.raw.signal,
     onStepFinish: createStepAuditLogger(label),
   })
+
+  // The stream starts at once, so the first call asks for admission while this
+  // waits. Refused, the turn is answered as a refusal at the door would be, with
+  // its header. An approval resume is left to the stream: the approved write
+  // ran before the first call, so its result belongs in the answer, and the
+  // closing message below says why the turn stopped. A client that leaves
+  // before the call stops the wait too.
+  if (meter && !isApprovalResume(messages)) {
+    const refused = await untilAborted(meter.firstAdmission, c.req.raw.signal)
+    if (refused !== undefined) return refusedTurn(refused)
+  }
 
   // 'Content-Encoding: Identity' defeats wrangler dev/miniflare response
   // buffering so tokens actually stream locally (workers-sdk#8004); harmless
@@ -624,7 +681,10 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
           return toClientErrorMessage(error)
         },
       }),
-      () => (stoppedBy === undefined ? undefined : SPEND_LIMIT_MESSAGES[stoppedBy]),
+      () => {
+        const limit = stoppedBy ?? meter?.refusedBy
+        return limit === undefined ? undefined : SPEND_LIMIT_MESSAGES[limit]
+      },
     ),
   })
 })

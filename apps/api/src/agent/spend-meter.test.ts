@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { SpendLimit } from '@devsprint/shared/tools'
 import type {
   LanguageModelV3,
   LanguageModelV3CallOptions,
@@ -10,13 +11,22 @@ const CALL = {
   prompt: [{ role: 'user', content: [{ type: 'text', text: 'x'.repeat(400) }] }],
 } as unknown as LanguageModelV3CallOptions
 
-function meter() {
+/**
+ * A meter over a ledger that admits every call, the way the workspace does while
+ * a limit has room: the admission's charge lands in `charge` with the rest.
+ */
+function meter(refuse: () => SpendLimit | undefined = () => undefined) {
   const charge = vi.fn<(tokens: number) => void>()
   const refund = vi.fn<(tokens: number) => void>()
+  const admit = vi.fn((tokens: number) => {
+    const limit = refuse()
+    if (limit === undefined) charge(tokens)
+    return Promise.resolve(limit)
+  })
   const total = () =>
     charge.mock.calls.reduce((sum, [tokens]) => sum + tokens, 0) -
     refund.mock.calls.reduce((sum, [tokens]) => sum + tokens, 0)
-  return { charge, refund, total, spend: createSpendMeter({ charge, refund }) }
+  return { admit, charge, refund, total, spend: createSpendMeter({ admit, charge, refund }) }
 }
 
 function modelThat(doStream: LanguageModelV3['doStream']): LanguageModelV3 {
@@ -245,5 +255,104 @@ describe('createSpendMeter', () => {
     spend.settle(2_000)
 
     expect(total()).toBe(3_000)
+  })
+})
+
+describe('createSpendMeter — admission', () => {
+  it('waits for the admission before it calls the provider', async () => {
+    let admitNow: (limit: SpendLimit | undefined) => void = () => undefined
+    const admit = vi.fn(
+      () =>
+        new Promise<SpendLimit | undefined>((resolve) => {
+          admitNow = resolve
+        }),
+    )
+    const provider = vi.fn(() => Promise.resolve(streamOf([])))
+    const spend = createSpendMeter({ admit, charge: vi.fn(), refund: vi.fn() })
+
+    const call = spend.wrap(modelThat(provider)).doStream(CALL)
+    await Promise.resolve()
+    expect(admit).toHaveBeenCalledTimes(1)
+    expect(provider).not.toHaveBeenCalled()
+
+    admitNow(undefined)
+    await call
+    expect(provider).toHaveBeenCalledTimes(1)
+  })
+
+  it('admits with the capped estimate, the same figure it would have charged', async () => {
+    const { admit, spend } = meter()
+    const huge = {
+      prompt: [{ role: 'user', content: [{ type: 'text', text: 'x'.repeat(256 * 1024) }] }],
+    } as unknown as LanguageModelV3CallOptions
+
+    await spend.wrap(modelThat(() => Promise.resolve(streamOf([])))).doStream(huge)
+
+    expect(admit).toHaveBeenCalledWith(MAX_CALL_ESTIMATE_TOKENS)
+  })
+
+  it('never calls the provider for a refused call, and ends its step cleanly', async () => {
+    const { charge, refund, spend } = meter(() => 'client-budget')
+    const provider = vi.fn(() => Promise.resolve(streamOf([])))
+
+    const { stream } = await spend.wrap(modelThat(provider)).doStream(CALL)
+    const parts: LanguageModelV3StreamPart[] = []
+    const reader = stream.getReader()
+    for (let next = await reader.read(); !next.done; next = await reader.read()) {
+      parts.push(next.value)
+    }
+    spend.settle(0)
+
+    expect(provider).not.toHaveBeenCalled()
+    expect(parts.map((part) => part.type)).toEqual(['stream-start', 'finish'])
+    expect(charge).not.toHaveBeenCalled()
+    expect(refund).not.toHaveBeenCalled()
+    expect(spend.refusedBy).toBe('client-budget')
+    await expect(spend.firstAdmission).resolves.toBe('client-budget')
+  })
+
+  it("reports only the first call's admission as the first", async () => {
+    let calls = 0
+    const { spend } = meter(() => (calls++ === 0 ? undefined : 'budget'))
+    const model = spend.wrap(modelThat(() => Promise.resolve(streamOf([]))))
+
+    await model.doStream(CALL)
+    spend.settle(1_000)
+    await model.doStream(CALL)
+
+    await expect(spend.firstAdmission).resolves.toBeUndefined()
+    expect(spend.refusedBy).toBe('budget')
+  })
+
+  it('does not refund a call it never charged', async () => {
+    // A refused retry after a 429: the refund belongs to the admitted attempt only.
+    let calls = 0
+    const { total, spend } = meter(() => (calls++ === 0 ? undefined : 'budget'))
+    const model = spend.wrap(
+      modelThat(vi.fn<LanguageModelV3['doStream']>().mockRejectedValueOnce(new Error('429'))),
+    )
+
+    await expect(model.doStream(CALL)).rejects.toThrow('429')
+    await model.doStream(CALL)
+    spend.settle(0)
+
+    expect(total()).toBe(0)
+  })
+
+  it('fails the call, without the provider, when the admission itself fails', async () => {
+    const provider = vi.fn(() => Promise.resolve(streamOf([])))
+    const spend = createSpendMeter({
+      admit: () => Promise.reject(new Error('workspace unavailable')),
+      charge: vi.fn(),
+      refund: vi.fn(),
+    })
+
+    await expect(spend.wrap(modelThat(provider)).doStream(CALL)).rejects.toThrow(
+      'workspace unavailable',
+    )
+
+    expect(provider).not.toHaveBeenCalled()
+    // The error reaches the stream, so the first admission does not hold the route up.
+    await expect(spend.firstAdmission).resolves.toBeUndefined()
   })
 })

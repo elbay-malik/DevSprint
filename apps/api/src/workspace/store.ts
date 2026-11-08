@@ -1,5 +1,11 @@
 import { createWorkspaceSeed, type Workspace } from '@devsprint/shared'
-import type { DailyModelUsage, WorkspaceApi } from '@devsprint/shared/tools'
+import type {
+  DailyModelUsage,
+  ModelCallAdmission,
+  ModelSpendLimits,
+  WorkspaceApi,
+} from '@devsprint/shared/tools'
+import { spendLimitReached } from '../agent/limits'
 import {
   diffReleaseNotes,
   getBurndown,
@@ -43,6 +49,12 @@ export interface WorkspaceStore {
   modelUsage(clientKey?: string): DailyModelUsage
   recordModelUsage(tokens: number, clientKey?: string): DailyModelUsage
   refundModelUsage(tokens: number, clientKey?: string): DailyModelUsage
+  /** The DO's check-and-charge. Synchronous here, so atomic without a queue. */
+  admitModelCall(
+    tokens: number,
+    clientKey: string | undefined,
+    limits: ModelSpendLimits,
+  ): ModelCallAdmission
 }
 
 /**
@@ -73,7 +85,7 @@ export function createWorkspaceStore(): WorkspaceStore {
   let changes: BoardChange[] = []
   let cancelTokens = new Map<string, string>()
   let lastResetAt = 0
-  return {
+  const store: WorkspaceStore = {
     get: () => workspace,
     reset: () => {
       workspace = createWorkspaceSeed()
@@ -103,6 +115,14 @@ export function createWorkspaceStore(): WorkspaceStore {
       clients = { day: current.day, tokens: held }
       return { ...usage, clientTokens: held[clientKey] ?? 0 }
     },
+    admitModelCall: (tokens, clientKey, { dailyCap, clientShare }) => {
+      const usage = store.modelUsage(clientKey)
+      const positive = (limit: number | undefined) =>
+        limit !== undefined && Number.isFinite(limit) && limit > 0 ? limit : undefined
+      const limit = spendLimitReached(usage, positive(dailyCap), positive(clientShare))
+      if (limit !== undefined) return { admitted: false, limit, usage }
+      return { admitted: true, usage: store.recordModelUsage(tokens, clientKey) }
+    },
     refundModelUsage: (tokens, clientKey) => {
       const current = currentUsage()
       const refund = Number.isFinite(tokens) && tokens > 0 ? Math.floor(tokens) : 0
@@ -113,6 +133,7 @@ export function createWorkspaceStore(): WorkspaceStore {
       return { ...usage, clientTokens: held[clientKey] ?? 0 }
     },
   }
+  return store
 }
 
 /**
@@ -189,6 +210,8 @@ export function createLocalWorkspaceApi(store: WorkspaceStore): WorkspaceApi {
       Promise.resolve(store.recordModelUsage(tokens, clientKey)),
     refundModelUsage: (tokens, clientKey) =>
       Promise.resolve(store.refundModelUsage(tokens, clientKey)),
+    admitModelCall: (tokens, clientKey, limits) =>
+      Promise.resolve(store.admitModelCall(tokens, clientKey, limits)),
     // One at a time rather than filter-then-bulk-add, so an in-call duplicate
     // is caught too — mirrors the DO's real implementation. No eviction cap
     // here: that guards a Durable Object storage limit this in-memory Set does

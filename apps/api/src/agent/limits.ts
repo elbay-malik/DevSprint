@@ -18,7 +18,7 @@
  */
 import { createUIMessageStream, createUIMessageStreamResponse, type UIMessageChunk } from 'ai'
 import { ipRateLimitKey } from '@devsprint/shared'
-import type { DailyModelUsage } from '@devsprint/shared/tools'
+import type { DailyModelUsage, SpendLimit } from '@devsprint/shared/tools'
 
 /** Cloudflare's rate-limit binding, as much of it as this Worker uses. */
 export interface RateLimitBinding {
@@ -64,18 +64,18 @@ export function resolveClientTokenShare(configured: string | undefined): number 
  * Which spend limit, if any, this usage has reached. The day's cap comes first:
  * once it is gone no client can be served, so that is the true thing to say.
  *
- * This is check-then-record, for the cap and the share alike. A turn is checked
- * against what has been spent so far, not against what its next call will cost,
- * and the charge lands in a separate call afterwards. So concurrent turns can
- * each pass the check, and a turn can end past the limit it was checked against.
- * spend-meter.ts does charge an estimate as each model call starts (ADR-0016's
- * 2026-11-02 status note), but that charge comes after this check, not with it.
+ * Checked against what has been spent so far, not against what the next call
+ * will cost. Read on its own, as the route does before spending approvals and
+ * between steps, it is check-then-record and concurrent turns can all pass it.
+ * The control that holds is `admitModelCall`, which runs this check and the
+ * call's opening charge together in the workspace (ADR-0016's 2026-11-08 status
+ * note), so a burst passes it one call at a time.
  */
 export function spendLimitReached(
   usage: DailyModelUsage,
   dailyCap: number | undefined,
   clientShare: number | undefined,
-): 'budget' | 'client-budget' | undefined {
+): SpendLimit | undefined {
   if (dailyCap !== undefined && usage.tokens >= dailyCap) return 'budget'
   if (clientShare !== undefined && (usage.clientTokens ?? 0) >= clientShare) return 'client-budget'
   return undefined
