@@ -105,6 +105,18 @@ export interface WorkspaceApi {
   recordModelUsage(tokens: number, clientKey?: string): Promise<DailyModelUsage>
   /** Takes back an estimate that charged too much, stopping at zero. */
   refundModelUsage(tokens: number, clientKey?: string): Promise<DailyModelUsage>
+  /**
+   * Checks the day's cap and this client's share and, only if neither has been
+   * reached, records `tokens` against both, as one call. Concurrent model calls
+   * are admitted one at a time, so a burst cannot all pass the check before any
+   * of them is charged (ADR-0016's 2026-11-08 status note). A refused call
+   * records nothing.
+   */
+  admitModelCall(
+    tokens: number,
+    clientKey: string | undefined,
+    limits: ModelSpendLimits,
+  ): Promise<ModelCallAdmission>
 
   listIssues(input: ListIssuesInput): Promise<ToolResult<ListIssuesData>>
   searchIssues(input: SearchIssuesInput): Promise<ToolResult<SearchIssuesData>>
@@ -155,6 +167,20 @@ export interface CancelDeploymentInput {
   deploymentId: string
   cancelToken: string
 }
+
+/** The spend limits a model call is admitted against. Absent means off. */
+export interface ModelSpendLimits {
+  dailyCap?: number
+  clientShare?: number
+}
+
+/** Which spend limit refused a call: the day's cap, or this client's share. */
+export type SpendLimit = 'budget' | 'client-budget'
+
+/** What `admitModelCall` decided, with the usage it decided on (after the charge, if admitted). */
+export type ModelCallAdmission =
+  | { admitted: true; usage: DailyModelUsage }
+  | { admitted: false; limit: SpendLimit; usage: DailyModelUsage }
 
 export interface DailyModelUsage {
   /** `YYYY-MM-DD`, in UTC. */

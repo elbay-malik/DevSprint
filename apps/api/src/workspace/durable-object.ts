@@ -9,6 +9,8 @@ import {
 } from '@devsprint/shared'
 import type {
   DailyModelUsage,
+  ModelCallAdmission,
+  ModelSpendLimits,
   WorkspaceApi,
   AssignIssueInput,
   CreateIssueInput,
@@ -51,6 +53,7 @@ import {
 } from './changes'
 import { nextUtcMidnightAfter } from './reset-schedule'
 import { resetCooldownRefusal } from './reset-gate'
+import { spendLimitReached } from '../agent/limits'
 import {
   addClientTokens,
   hashClientKey,
@@ -59,6 +62,11 @@ import {
 } from './client-usage'
 
 const STORAGE_KEY = 'workspace'
+
+/** A limit the Worker passed in, or off when it is not a positive number. */
+function positiveLimit(limit: number | undefined): number | undefined {
+  return limit !== undefined && Number.isFinite(limit) && limit > 0 ? limit : undefined
+}
 /** Approval ids already spent (ADR-0010), persisted alongside the board (ADR-0014). */
 const LEDGER_KEY = 'spent-approvals'
 /**
@@ -410,54 +418,126 @@ export class WorkspaceDO extends DurableObject implements WorkspaceApi {
   }
 
   /**
-   * The hash comes first. Only storage calls hold other requests back, so a
-   * digest between the reads and the write could let two steps read the same
-   * totals and lose one's tokens.
+   * Runs the usage writes one after another, so a read-modify-write of the day's
+   * total can never interleave with another. The hash and every storage call sit
+   * inside one turn of this queue, which is what makes `admitModelCall`'s check
+   * and charge one step rather than two.
+   *
+   * A real object already holds other requests back during a storage call, but
+   * not across a digest or any other await between the reads and the write.
+   * Queuing here makes the guarantee the code's own rather than the platform's
+   * timing, and it holds the same way in the unit suite's fake storage.
    */
-  async recordModelUsage(tokens: number, clientKey?: string): Promise<DailyModelUsage> {
-    const hash = clientKey === undefined ? undefined : await hashClientKey(clientKey, this.today())
-    const current = await this.loadUsage()
-    // Negative or nonsense usage would quietly buy back budget.
-    const spent = Number.isFinite(tokens) && tokens > 0 ? Math.floor(tokens) : 0
-    const next: DailyModelUsage = { day: current.day, tokens: current.tokens + spent }
-    if (hash === undefined) {
+  private usageQueue: Promise<unknown> = Promise.resolve()
+
+  private serialiseUsage<T>(work: () => Promise<T>): Promise<T> {
+    const run = this.usageQueue.then(work, work)
+    // A write that failed must not stop the ones queued behind it.
+    this.usageQueue = run.catch(() => undefined)
+    return run
+  }
+
+  /** Writes the day's total and, for a client, its part, in one storage call. */
+  private async writeUsage(
+    next: DailyModelUsage,
+    hash: string | undefined,
+    held: Record<string, number> | undefined,
+  ): Promise<DailyModelUsage> {
+    if (hash === undefined || held === undefined) {
       await this.ctx.storage.put(USAGE_KEY, next)
       return next
     }
-    const clients = await this.loadClientUsage(current.day)
-    const held = addClientTokens(clients.tokens, hash, spent)
     // One write, so the day's total and the client's part can't disagree.
     await this.ctx.storage.put({
       [USAGE_KEY]: next,
-      [CLIENT_USAGE_KEY]: { day: current.day, tokens: held } satisfies ClientUsage,
+      [CLIENT_USAGE_KEY]: { day: next.day, tokens: held } satisfies ClientUsage,
     })
     return { ...next, clientTokens: held[hash] ?? 0 }
+  }
+
+  /** Adds `spent` to the day and the client. Only ever called inside the queue. */
+  private async addUsage(
+    current: DailyModelUsage,
+    hash: string | undefined,
+    clients: ClientUsage | undefined,
+    spent: number,
+  ): Promise<DailyModelUsage> {
+    const next: DailyModelUsage = { day: current.day, tokens: current.tokens + spent }
+    const held =
+      hash === undefined || clients === undefined
+        ? undefined
+        : addClientTokens(clients.tokens, hash, spent)
+    return this.writeUsage(next, hash, held)
+  }
+
+  /**
+   * The hash comes first, before anything is read, so nothing but storage sits
+   * between the reads and the write.
+   */
+  recordModelUsage(tokens: number, clientKey?: string): Promise<DailyModelUsage> {
+    return this.serialiseUsage(async () => {
+      const hash =
+        clientKey === undefined ? undefined : await hashClientKey(clientKey, this.today())
+      const current = await this.loadUsage()
+      const clients = hash === undefined ? undefined : await this.loadClientUsage(current.day)
+      // Negative or nonsense usage would quietly buy back budget.
+      const spent = Number.isFinite(tokens) && tokens > 0 ? Math.floor(tokens) : 0
+      return this.addUsage(current, hash, clients, spent)
+    })
+  }
+
+  /**
+   * The check and the charge for one model call, as one step (ADR-0016's
+   * 2026-11-08 status note). Concurrent calls queue here, so once the day's cap
+   * or this client's share is reached every later call is refused, and a burst
+   * can pass the limit by one call's charge at most. A refused call records
+   * nothing. The limits come from the Worker's config, and one that is not a
+   * positive number counts as off.
+   */
+  admitModelCall(
+    tokens: number,
+    clientKey: string | undefined,
+    limits: ModelSpendLimits,
+  ): Promise<ModelCallAdmission> {
+    return this.serialiseUsage(async () => {
+      const hash =
+        clientKey === undefined ? undefined : await hashClientKey(clientKey, this.today())
+      const current = await this.loadUsage()
+      const clients = hash === undefined ? undefined : await this.loadClientUsage(current.day)
+      const usage: DailyModelUsage =
+        hash === undefined || clients === undefined
+          ? current
+          : { ...current, clientTokens: clients.tokens[hash] ?? 0 }
+      const limit = spendLimitReached(
+        usage,
+        positiveLimit(limits.dailyCap),
+        positiveLimit(limits.clientShare),
+      )
+      if (limit !== undefined) return { admitted: false, limit, usage }
+      const spent = Number.isFinite(tokens) && tokens > 0 ? Math.floor(tokens) : 0
+      return { admitted: true, usage: await this.addUsage(current, hash, clients, spent) }
+    })
   }
 
   /**
    * Takes back what an estimate charged too much of (agent/spend-meter.ts). Apart
    * from this, usage only goes up, and `recordModelUsage` still refuses a negative
-   * figure. The hash comes first here too, for the same reason.
+   * figure. Queued and hashed first, the same as recording.
    */
-  async refundModelUsage(tokens: number, clientKey?: string): Promise<DailyModelUsage> {
-    const hash = clientKey === undefined ? undefined : await hashClientKey(clientKey, this.today())
-    const current = await this.loadUsage()
-    const refund = Number.isFinite(tokens) && tokens > 0 ? Math.floor(tokens) : 0
-    const next: DailyModelUsage = {
-      day: current.day,
-      tokens: Math.max(0, current.tokens - refund),
-    }
-    if (hash === undefined) {
-      await this.ctx.storage.put(USAGE_KEY, next)
-      return next
-    }
-    const clients = await this.loadClientUsage(current.day)
-    const held = refundClientTokens(clients.tokens, hash, refund)
-    await this.ctx.storage.put({
-      [USAGE_KEY]: next,
-      [CLIENT_USAGE_KEY]: { day: current.day, tokens: held } satisfies ClientUsage,
+  refundModelUsage(tokens: number, clientKey?: string): Promise<DailyModelUsage> {
+    return this.serialiseUsage(async () => {
+      const hash =
+        clientKey === undefined ? undefined : await hashClientKey(clientKey, this.today())
+      const current = await this.loadUsage()
+      const refund = Number.isFinite(tokens) && tokens > 0 ? Math.floor(tokens) : 0
+      const next: DailyModelUsage = {
+        day: current.day,
+        tokens: Math.max(0, current.tokens - refund),
+      }
+      if (hash === undefined) return this.writeUsage(next, undefined, undefined)
+      const clients = await this.loadClientUsage(current.day)
+      return this.writeUsage(next, hash, refundClientTokens(clients.tokens, hash, refund))
     })
-    return { ...next, clientTokens: held[hash] ?? 0 }
   }
 
   // --- reads ------------------------------------------------------------------
