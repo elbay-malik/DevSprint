@@ -726,6 +726,48 @@ describe('an approval resume a limit refused', () => {
       expect(lastAssistantMessageIsCompleteWithApprovalResponses({ messages: [after] })).toBe(false)
     })
 
+    it('keeps the result of a write that ran when the first call is then refused', async () => {
+      // The door lets the resume through and the approved writes run, then the
+      // first model call's admission is refused, as a concurrent turn can make
+      // it. The writes' results stay in the answer, and so does the reason.
+      const first = await post([userMessage(CLOSE_OUT)])
+      const assistant = answeredAssistantMessage(first.chunks, () => ({ approved: true }))
+      const held = assistant as unknown as UIMessage
+      const provider = vi.fn()
+      vi.stubGlobal('fetch', provider)
+      const refusing = fakeWorkspaceBinding(workspace.store, {
+        admitModelCall: (_tokens, clientKey) =>
+          Promise.resolve({
+            admitted: false,
+            limit: 'client-budget',
+            usage: workspace.store.modelUsage(clientKey),
+          }),
+      })
+
+      const resumed = await postAs([userMessage(CLOSE_OUT), assistant], {
+        ...roomLeft,
+        WORKSPACE: refusing.binding,
+      })
+
+      expect(provider).not.toHaveBeenCalled()
+      expect(openIssues()).toEqual([])
+      expect(resumed.chunks.filter((chunk) => chunk.type === 'tool-output-available')).toHaveLength(
+        5,
+      )
+      expect(textOf(resumed.chunks)).toBe(CLIENT_BUDGET_REACHED_MESSAGE)
+      expect(resumed.chunks.filter((chunk) => chunk.type === 'error')).toEqual([])
+
+      const stream = new ReadableStream<UIMessageChunk>({
+        start(controller) {
+          for (const chunk of resumed.chunks) controller.enqueue(chunk as UIMessageChunk)
+          controller.close()
+        },
+      })
+      let after = held
+      for await (const next of readUIMessageStream({ message: held, stream })) after = next
+      expect(lastAssistantMessageIsCompleteWithApprovalResponses({ messages: [after] })).toBe(false)
+    })
+
     it('does not make the SPA resend the answered approval', async () => {
       // Run on the SDK's own reducer and predicate, on what the route really sent.
       // True here would resend for as long as the share lasted, then run the write
