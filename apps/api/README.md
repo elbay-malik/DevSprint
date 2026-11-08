@@ -40,8 +40,8 @@ a dev-only guard would remove it exactly where it is useful. Open is not the sam
 though ([ADR-0024](../../docs/adr/0024-harden-the-shared-board.md)). The workspace refuses a reset within
 30 seconds of the last one, from anyone, with `429 RESET_COOLDOWN`, so a loop can't keep the board
 at its seed and wipe everyone's writes. Undo and cancel share a per-IP limit of 30 a minute
-(`WRITE_RATE_LIMIT`). `RESET_COOLDOWN_SECONDS` sets the cooldown, and the
-e2e stack passes 0. The board also resets itself once a day
+(`WRITE_RATE_LIMIT`), and `GET /api/workspace` has its own of 300 a minute (`READ_RATE_LIMIT`).
+`RESET_COOLDOWN_SECONDS` sets the cooldown, and the e2e stack passes 0. The board also resets itself once a day
 ([ADR-0014](../../docs/adr/0014-daily-reset-alarm-and-a-persisted-approval-ledger.md)).
 
 `POST /api/workspace/undo` is open on the same terms: anyone who can press Reset can already do
