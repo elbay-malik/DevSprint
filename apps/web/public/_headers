@@ -5,6 +5,7 @@
 # means updating it here. src/lib/csp-headers.test.ts fails until they match.
 /*
   Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-oWVGYtvxC7XdFCxwi4L7lJKdry4JUIVY0+c4LnEkZE0='; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://devsprint-api.eleo-666.workers.dev; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'none'
+  Strict-Transport-Security: max-age=31536000
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()

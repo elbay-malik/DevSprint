@@ -40,3 +40,9 @@ describe('the CSP in public/_headers', () => {
     expect(cspSources('frame-ancestors')).toEqual(["'none'"])
   })
 })
+
+describe('the transport rule in public/_headers', () => {
+  it('tells browsers to use HTTPS for a year, for this host only', () => {
+    expect(headers).toMatch(/^ {2}Strict-Transport-Security: max-age=31536000$/m)
+  })
+})
