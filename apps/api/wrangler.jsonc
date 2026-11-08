@@ -3,13 +3,12 @@
   "name": "devsprint-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-01",
-  // Served on its own custom domain, so the zone's rate-limiting rule can sit
-  // in front of it (ADR-0019's 2026-11-08 note); workers.dev stays on until the
-  // custom domain is proven, then goes off. No version preview URLs: Cloudflare does
+  // Served on its own custom domain only, so the zone's rate-limiting rule sits
+  // in front of every request (ADR-0019's 2026-11-08 note). No version preview URLs: Cloudflare does
   // not generate them for a Worker that defines a Durable Object anyway, and
   // PR previews are the SPA's alone.
   "routes": [{ "pattern": "api.devsprint.elbaymalik.com", "custom_domain": true }],
-  "workers_dev": true,
+  "workers_dev": false,
   "preview_urls": false,
   // Not needed for the echo route, but standard for the AI SDK providers
   // arriving in Phase 3 — avoids a config change later.
