@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { Issue } from '@devsprint/shared'
+import { issueSource, type Issue } from '@devsprint/shared'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -24,6 +24,9 @@ const props = defineProps<{
 const pending = computed(
   () => props.pendingStatus !== undefined || props.pendingAssignee !== undefined,
 )
+
+/** Filed by an external host on the public MCP endpoint, with no approval card behind it. */
+const viaMcp = computed(() => issueSource(props.issue) === 'mcp')
 </script>
 
 <template>
@@ -45,7 +48,14 @@ const pending = computed(
   >
     <CardContent class="flex flex-col gap-1.5 px-3">
       <div class="flex items-center justify-between gap-2">
-        <span class="text-muted-foreground font-mono text-xs">{{ issue.key }}</span>
+        <!-- Where the issue came from is a word, not a colour, so it reads in
+             greyscale and to a screen reader as "Created via MCP". -->
+        <span class="flex min-w-0 items-center gap-1.5">
+          <span class="text-muted-foreground font-mono text-xs">{{ issue.key }}</span>
+          <Badge v-if="viaMcp" data-testid="issue-source" variant="secondary" class="font-normal"
+            ><span class="sr-only">Created </span>via MCP</Badge
+          >
+        </span>
         <Badge variant="outline" class="tabular-nums"
           >{{ issue.points
           }}<span class="sr-only">{{ issue.points === 1 ? ' point' : ' points' }}</span></Badge
