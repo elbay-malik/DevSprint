@@ -120,3 +120,28 @@ oversized request still spends its token. A change id, cancel token or deploymen
 characters (`MAX_BOARD_WRITE_ID_LENGTH`) is refused as `INVALID_INPUT` before the request reaches the
 Durable Object. Every id these routes take is server-minted and shorter than that, so the SPA's
 requests, a few dozen bytes each, are unaffected.
+
+## Status note — 2026-11-08
+
+`GET /api/workspace`, the board snapshot, had no rate limit, and every read is a Durable Object
+call. It now has a per-IP limit of 300 a minute (`READ_RATE_LIMIT`). A throttled read gets 429
+with `Retry-After: 60`, in the same `{ ok: false, error }` envelope as undo and cancel. The SPA
+does not poll: a tab reads on load, after a turn, a Reset or a Cancel, and on a return to the
+tab at most once every 5 seconds. That is about a dozen reads a minute from one busy tab, so 300
+leaves room for many tabs, or several visitors behind one address. Like the other limits, an
+absent binding means no limit, and a request with no client IP is not limited. The write limit
+and the read limit now come from one middleware factory, so they can't drift apart.
+
+A refused reset no longer always reaches the Durable Object either. Each isolate keeps a lower
+bound on when the next reset is allowed, learned from the object's own answers. An accepted reset
+happened no earlier than the request was sent, and a refusal of `n` seconds leaves more than
+`n - 1`. Within that bound the Worker answers with the same `RESET_COOLDOWN` refusal itself. Its
+`Retry-After` can be a little shorter than the object's figure, never longer. The object stays the
+source of truth: past the bound, or after a reset made through another isolate, the request goes
+to the object as before. With no cooldown configured, the e2e case, nothing is kept.
+
+Both limits stop a loop from turning into Durable Object calls. Neither saves the account's
+request quota: a request the Worker refuses still runs the Worker and counts as a request. Only a
+rate-limiting rule at the edge, on a zone in front of the Worker, refuses a request before that.
+The api is served on workers.dev (ADR-0019), so that would also mean moving it to a custom domain.
+Both are account-level decisions outside this repository.
