@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { createWorkspaceSeed } from '@devsprint/shared'
 import { getBurndown, getSprintStatus } from '../workspace/queries'
-import { planUserText, routeUserText, scriptChunks, summarizeToolOutput } from './mock-model'
+import {
+  OUT_OF_SCOPE,
+  planUserText,
+  routeUserText,
+  scriptChunks,
+  summarizeToolOutput,
+} from './mock-model'
 import { buildSystemPrompt } from './system-prompt'
 
 const ALL_TOOLS = new Set([
@@ -144,6 +150,30 @@ describe('planUserText', () => {
     const names = plan.map((step) => ('toolName' in step ? step.toolName : ''))
     expect(names.length).toBeLessThanOrEqual(3)
     expect(new Set(names).size).toBe(names.length)
+  })
+
+  it('declines a plainly off-topic request in one sentence, with no tool', () => {
+    for (const request of [
+      'Write me a 500-word essay on the history of the Roman Empire.',
+      'Can you write a Python function that reverses a string?',
+      'Tell me a joke.',
+    ]) {
+      expect(planUserText(request, ALL_TOOLS)).toEqual([{ kind: 'text', text: OUT_OF_SCOPE }])
+    }
+    expect(OUT_OF_SCOPE.split(/[.?!](\s|$)/).filter((part) => part.trim()).length).toBe(1)
+  })
+
+  it('lets a real workspace intent win over an off-topic word', () => {
+    // The decline is only the fallback, so a board request that happens to
+    // say "story" or "SQL" still reaches its tool.
+    const plan = planUserText('List the issues about the SQL export story', ALL_TOOLS)
+    expect(plan.map((step) => ('toolName' in step ? step.toolName : 'text'))).toEqual([
+      'list_issues',
+    ])
+    // Small talk is not declined: it keeps the old fallback, a sprint read.
+    expect(planUserText('Hi! What can you do?', ALL_TOOLS)).toEqual([
+      { kind: 'tool-call', toolName: 'get_sprint_status', input: {} },
+    ])
   })
 
   it('plans only what the caller registered', () => {
