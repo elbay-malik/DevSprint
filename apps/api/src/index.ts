@@ -19,6 +19,7 @@ import { workspaceStub, type WorkspaceApi } from './workspace/durable-object'
 import { createResetGate } from './workspace/reset-gate'
 import { createCopilotAgent } from './agent/agent'
 import { createSpendMeter } from './agent/spend-meter'
+import { holdUntilDecided } from './agent/first-admission'
 import { createStepAuditLogger } from './agent/audit'
 import { describeError, toClientErrorMessage } from './agent/errors'
 import { ModelConfigError, resolveModel } from './agent/model'
@@ -375,28 +376,6 @@ function invalidInput(c: Context<{ Bindings: AppEnv }>, message: string) {
 }
 
 /**
- * The promise's value, or undefined once the signal aborts, whichever is first.
- * A wait the client has walked away from has nothing left to decide.
- */
-function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T | undefined> {
-  if (signal.aborted) return Promise.resolve(undefined)
-  return new Promise((resolve) => {
-    const onAbort = () => resolve(undefined)
-    signal.addEventListener('abort', onAbort, { once: true })
-    void promise.then(
-      (value) => {
-        signal.removeEventListener('abort', onAbort)
-        resolve(value)
-      },
-      () => {
-        signal.removeEventListener('abort', onAbort)
-        resolve(undefined)
-      },
-    )
-  })
-}
-
-/**
  * Reads a body with no Content-Length as far as the limit and no further, so a
  * chunked request cannot slip past the way it would past a header check.
  */
@@ -630,15 +609,58 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
     onStepFinish: createStepAuditLogger(label),
   })
 
+  let turnStream = withClosingMessage(
+    result.toUIMessageStream({
+      // Flushed here rather than from the agent's own `onFinish`, which fires
+      // while the root `ai.streamText` span is still open — exporting then sent
+      // seven spans all pointing at a parent that was never sent with them. This
+      // callback runs once the UI stream is genuinely finished.
+      //
+      // The response *is* the stream, so this cannot be awaited inside the
+      // handler; it rides the same `waitUntil` a cancelled deployment uses to
+      // record itself once the request is over (ADR-0013, ADR-0015).
+      // `originalMessages` is required alongside this callback: without it the
+      // stream cannot reconstruct a response that *continues* an existing
+      // assistant message, which is exactly what an approval resume is — it
+      // throws "No tool invocation found for tool call ID" instead.
+      ...(turnTracer
+        ? {
+            originalMessages: messagesForTurn,
+            onFinish: () => waitUntil(turnTracer.flush()),
+          }
+        : {}),
+      onError: (error) => {
+        console.error(
+          JSON.stringify({ event: 'model-error', model: label, error: describeError(error) }),
+        )
+        return toClientErrorMessage(error)
+      },
+    }),
+    () => {
+      const limit = stoppedBy ?? meter?.refusedBy
+      return limit === undefined ? undefined : SPEND_LIMIT_MESSAGES[limit]
+    },
+  )
+
   // The stream starts at once, so the first call asks for admission while this
   // waits. Refused, the turn is answered as a refusal at the door would be, with
   // its header. An approval resume is left to the stream: the approved write
   // ran before the first call, so its result belongs in the answer, and the
-  // closing message below says why the turn stopped. A client that leaves
-  // before the call stops the wait too.
+  // closing message says why the turn stopped.
+  //
+  // The wait cannot hang. It reads the stream as it waits, so a turn that ends
+  // or fails before any model call ends it too, and so does the client leaving.
+  // After a timeout the stream goes out anyway, and a later refusal closes the
+  // turn in the stream like a refused later call.
   if (meter && !isApprovalResume(messages)) {
-    const refused = await untilAborted(meter.firstAdmission, c.req.raw.signal)
-    if (refused !== undefined) return refusedTurn(refused)
+    const held = await holdUntilDecided(turnStream, meter.firstAdmission, {
+      signal: c.req.raw.signal,
+    })
+    if (held.decision !== undefined) {
+      await held.cancel()
+      return refusedTurn(held.decision)
+    }
+    turnStream = held.release()
   }
 
   // 'Content-Encoding: Identity' defeats wrangler dev/miniflare response
@@ -654,38 +676,7 @@ app.post(API_ROUTES.chat, chatBodyLimit, async (c) => {
       'X-DevSprint-Tools': toolSource,
       ...(turnTracer ? { 'X-DevSprint-Trace': turnTracer.traceId } : {}),
     },
-    stream: withClosingMessage(
-      result.toUIMessageStream({
-        // Flushed here rather than from the agent's own `onFinish`, which fires
-        // while the root `ai.streamText` span is still open — exporting then sent
-        // seven spans all pointing at a parent that was never sent with them. This
-        // callback runs once the UI stream is genuinely finished.
-        //
-        // The response *is* the stream, so this cannot be awaited inside the
-        // handler; it rides the same `waitUntil` a cancelled deployment uses to
-        // record itself once the request is over (ADR-0013, ADR-0015).
-        // `originalMessages` is required alongside this callback: without it the
-        // stream cannot reconstruct a response that *continues* an existing
-        // assistant message, which is exactly what an approval resume is — it
-        // throws "No tool invocation found for tool call ID" instead.
-        ...(turnTracer
-          ? {
-              originalMessages: messagesForTurn,
-              onFinish: () => waitUntil(turnTracer.flush()),
-            }
-          : {}),
-        onError: (error) => {
-          console.error(
-            JSON.stringify({ event: 'model-error', model: label, error: describeError(error) }),
-          )
-          return toClientErrorMessage(error)
-        },
-      }),
-      () => {
-        const limit = stoppedBy ?? meter?.refusedBy
-        return limit === undefined ? undefined : SPEND_LIMIT_MESSAGES[limit]
-      },
-    ),
+    stream: turnStream,
   })
 })
 
