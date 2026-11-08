@@ -113,6 +113,48 @@ describe('POST /api/workspace/reset — cooldown and write limit', () => {
     vi.restoreAllMocks()
   })
 
+  it('answers a reset it knows is refused without asking the Durable Object', async () => {
+    // Clear of the cooldown the test above left in this module's reset gate.
+    const now = Date.now() + 600_000
+    vi.spyOn(Date, 'now').mockReturnValue(now)
+    const own = fakeWorkspaceBinding()
+    const api = own.binding.get() as unknown as WorkspaceApi
+    const requestReset = vi.spyOn(api, 'requestReset')
+    const cooled = { ...env, WORKSPACE: own.binding, RESET_COOLDOWN_SECONDS: '30' }
+
+    expect((await app.request('/api/workspace/reset', { method: 'POST' }, cooled)).status).toBe(200)
+    expect(requestReset).toHaveBeenCalledTimes(1)
+
+    vi.mocked(Date.now).mockReturnValue(now + 10_000)
+    const refused = await app.request('/api/workspace/reset', { method: 'POST' }, cooled)
+    expect(refused.status).toBe(429)
+    expect(refused.headers.get('retry-after')).toBe('20')
+    await expect(refused.json()).resolves.toEqual({
+      ok: false,
+      error: { code: 'RESET_COOLDOWN', message: expect.stringContaining('20 seconds') },
+    })
+    // Refused in the Worker: the object was not asked again.
+    expect(requestReset).toHaveBeenCalledTimes(1)
+
+    // Once the cooldown is over, the object decides again.
+    vi.mocked(Date.now).mockReturnValue(now + 30_000)
+    expect((await app.request('/api/workspace/reset', { method: 'POST' }, cooled)).status).toBe(200)
+    expect(requestReset).toHaveBeenCalledTimes(2)
+    vi.restoreAllMocks()
+  })
+
+  it('still asks the Durable Object about every reset when there is no cooldown', async () => {
+    const own = fakeWorkspaceBinding()
+    const api = own.binding.get() as unknown as WorkspaceApi
+    const requestReset = vi.spyOn(api, 'requestReset')
+    const open = { ...env, WORKSPACE: own.binding }
+
+    for (let i = 0; i < 3; i++) {
+      expect((await app.request('/api/workspace/reset', { method: 'POST' }, open)).status).toBe(200)
+    }
+    expect(requestReset).toHaveBeenCalledTimes(3)
+  })
+
   it('throttles undo and cancel per client, but leaves reset to its cooldown', async () => {
     const limit = vi.fn().mockResolvedValue({ success: false })
     const throttled = { ...env, WRITE_RATE_LIMIT: { limit } }
@@ -542,6 +584,46 @@ describe('GET /api/workspace', () => {
       env,
     )
     expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:5173')
+  })
+
+  it('is limited per client, in the board envelope, without reading the board', async () => {
+    const limit = vi.fn().mockResolvedValue({ success: false })
+    const own = fakeWorkspaceBinding()
+    const api = own.binding.get() as unknown as WorkspaceApi
+    const snapshot = vi.spyOn(api, 'snapshot')
+
+    const res = await app.request(
+      '/api/workspace',
+      { headers: { 'CF-Connecting-IP': '203.0.113.9' } },
+      { ...env, WORKSPACE: own.binding, READ_RATE_LIMIT: { limit } },
+    )
+
+    expect(res.status).toBe(429)
+    expect(res.headers.get('retry-after')).toBe('60')
+    await expect(res.json()).resolves.toEqual({
+      ok: false,
+      error: { code: 'RATE_LIMITED', message: expect.any(String) },
+    })
+    expect(limit).toHaveBeenCalledWith({ key: '203.0.113.9' })
+    expect(snapshot).not.toHaveBeenCalled()
+  })
+
+  it('serves the board while the client is under its limit', async () => {
+    const limit = vi.fn().mockResolvedValue({ success: true })
+    const res = await app.request(
+      '/api/workspace',
+      { headers: { 'CF-Connecting-IP': '203.0.113.9' } },
+      { ...env, READ_RATE_LIMIT: { limit } },
+    )
+    expect(res.status).toBe(200)
+    expect(limit).toHaveBeenCalledTimes(1)
+  })
+
+  it('is not limited for a request with no client address', async () => {
+    const limit = vi.fn().mockResolvedValue({ success: false })
+    const res = await app.request('/api/workspace', {}, { ...env, READ_RATE_LIMIT: { limit } })
+    expect(res.status).toBe(200)
+    expect(limit).not.toHaveBeenCalled()
   })
 })
 
