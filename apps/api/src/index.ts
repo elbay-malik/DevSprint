@@ -15,6 +15,7 @@ import { API_ROUTES, trimChatHistory } from '@devsprint/shared'
 import type { AppEnv } from './env'
 import { corsOriginMatcher } from './cors'
 import { workspaceStub, type WorkspaceApi } from './workspace/durable-object'
+import { createResetGate } from './workspace/reset-gate'
 import { createCopilotAgent } from './agent/agent'
 import { createSpendMeter } from './agent/spend-meter'
 import { createStepAuditLogger } from './agent/audit'
@@ -160,40 +161,68 @@ app.use('/api/*', async (c, next) => {
 })
 
 /**
- * A per-IP throttle on undo and cancel, the board writes that skip the model.
- * Before it, only the chat route was limited, so a loop could call them as
- * fast as the network allowed (ADR-0024). The looser per-location accounting
- * is fine here for the same reason it is on chat (ADR-0016): the job is to
- * stop a script, not to count precisely. The cancel token and the undo
- * record are what actually protect other visitors; this keeps one client
- * from hammering the Durable Object while they say no.
+ * A per-IP throttle that answers in the board routes' `{ ok: false, error }`
+ * envelope, with `Retry-After` set to the binding's whole period. The looser
+ * per-location accounting is fine here for the same reason it is on chat
+ * (ADR-0016): the job is to stop a script, not to count precisely.
+ *
+ * Absent binding means absent limit, as on chat: local dev and the unit suite
+ * run without one. A request with no client IP isn't limited either, rather
+ * than sharing one bucket with every other such request (`rateLimitKey`).
+ */
+function perClientLimit(options: {
+  binding: (env: AppEnv) => RateLimitBinding | undefined
+  event: string
+  message: string
+}) {
+  return createMiddleware<{ Bindings: AppEnv }>(async (c, next) => {
+    const limiter = options.binding(c.env)
+    const clientKey = rateLimitKey(c.req.raw)
+    if (limiter && clientKey !== undefined) {
+      const { success } = await limiter.limit({ key: clientKey })
+      if (!success) {
+        console.warn(JSON.stringify({ event: options.event, path: c.req.path }))
+        return c.json(
+          { ok: false as const, error: { code: 'RATE_LIMITED', message: options.message } },
+          429,
+          { 'Retry-After': '60' },
+        )
+      }
+    }
+    await next()
+  })
+}
+
+/**
+ * Undo and cancel, the board writes that skip the model. Before this, only the
+ * chat route was limited, so a loop could call them as fast as the network
+ * allowed (ADR-0024). The cancel token and the undo record are what actually
+ * protect other visitors; this keeps one client from hammering the Durable
+ * Object while they say no.
  *
  * Reset is not on it. Its whole-board cooldown is stricter than any per-IP
  * limit, and the e2e suite resets before every test, faster than a sane
  * limit would allow.
+ *
+ * The bindings are typed `| undefined` for the same reason as the chat limiter
+ * below: the generated type says they are always there, and they are not.
  */
-const writeLimit = createMiddleware<{ Bindings: AppEnv }>(async (c, next) => {
-  // Typed `| undefined` for the same reason as the chat limiter below.
-  const limiter: RateLimitBinding | undefined = c.env.WRITE_RATE_LIMIT
-  const clientKey = rateLimitKey(c.req.raw)
-  if (limiter && clientKey !== undefined) {
-    const { success } = await limiter.limit({ key: clientKey })
-    if (!success) {
-      console.warn(JSON.stringify({ event: 'write-rate-limited', path: c.req.path }))
-      return c.json(
-        {
-          ok: false as const,
-          error: {
-            code: 'RATE_LIMITED',
-            message: 'Too many changes in a short time. Try again in a minute.',
-          },
-        },
-        429,
-        { 'Retry-After': '60' },
-      )
-    }
-  }
-  await next()
+const writeLimit = perClientLimit({
+  binding: (env): RateLimitBinding | undefined => env.WRITE_RATE_LIMIT,
+  event: 'write-rate-limited',
+  message: 'Too many changes in a short time. Try again in a minute.',
+})
+
+/**
+ * The board snapshot. Every read is a Durable Object call, and the SPA does
+ * not poll: it reads on load, after a turn or a button, and on a return to the
+ * tab at most every 5 s. READ_RATE_LIMIT sits far above that (wrangler.jsonc),
+ * so only a loop meets it (ADR-0024's 2026-11-08 status note).
+ */
+const readLimit = perClientLimit({
+  binding: (env): RateLimitBinding | undefined => env.READ_RATE_LIMIT,
+  event: 'read-rate-limited',
+  message: 'Too many board reads in a short time. Try again in a minute.',
 })
 
 /**
@@ -216,7 +245,7 @@ const boardWriteBodyLimit = bodyLimit({
 
 app.get('/api/health', (c) => c.json({ ok: true }))
 
-app.get(API_ROUTES.workspace, async (c) => c.json(await workspaceOf(c.env).snapshot()))
+app.get(API_ROUTES.workspace, readLimit, async (c) => c.json(await workspaceOf(c.env).snapshot()))
 
 /**
  * Restores the seed. The demo is a mock workspace that approved writes mutate,
@@ -229,10 +258,16 @@ app.get(API_ROUTES.workspace, async (c) => c.json(await workspaceOf(c.env).snaps
  * from many addresses would otherwise keep the board at its seed and wipe
  * every visitor's approved writes as they land (ADR-0024).
  */
+const resetGate = createResetGate()
+
 app.post(API_ROUTES.workspaceReset, async (c) => {
-  const result = await workspaceOf(c.env).requestReset({
-    cooldownMs: resolveResetCooldownMs(c.env.RESET_COOLDOWN_SECONDS),
-  })
+  const cooldownMs = resolveResetCooldownMs(c.env.RESET_COOLDOWN_SECONDS)
+  const sentAt = Date.now()
+  // A reset this isolate already knows the object would refuse is refused here,
+  // without a Durable Object call. The object still decides everything else.
+  const result =
+    resetGate.check(sentAt, cooldownMs) ?? (await workspaceOf(c.env).requestReset({ cooldownMs }))
+  resetGate.learn(sentAt, cooldownMs, result)
   if (result.ok) return c.json(result.data)
   // The body stays the plain error envelope; how long is left goes in the header.
   return c.json({ ok: false as const, error: result.error }, 429, {
