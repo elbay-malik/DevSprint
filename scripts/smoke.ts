@@ -16,8 +16,8 @@ import ts from 'typescript'
 const SUBDOMAIN = 'eleo-666.workers.dev'
 export const URLS = {
   web: `https://devsprint-web.${SUBDOMAIN}`,
-  api: `https://devsprint-api.${SUBDOMAIN}`,
-  mcp: `https://devsprint-mcp-issues.${SUBDOMAIN}`,
+  api: 'https://api.devsprint.elbaymalik.com',
+  mcp: 'https://mcp.devsprint.elbaymalik.com',
 }
 
 /** Reads MODEL_PROVIDER as apps/api/src/agent/model.ts does: blank means auto. */
@@ -43,6 +43,23 @@ function skip(name: string, why: string) {
 function check(name: string, ok: boolean, detail = '') {
   console.log(`${ok ? '✓' : '✗'} ${name}${!ok && detail ? ` — ${detail}` : ''}`)
   if (!ok) failures += 1
+}
+
+/**
+ * The first fetch to a host, retried for a short while. A custom domain added by
+ * the deploy that just ran can take a minute before its certificate is served,
+ * and that is not the misconfiguration a smoke check is for.
+ */
+async function reachable(url: string, attempts = 12, waitMs = 10_000): Promise<Response> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      const res = await fetch(url)
+      if (res.ok || attempt >= attempts) return res
+    } catch (error) {
+      if (attempt >= attempts) throw error
+    }
+    await new Promise((resolve) => setTimeout(resolve, waitMs))
+  }
 }
 
 /** One JSON-RPC call to the MCP endpoint, as any Streamable HTTP host makes it. */
@@ -132,7 +149,7 @@ export function chatTurnChecks(turn: Response, stream: string) {
 export async function smoke(options: { proveSharedBoard: boolean } = { proveSharedBoard: false }) {
   failures = 0
   skipped = 0
-  console.log(`\nSmoke checks against ${SUBDOMAIN}`)
+  console.log(`\nSmoke checks against ${URLS.web}, ${URLS.api} and ${URLS.mcp}`)
 
   // The SPA, and that its build points at the deployed api: a build without
   // VITE_API_URL calls relative /api paths, which this Worker answers with
@@ -178,7 +195,7 @@ export async function smoke(options: { proveSharedBoard: boolean } = { proveShar
   )
 
   // The api, and that CORS admits the SPA and its previews but not strangers.
-  const health = await fetch(`${URLS.api}/api/health`)
+  const health = await reachable(`${URLS.api}/api/health`)
   check('api health', health.ok)
   check(
     'api sends its security headers',
@@ -240,6 +257,7 @@ export async function smoke(options: { proveSharedBoard: boolean } = { proveShar
   }
 
   // The public MCP server (scenario S-F), and that it reads the same board.
+  check('mcp health', (await reachable(`${URLS.mcp}/health`)).ok)
   const foreignMcp = await fetch(`${URLS.mcp}/mcp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Origin: 'https://example.com' },
