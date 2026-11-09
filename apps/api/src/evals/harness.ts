@@ -117,82 +117,129 @@ function summarize(chunks: EvalChunk[], names: Map<string, string>): EvalTurn {
   return { toolCalls, approvals, results, text, chunks }
 }
 
+type MessagePart = Record<string, unknown> & { type: string }
+
 /**
- * The assistant message the SPA holds once every card has been answered — the
- * same shape `addToolApprovalResponse` produces, signature included. Resending
- * it is what resumes the turn, so a scenario with gates needs this to get past
- * step one.
+ * The assistant message for one user step, built the way the SPA's chat state
+ * builds it: every round's chunks update the same message, so a write approved
+ * in round one comes back in round two as a finished call with its result,
+ * not as an approval still waiting to run.
+ *
+ * Rebuilding the message from each round's chunks alone lost that. The earlier
+ * round's approval was sent again as answered-but-not-run, the server's
+ * single-use ledger rightly refused it as a replay, and the turn failed with a
+ * missing tool result. A model that asks for one write per round, as the live
+ * one does, therefore always stopped after two approvals (ADR-0021's
+ * 2026-11-09 correction). Each round's reads went missing the same way, so
+ * the model listed the issues again every round.
  */
-function answeredAssistantMessage(
-  chunks: EvalChunk[],
-  decide: (approval: { toolName: string; input: Record<string, unknown> }) => ApprovalDecision,
-  id: string,
-) {
-  const inputs = new Map<string, Record<string, unknown>>()
-  const names = new Map<string, string>()
-  for (const chunk of chunks) {
-    if (chunk.type !== 'tool-input-available' || chunk.toolCallId === undefined) continue
-    inputs.set(chunk.toolCallId, chunk.input ?? {})
-    names.set(chunk.toolCallId, chunk.toolName ?? '')
+class AssistantMessage {
+  private readonly parts: MessagePart[] = []
+
+  constructor(
+    private readonly id: string,
+    private readonly names: Map<string, string>,
+  ) {}
+
+  private toolPart(toolCallId: string): MessagePart | undefined {
+    return this.parts.find((part) => part.toolCallId === toolCallId)
   }
 
-  const parts = chunks
-    .filter((chunk) => chunk.type === 'tool-approval-request')
-    .map((approval) => {
-      const toolCallId = approval.toolCallId ?? ''
-      const toolName = names.get(toolCallId) ?? ''
-      const input = inputs.get(toolCallId) ?? {}
-      const decision = decide({ toolName, input })
-      return {
-        type: `tool-${toolName}`,
-        toolCallId,
-        state: 'approval-responded',
-        input,
-        approval: {
-          id: approval.approvalId ?? '',
-          approved: decision.approved,
-          ...(decision.reason === undefined ? {} : { reason: decision.reason }),
-          signature: approval.signature,
-        },
+  /** Applies one round's stream, as the SPA's chat state does. */
+  apply(chunks: EvalChunk[]): void {
+    for (const chunk of chunks) {
+      const id = chunk.toolCallId
+      switch (chunk.type) {
+        case 'start-step':
+          this.parts.push({ type: 'step-start' })
+          break
+        case 'tool-input-available':
+          if (id === undefined || this.toolPart(id) !== undefined) break
+          this.parts.push({
+            type: `tool-${this.names.get(id) ?? chunk.toolName ?? ''}`,
+            toolCallId: id,
+            state: 'input-available',
+            input: chunk.input ?? {},
+          })
+          break
+        case 'tool-approval-request': {
+          const part = id === undefined ? undefined : this.toolPart(id)
+          if (part === undefined) break
+          part.state = 'approval-requested'
+          part.approval = { id: chunk.approvalId ?? '', signature: chunk.signature }
+          break
+        }
+        case 'tool-output-available': {
+          const part = id === undefined ? undefined : this.toolPart(id)
+          if (part === undefined) break
+          part.state = 'output-available'
+          part.output = chunk.output
+          break
+        }
+        case 'tool-output-error': {
+          const part = id === undefined ? undefined : this.toolPart(id)
+          if (part === undefined) break
+          part.state = 'output-error'
+          part.errorText = chunk.errorText
+          break
+        }
+        case 'tool-output-denied': {
+          const part = id === undefined ? undefined : this.toolPart(id)
+          if (part !== undefined) part.state = 'output-denied'
+          break
+        }
+        case 'text-delta': {
+          const last = this.parts.at(-1)
+          if (last?.type === 'text') last.text = `${String(last.text)}${chunk.delta ?? ''}`
+          else this.parts.push({ type: 'text', text: chunk.delta ?? '' })
+          break
+        }
       }
-    })
-
-  return { id, role: 'assistant', parts: [{ type: 'step-start' }, ...parts] }
-}
-
-/**
- * The assistant message the SPA would hold after a turn finished: its tool
- * calls with their results, plus whatever it wrote. Without this the history
- * handed to the next turn contains only user text, and any step that refers
- * back to an earlier one ("save it", "yes, that one") has nothing to refer to.
- */
-function completedAssistantMessage(chunks: EvalChunk[], id: string, names: Map<string, string>) {
-  const inputs = new Map<string, Record<string, unknown>>()
-  for (const chunk of chunks) {
-    if (chunk.type === 'tool-input-available' && chunk.toolCallId !== undefined) {
-      inputs.set(chunk.toolCallId, chunk.input ?? {})
     }
   }
 
-  const parts: unknown[] = [{ type: 'step-start' }]
-  for (const chunk of chunks) {
-    if (chunk.type !== 'tool-output-available' || chunk.toolCallId === undefined) continue
-    parts.push({
-      type: `tool-${names.get(chunk.toolCallId) ?? ''}`,
-      toolCallId: chunk.toolCallId,
-      state: 'output-available',
-      input: inputs.get(chunk.toolCallId) ?? {},
-      output: chunk.output,
-    })
+  /**
+   * Answers every open card, the same shape `addToolApprovalResponse` produces,
+   * signature included. Resending the message is what resumes the turn.
+   */
+  answer(
+    decide: (approval: { toolName: string; input: Record<string, unknown> }) => ApprovalDecision,
+  ): void {
+    for (const part of this.parts) {
+      if (part.state !== 'approval-requested') continue
+      const decision = decide({
+        toolName: part.type.slice('tool-'.length),
+        input: (part.input ?? {}) as Record<string, unknown>,
+      })
+      const asked = part.approval as { id: string; signature?: string }
+      part.state = 'approval-responded'
+      part.approval = {
+        id: asked.id,
+        approved: decision.approved,
+        ...(decision.reason === undefined ? {} : { reason: decision.reason }),
+        signature: asked.signature,
+      }
+    }
   }
 
-  const text = chunks
-    .filter((chunk) => chunk.type === 'text-delta')
-    .map((chunk) => chunk.delta ?? '')
-    .join('')
-  if (text.length > 0) parts.push({ type: 'text', text })
+  /** The message to send while the step is still being answered. */
+  toJSON() {
+    return { id: this.id, role: 'assistant', parts: structuredClone(this.parts) }
+  }
 
-  return { id, role: 'assistant', parts }
+  /**
+   * The message as the next step sees it. A call still waiting for an answer
+   * is left out: the SPA holds the composer until every card is answered, so a
+   * real next message never follows one.
+   */
+  settled() {
+    const waiting = new Set(['input-available', 'approval-requested', 'approval-responded'])
+    return {
+      id: this.id,
+      role: 'assistant',
+      parts: structuredClone(this.parts.filter((part) => !waiting.has(String(part.state)))),
+    }
+  }
 }
 
 /** More rounds than any scenario needs (S-B has five writes); a bound, not a target. */
@@ -256,32 +303,28 @@ export async function runScenario(options: RunScenarioOptions): Promise<Scenario
       parts: [{ type: 'text', text: step.prompt }],
     })
 
+    const message = new AssistantMessage(`a${index}`, names)
     const asked = await post()
     turns.push(asked)
+    message.apply(asked.chunks)
 
-    if (asked.approvals.length === 0 || step.decide === undefined) {
-      // No gate to answer, so the turn is over — but the next turn still has
-      // to be able to see what this one did. "Looks good, save it" carries no
-      // version and no markdown; it means the draft the previous turn made.
-      history.push(completedAssistantMessage(asked.chunks, `a${index}`, names))
-      continue
-    }
-
-    // Answer the cards and resume, the way the SPA does — and keep doing it
+    // Answer the cards and resume, the way the SPA does, and keep doing it
     // while the resumed turn raises more. A live model may ask for writes one
-    // at a time, and the SPA simply shows the next card; answering only the
-    // first round made a correct, serial model look like it stopped after one.
+    // at a time, and the SPA simply shows the next card.
     let pending = asked
-    for (let round = 1; ; round += 1) {
-      history.push(answeredAssistantMessage(pending.chunks, step.decide, `a${index}-${round}`))
-      const resumed = await post()
-      turns.push(resumed)
-      if (resumed.approvals.length === 0 || round >= MAX_APPROVAL_ROUNDS) {
-        history.push(completedAssistantMessage(resumed.chunks, `a${index}-resumed`, names))
-        break
-      }
-      pending = resumed
+    for (let round = 1; pending.approvals.length > 0 && step.decide !== undefined; round += 1) {
+      message.answer(step.decide)
+      history.push(message.toJSON())
+      pending = await post()
+      turns.push(pending)
+      history.pop()
+      message.apply(pending.chunks)
+      if (round >= MAX_APPROVAL_ROUNDS) break
     }
+
+    // The next step has to see what this one did: "Looks good, save it"
+    // carries no version and no markdown; it means the draft this turn made.
+    history.push(message.settled())
   }
 
   return {
