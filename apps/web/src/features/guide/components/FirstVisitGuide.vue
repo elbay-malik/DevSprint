@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { Button } from '@/components/ui/button'
-import { closeGuide, dismissGuide, guideOpen } from '../lib/guide'
+import { closeGuide, dismissGuide, guideOpen, showOnLoad } from '../lib/guide'
 
 /**
  * The "Try this" card a first-time visitor sees: what to do to see the one
@@ -12,9 +12,12 @@ import { closeGuide, dismissGuide, guideOpen } from '../lib/guide'
  *
  * It closes for the visit once the composer gets focus, the moment the visitor
  * starts on step 1, so on a phone it never sits over the composer or a card's
- * Approve.
+ * Approve. It shows once the web fonts are in (showOnLoad), so its text does
+ * not reflow under the visitor.
  */
 const card = ref<HTMLElement>()
+
+onMounted(() => void showOnLoad())
 
 /** Hands focus back to the Guide button if it was in the card, never pulled from elsewhere. */
 async function hide(how: () => void): Promise<void> {
