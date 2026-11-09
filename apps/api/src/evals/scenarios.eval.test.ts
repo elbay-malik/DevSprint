@@ -134,12 +134,18 @@ describe('S-B — batch write with per-issue approval gates', () => {
     // "Exactly 5 approval requests are emitted, one per issue key."
     const approvals = run.turns.flatMap((turn) => turn.approvals)
     expect(approvals).toHaveLength(5)
-    expect(
-      run.turns
-        .flatMap((turn) => turn.toolCalls)
-        .filter((call) => call.name === 'update_issue_status')
-        .map((call) => call.input.issueKey),
-    ).toEqual(['DS-7', 'DS-8', 'DS-9', 'DS-10', 'DS-11'])
+    const keys = run.turns
+      .flatMap((turn) => turn.toolCalls)
+      .filter((call) => call.name === 'update_issue_status')
+      .map((call) => String(call.input.issueKey))
+    // The mock asks in board order. A live model asks one per round in an order
+    // of its own (2026-11-09: DS-9, DS-10, DS-7, DS-8, DS-11), and the scenario
+    // only requires one call per issue.
+    expect(live ? [...keys].sort() : keys).toEqual(
+      live
+        ? ['DS-10', 'DS-11', 'DS-7', 'DS-8', 'DS-9']
+        : ['DS-7', 'DS-8', 'DS-9', 'DS-10', 'DS-11'],
+    )
 
     // "The denied `update_issue_status` call for DS-11 never mutates state."
     const board = run.store.get()
