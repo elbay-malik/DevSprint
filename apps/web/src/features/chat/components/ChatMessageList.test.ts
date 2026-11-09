@@ -1097,7 +1097,7 @@ describe('ChatMessageList approval groups', () => {
     it('says where messages go before the first one is sent', () => {
       const wrapper = mount(ChatMessageList)
       expect(wrapper.get('[data-testid="chat-privacy"]').text().replace(/\s+/g, ' ')).toBe(
-        'Messages go to a third-party AI provider (Groq) and may be logged. Don’t enter personal information. This browser keeps only your theme and whether you closed the guide.',
+        'Messages go to a third-party AI provider (Groq) and may be logged. Don’t enter personal information. This browser keeps only your theme and whether you chose not to see the guide again.',
       )
     })
 
