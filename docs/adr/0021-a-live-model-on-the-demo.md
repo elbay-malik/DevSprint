@@ -140,3 +140,26 @@ S-D, S-E and the scope case passed.
 S-B asks to mark every remaining open issue in Sprint 12 as done. The model asked to approve two
 of the five, and the run did not record why it stopped there. The case fails at that count, so its
 later checks did not run. In the six passing model-driven cases, no write ran without an approval.
+
+## Status note — 2026-11-09 (correction: why S-B stopped)
+
+The S-B failure in the note above was the eval harness, not the model. gpt-oss-120b asks for one
+write per round. When the harness resumed a later round, it rebuilt the assistant message from
+that round's stream alone. The approval from the round before was sent again as answered but not
+yet run, the server's single-use ledger refused it as a replay, and the turn failed with
+`AI_MissingToolResultsError`. So every serial run stopped after two approvals. The scripted mock
+asks for all five at once, so CI never reached a second round. The harness now keeps one assistant
+message per step and updates it from every round, as the SPA's chat state does. A scripted model
+that asks one write per round covers it in `harness.test.ts`.
+
+With the fix, one live S-B run on 2026-11-09 asked for all five approvals, one per round (DS-9,
+DS-10, DS-7, DS-8, DS-11), and left the board as the scenario expects: four issues Done, DS-11
+still Blocked after the denial, and an answer that names it. The eval had also required the five
+keys in board order; for a live model it now checks them as a set. The ten-case run was not
+repeated, so the 9 / 10 above stands as measured.
+
+The real cost is the serial rounds. Groq's tool-use documentation marks gpt-oss-120b as not
+supporting parallel tool use, and neither `parallelToolCalls: true` nor a stronger prompt changed
+that in live checks. That S-B run took 10 model calls and 32,997 tokens, more than the 25,000 a
+day one client may spend (ADR-0016). In the SPA locally, the same request ended on the
+budget-reached turn after 9 calls (28,695 tokens), before the sprint was closed.
