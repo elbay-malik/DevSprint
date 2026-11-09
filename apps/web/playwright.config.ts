@@ -14,7 +14,21 @@ export default defineConfig({
   // A stray `test.only` would otherwise shrink CI to one test and stay green.
   forbidOnly: !!process.env.CI,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
-  use: { baseURL: 'http://localhost:5173', trace: 'retain-on-failure' },
+  use: {
+    baseURL: 'http://localhost:5173',
+    trace: 'retain-on-failure',
+    // The first-visit card would sit over the board in every other spec, so it
+    // starts dismissed; e2e/guide.spec.ts clears this to see a first visit.
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: 'http://localhost:5173',
+          localStorage: [{ name: 'guide:devsprint:v1', value: 'dismissed' }],
+        },
+      ],
+    },
+  },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   // Both panes and the production headers are under test, so all four servers
   // run; e2e/servers.ts defines them for this file and scripts/ci-local.ts

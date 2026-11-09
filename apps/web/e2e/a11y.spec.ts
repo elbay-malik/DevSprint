@@ -50,6 +50,15 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expectNoViolations(page)
     })
 
+    test('the first-visit guide', async ({ page, context }) => {
+      await context.clearCookies()
+      await page.goto('/')
+      await page.evaluate(() => localStorage.clear())
+      await page.reload()
+      await expect(page.getByTestId('guide')).toBeVisible()
+      await expectNoViolations(page)
+    })
+
     test('a burndown chart and an issue table in the transcript', async ({ page }) => {
       await page.goto('/')
       await send(page, 'Is Sprint 12 on track? Show me the burndown and the blocked issues.')
