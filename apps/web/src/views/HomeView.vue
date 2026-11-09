@@ -2,6 +2,7 @@
 import AppHeader from '@/features/workspace/components/AppHeader.vue'
 import WorkspacePane from '@/features/workspace/components/WorkspacePane.vue'
 import ChatPane from '@/features/chat/components/ChatPane.vue'
+import FirstVisitGuide from '@/features/guide/components/FirstVisitGuide.vue'
 </script>
 
 <template>
@@ -9,7 +10,11 @@ import ChatPane from '@/features/chat/components/ChatPane.vue'
        Below it they stack and the page scrolls: the board flows at its natural
        height, and the copilot gets a full screen of its own after it. -->
   <div class="grid min-h-dvh grid-rows-[auto_minmax(0,1fr)] lg:h-dvh">
-    <AppHeader />
+    <!-- The guide hangs under the header on a phone, out of the layout. -->
+    <div class="relative">
+      <AppHeader />
+      <FirstVisitGuide />
+    </div>
     <main
       class="grid grid-cols-1 lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] lg:divide-x"
     >

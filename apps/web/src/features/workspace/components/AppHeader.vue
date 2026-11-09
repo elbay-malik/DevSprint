@@ -5,6 +5,7 @@ import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
 import { WORKSPACE_RESET_ENDPOINT } from '@/lib/api'
 import { nextTheme, resolvedTheme, setTheme, theme } from '@/lib/theme'
+import { guideOpen, openGuide } from '@/features/guide/lib/guide'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 /**
@@ -183,6 +184,15 @@ async function reset(): Promise<void> {
         {{ resetting ? 'Resetting…' : 'Reset board' }}
       </Button>
       <span id="reset-demo-hint" class="sr-only">Restores the seed board for every visitor.</span>
+      <Button
+        data-testid="guide-open"
+        size="sm"
+        variant="ghost"
+        :aria-expanded="guideOpen ? 'true' : 'false'"
+        @click="openGuide()"
+      >
+        Guide
+      </Button>
       <Button
         data-testid="theme-toggle"
         size="sm"
