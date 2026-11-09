@@ -1046,16 +1046,16 @@ describe('ChatMessageList approval groups', () => {
       expect(group.attributes('aria-label')).toBe('Suggested requests')
       const chips = group.findAll('button')
       expect(chips.map((chip) => chip.text())).toEqual([
+        'Close out the sprint',
         'Is the sprint on track?',
         'Draft release notes',
-        'Close out the sprint',
         'Deploy to staging',
         'Mark DS-42 as done',
       ])
       // Within the four-to-six a first look can take in.
       expect(chips.length).toBeLessThanOrEqual(6)
       // What will be sent is one hover away.
-      expect(chips[0]?.attributes('title')).toBe('Is Sprint 12 on track? Show me the burndown.')
+      expect(chips[1]?.attributes('title')).toBe('Is Sprint 12 on track? Show me the burndown.')
     })
 
     it('sends a suggestion’s prompt verbatim and hands focus to the composer', async () => {
@@ -1097,7 +1097,7 @@ describe('ChatMessageList approval groups', () => {
     it('says where messages go before the first one is sent', () => {
       const wrapper = mount(ChatMessageList)
       expect(wrapper.get('[data-testid="chat-privacy"]').text().replace(/\s+/g, ' ')).toBe(
-        'Messages go to a third-party AI provider (Groq) and may be logged. Don’t enter personal information.',
+        'Messages go to a third-party AI provider (Groq) and may be logged. Don’t enter personal information. This browser keeps only your theme and whether you closed the guide.',
       )
     })
 

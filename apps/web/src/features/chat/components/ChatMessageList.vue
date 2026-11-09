@@ -460,7 +460,8 @@ watch(lastUndo, (undo) => {
          message, so it never competes with a conversation. -->
     <div v-if="chat.messages.length === 0" data-testid="chat-empty" class="flex flex-col gap-3">
       <p class="text-muted-foreground text-sm text-pretty">
-        Ask how the sprint is going, or tell the copilot what to change.
+        Ask how the sprint is going, or tell the copilot what to change. Every change waits for your
+        approval.
       </p>
       <!-- The chat scenarios' prompts, verbatim; the title shows what is sent. -->
       <div
@@ -488,7 +489,7 @@ watch(lastUndo, (undo) => {
         <p>Every visitor shares this board. It resets at 00:00 UTC.</p>
         <p data-testid="chat-privacy">
           Messages go to a third-party AI provider (Groq) and may be logged. Don’t enter personal
-          information.
+          information. This browser keeps only your theme and whether you closed the guide.
         </p>
         <!-- Product chrome, not model text, so ADR-0022's no-links rule is not
              in play; a copy suits an address meant for an MCP client anyway. -->
