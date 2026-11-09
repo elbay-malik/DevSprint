@@ -69,7 +69,7 @@ Annotations:
   Every visitor shares this board. It resets at 00:00 UTC.
   Messages go to a third-party AI provider (Groq) and may be logged.
   Don’t enter personal information. This browser keeps only your theme
-  and whether you closed the guide.
+  and whether you chose not to see the guide again.
   Any MCP client can work on it too: [Copy]
   https://mcp.devsprint.elbaymalik.com/mcp
   ```
@@ -79,7 +79,8 @@ Annotations:
   control takes the reader down to the composer. A Guide button reopens the first-visit card.
 - **First-visit guide.** A "Try this" card with four steps: close out the sprint, approve or deny
   the cards, undo one, and what is shared and what can fail. It takes no focus and has no
-  backdrop: bottom-left over the board from `lg` up, under the header below it. Close hides it for
+  backdrop: bottom-left over the board from `lg` up, under the header below it. It shows once the
+  web fonts have loaded (at most 1.5 s), so its text does not reflow. Close hides it for
   the visit, as does focusing the composer; "Don't show again" stores `guide:devsprint:v1` in
   localStorage.
 - **Stop button** ("Stop reply") is visible only while the agent is streaming; it aborts the
