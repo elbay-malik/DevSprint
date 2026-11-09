@@ -63,18 +63,25 @@ Annotations:
 
   ```
   Ask how the sprint is going, or tell the copilot what to change.
-  (Is the sprint on track?) (Draft release notes) (Close out the sprint)
+  Every change waits for your approval.
+  (Close out the sprint) (Is the sprint on track?) (Draft release notes)
   (Deploy to staging) (Mark DS-42 as done)
   Every visitor shares this board. It resets at 00:00 UTC.
   Messages go to a third-party AI provider (Groq) and may be logged.
-  Don’t enter personal information.
+  Don’t enter personal information. This browser keeps only your theme
+  and whether you closed the guide.
   Any MCP client can work on it too: [Copy]
   https://mcp.devsprint.elbaymalik.com/mcp
   ```
 
 - **Header.** Sprint selector, demo reset, theme toggle. Reset restores the seed workspace for
   every visitor, so it asks "Reset for everyone?" inline before it does. Below `lg` a "Copilot ↓"
-  control takes the reader down to the composer.
+  control takes the reader down to the composer. A Guide button reopens the first-visit card.
+- **First-visit guide.** A "Try this" card with four steps: close out the sprint, approve or deny
+  the cards, undo one, and what is shared and what can fail. It takes no focus and has no
+  backdrop: bottom-left over the board from `lg` up, under the header below it. Close hides it for
+  the visit, as does focusing the composer; "Don't show again" stores `guide:devsprint:v1` in
+  localStorage.
 - **Stop button** ("Stop reply") is visible only while the agent is streaming; it aborts the
   agent loop mid-turn, and its label says it stops the reply, not a deployment. Scenario S-C variant C2 uses the card-level Cancel instead, which is a different
   mechanism as well as a different control: Stop aborts the request, Cancel posts to the api. It has
