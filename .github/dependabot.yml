@@ -9,6 +9,11 @@ updates:
     # release-age policy, so a day-old version would fail CI.
     cooldown:
       default-days: 3
+    # `chore: bump …`, with no `(deps)` scope, to match the repo's commit format.
+    # Dependabot still writes a body, so these PRs are squash-merged with a
+    # one-line subject and an empty body.
+    commit-message:
+      prefix: chore
     groups:
       npm:
         patterns: ['*']
@@ -42,6 +47,8 @@ updates:
       interval: weekly
     cooldown:
       default-days: 3
+    commit-message:
+      prefix: chore
     groups:
       actions:
         patterns: ['*']
