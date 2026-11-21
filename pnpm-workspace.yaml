@@ -56,7 +56,7 @@ catalog:
   wrangler: 4.158.0
   zod: 4.6.7
   # AI SDK v6 line — npm `latest` is v7; these are the official ai-v6 dist-tag
-  # versions (all on @ai-sdk/provider 3.0.15). DO NOT bump to 7.x.
+  # versions (all on @ai-sdk/provider 3.0.19). DO NOT bump to 7.x.
   ai: 6.0.323
   '@ai-sdk/vue': 3.0.323
   '@ai-sdk/groq': 3.0.81
