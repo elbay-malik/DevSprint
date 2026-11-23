@@ -38,7 +38,7 @@
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
-    "@vue/test-utils": "2.5.1",
+    "@vue/test-utils": "2.6.0",
     "@vue/tsconfig": "catalog:",
     "happy-dom": "catalog:",
     "lighthouse": "13.6.0",
